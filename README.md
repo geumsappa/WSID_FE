@@ -3,7 +3,7 @@
 
 **1. 프로젝트 클론**
 ```bash
-git clone <repository-url>
+git clone https://github.com/geumsappa/WSID_FE.git
 cd WSID_FE-main
 ```
 
