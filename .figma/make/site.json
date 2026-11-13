@@ -1,0 +1,10 @@
+{
+  "description": "일상에 맞춘 금융사기 시뮬레이션으로 안전한 대응을 연습하고, 피해가 의심될 때 상황별 조치와 공식 신고 경로를 안내합니다.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
