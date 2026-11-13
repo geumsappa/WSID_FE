@@ -24,6 +24,7 @@ http://localhost:8443/
 > 모든 명령어는 `package.json`이 있는 폴더에서 실행하세요.
 
 ## 파일구조
+```text
 src/
 ├─ main.tsx                         # (그대로) 앱 시작점
 ├─ index.css                        # (그대로) 전체 스타일
@@ -108,3 +109,4 @@ src/
       │  └─ MyPage.tsx              # 프로필, 저장한 리포트·대화 목록과 상세
       └─ hooks/
          └─ useSavedRecords.ts      # 리포트·긴급대응 대화 저장/삭제       ← 백엔드 교체 대상
+'''
