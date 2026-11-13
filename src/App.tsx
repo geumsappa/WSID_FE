@@ -1433,7 +1433,7 @@ function Home({
               className="home-resume"
               onClick={onResume}
               aria-label={`진행 중인 훈련 이어서 하기: ${resume.title}`}
-              style={{ marginTop: 18, width: "100%", maxWidth: 720, display: "flex", alignItems: "center", gap: 14, padding: "16px 20px", borderRadius: 18, border: "1px solid rgba(37,99,235,.25)", background: "#fff", color: "#0f172a", textAlign: "left", cursor: "pointer", boxShadow: "0 10px 30px rgba(15,23,42,.08)" }}
+              style={{ margin: "24px auto 0", alignSelf: "center", width: "100%", maxWidth: 560, display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", borderRadius: 18, border: "1px solid rgba(37,99,235,.25)", background: "#fff", color: "#0f172a", textAlign: "left", cursor: "pointer", boxShadow: "0 10px 30px rgba(15,23,42,.08)" }}
             >
               <span className="home-action-icon" style={{ flexShrink: 0 }}>
                 <Icon name="refresh" size={26} />
