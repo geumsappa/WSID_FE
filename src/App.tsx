@@ -20,6 +20,8 @@ type Scenario = {
 interface SimulationMessage {
   from: "contact" | "user"
   text: string
+  images?: UploadedImage[]
+  imageCount?: number // 새로고침 후 복구된 메시지: 사진 원본은 저장하지 않고 장수만 남깁니다.
 }
 interface SituationOption {
   key: SituationKey
@@ -37,6 +39,18 @@ interface UploadedImage {
 type DemoAccount = { name: string; email: string; gender: string; salt: string; passwordHash: string; verified: boolean }
 type SavedReport = { id: string; title: string; type: string; date: string; analysis: ConversationAnalysis }
 type SavedConversation = { id: string; title: string; date: string; messages: { from: "assistant" | "user"; text: string; imageCount?: number }[] }
+type SimProgress = {
+  version: 1
+  updatedAt: number
+  simStage: SimStage
+  simMode: SimulationMode
+  everydayCategory: EverydayCategory | null
+  scenarioOptions: Scenario[]
+  context: string
+  scenario: Scenario
+  chatMessages: SimulationMessage[]
+  contextImageCount: number
+}
 const ACCOUNT_KEY = "wsid-demo-accounts-v1"
 const SESSION_KEY = "wsid-demo-session-v1"
 function readStore<T>(key: string, fallback: T): T { try { return JSON.parse(localStorage.getItem(key) || "null") ?? fallback } catch { return fallback } }
@@ -46,23 +60,119 @@ async function hashDemoPassword(password: string, salt: string) {
   const digest = await crypto.subtle.digest("SHA-256", bytes)
   return Array.from(new Uint8Array(digest)).map(x => x.toString(16).padStart(2, "0")).join("")
 }
+// 민감정보 감지·가림 (프런트 데모용 규칙)
+const isPhoneNumber = (value: string) => /^01[016789][-\s]?\d{3,4}[-\s]?\d{4}$/.test(value.trim())
+const SECRET_PATTERN = /(비밀번호|인증번호|보안카드|OTP|otp|PIN|pin)(.{0,12}?)(\d{4,})/g
+const RRN_PATTERN = /\d{6}\s?-\s?[1-4]\d{6}/g
+const CARD_PATTERN = /\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}/g
+const ACCOUNT_PATTERN = /\d{2,6}-\d{2,6}-\d{2,7}/g
+function detectSensitive(text: string, includeAccount: boolean): string[] {
+  const found: string[] = []
+  if (new RegExp(RRN_PATTERN.source).test(text)) found.push("주민등록번호")
+  if (new RegExp(CARD_PATTERN.source).test(text)) found.push("카드번호")
+  if (new RegExp(SECRET_PATTERN.source).test(text)) found.push("비밀번호·인증번호")
+  if (includeAccount) {
+    const rest = text.replace(RRN_PATTERN, "").replace(CARD_PATTERN, "")
+    const accounts = rest.match(new RegExp(ACCOUNT_PATTERN.source, "g")) ?? []
+    if (accounts.some((value) => !isPhoneNumber(value)) || /계좌.{0,8}\d{10,14}/.test(rest)) found.push("계좌번호")
+  }
+  return found
+}
+// 피해 대응에서는 본인 민감정보만 가립니다. 상대방 계좌·전화번호는 신고 이력 조회에 쓰이므로 남겨 둡니다.
+function maskSensitive(text: string) {
+  return text
+    .replace(RRN_PATTERN, "[주민등록번호 가림]")
+    .replace(CARD_PATTERN, "[카드번호 가림]")
+    .replace(SECRET_PATTERN, (_m, key: string, mid: string, digits: string) => `${key}${mid}${"*".repeat(digits.length)}`)
+}
+
+function ConfirmModal({ title, message, confirmLabel, cancelLabel, onConfirm, onCancel }: {
+  title: string
+  message: string
+  confirmLabel: string
+  cancelLabel: string
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onCancel() }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [onCancel])
+  const buttonBase: React.CSSProperties = {
+    flex: 1,
+    height: 48,
+    padding: "0 16px",
+    borderRadius: 12,
+    fontSize: 15,
+    fontWeight: 700,
+    lineHeight: 1,
+    whiteSpace: "nowrap",
+    cursor: "pointer",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+  }
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onClick={onCancel}
+      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", display: "grid", placeItems: "center", zIndex: 1000, padding: 20 }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ background: "#fff", borderRadius: 20, padding: "28px 24px 24px", width: "100%", maxWidth: 360, textAlign: "center", boxShadow: "0 20px 60px rgba(0,0,0,.25)" }}
+      >
+        <h2 style={{ margin: "0 0 10px", fontSize: 20, fontWeight: 800, color: "#0f172a", lineHeight: 1.4 }}>{title}</h2>
+        <p style={{ margin: "0 0 24px", fontSize: 15, lineHeight: 1.6, color: "#475569", wordBreak: "keep-all" }}>{message}</p>
+        <div style={{ display: "flex", gap: 10 }}>
+          <button
+            type="button"
+            onClick={onCancel}
+            style={{ ...buttonBase, background: "#fff", color: "#334155", border: "1px solid #cbd5e1" }}
+          >
+            {cancelLabel}
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            autoFocus
+            style={{ ...buttonBase, background: "#1d6fe0", color: "#fff", border: "none" }}
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const MAX_EVIDENCE_IMAGES = 12
 const MAX_EVIDENCE_BYTES = 10 * 1024 * 1024
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"]
 
-async function loadEvidence(files: File[], existing: number): Promise<{ images: UploadedImage[], error: string }> {
-  const available = Math.max(0, MAX_EVIDENCE_IMAGES - existing)
+type ImageLimits = { max: number; maxBytes: number; types: string[]; ext: RegExp; typeLabel: string; sizeLabel: string }
+// 긴급 대응: 최대 12장, 장당 10MB, JPG·PNG·WEBP
+const EMERGENCY_IMAGE_LIMITS: ImageLimits = { max: MAX_EVIDENCE_IMAGES, maxBytes: MAX_EVIDENCE_BYTES, types: IMAGE_TYPES, ext: /\.(jpe?g|png|webp)$/i, typeLabel: "JPG, PNG, WEBP", sizeLabel: "10MB" }
+// 시뮬레이션(요구사항 명세): 훈련 한 번에 최대 3장, 장당 5MB, PNG·JPEG
+const SIM_IMAGE_LIMITS: ImageLimits = { max: 3, maxBytes: 5 * 1024 * 1024, types: ["image/jpeg", "image/png"], ext: /\.(jpe?g|png)$/i, typeLabel: "PNG, JPEG", sizeLabel: "5MB" }
+const SIM_IMAGE_ACCEPT = ".png,.jpg,.jpeg,image/png,image/jpeg"
+
+async function loadEvidence(files: File[], existing: number, limits: ImageLimits = EMERGENCY_IMAGE_LIMITS): Promise<{ images: UploadedImage[], error: string }> {
+  const available = Math.max(0, limits.max - existing)
   const selected = files.slice(0, available)
   const images: UploadedImage[] = []
   const errors: string[] = []
-  if (files.length > available) errors.push(`사진은 최대 ${MAX_EVIDENCE_IMAGES}장까지 첨부할 수 있어요.`)
+  if (files.length > available) errors.push(`사진은 최대 ${limits.max}장까지 첨부할 수 있어요.`)
   for (const file of selected) {
-    if (!IMAGE_TYPES.includes(file.type) && !/\.(jpe?g|png|webp)$/i.test(file.name)) {
-      errors.push(`${file.name}: JPG, PNG, WEBP 파일만 첨부할 수 있어요.`)
+    if (!limits.types.includes(file.type) && !limits.ext.test(file.name)) {
+      errors.push(`${file.name}: ${limits.typeLabel} 파일만 첨부할 수 있어요.`)
       continue
     }
-    if (file.size > MAX_EVIDENCE_BYTES) {
-      errors.push(`${file.name}: 사진 한 장은 10MB 이하여야 해요.`)
+    if (file.size > limits.maxBytes) {
+      errors.push(`${file.name}: 사진 한 장은 ${limits.sizeLabel} 이하여야 해요.`)
       continue
     }
     try {
@@ -80,8 +190,26 @@ async function loadEvidence(files: File[], existing: number): Promise<{ images: 
   return { images, error: errors.join(" ") }
 }
 
-function EvidenceGallery({ images, onRemove, onAdd }: {
+// 시뮬레이션 진행 상태 저장(이어하기). 계정별로 이 브라우저에만 저장하며, 사진 원본은 저장하지 않습니다.
+const SIM_PROGRESS_TTL = 24 * 60 * 60 * 1000 // 명세 초안: 무활동 24시간 후 만료
+const simProgressKey = (email: string) => `wsid-sim-progress-${email}`
+function readSimProgress(email: string): SimProgress | null {
+  const saved = readStore<SimProgress | null>(simProgressKey(email), null)
+  if (!saved || saved.version !== 1 || Date.now() - saved.updatedAt > SIM_PROGRESS_TTL) {
+    try { localStorage.removeItem(simProgressKey(email)) } catch { /* 저장소 접근 불가 시 무시 */ }
+    return null
+  }
+  return saved
+}
+function removeSimProgress(email: string) {
+  try { localStorage.removeItem(simProgressKey(email)) } catch { /* 무시 */ }
+}
+const countImages = (messages: SimulationMessage[]) =>
+  messages.reduce((sum, m) => sum + (m.images?.length ?? m.imageCount ?? 0), 0)
+
+function EvidenceGallery({ images, onRemove, onAdd, max = MAX_EVIDENCE_IMAGES }: {
   images: UploadedImage[]
+  max?: number
   onRemove?: (id: string) => void
   onAdd?: () => void
 }) {
@@ -100,7 +228,7 @@ function EvidenceGallery({ images, onRemove, onAdd }: {
         </button>
         {onRemove && <button className="evidence-remove" type="button" aria-label={`${item.name} 삭제`} title="사진 삭제" onClick={() => onRemove(item.id)}>×</button>}
       </div>)}
-      {onAdd && images.length < MAX_EVIDENCE_IMAGES && <button className="evidence-add" type="button" onClick={onAdd} aria-label="사진 더 추가하기"><span>＋</span><small>사진 추가</small></button>}
+      {onAdd && images.length < max && <button className="evidence-add" type="button" onClick={onAdd} aria-label="사진 더 추가하기"><span>＋</span><small>사진 추가</small></button>}
     </div>}
     {selected && <div className="evidence-lightbox" role="dialog" aria-modal="true" aria-label="사진 확대 보기" onClick={() => setSelected(null)}>
       <button type="button" className="lightbox-close" onClick={() => setSelected(null)} aria-label="확대 보기 닫기">×</button>
@@ -525,6 +653,27 @@ const emergencyData: Record<EmergencyKey, {
   },
 }
 
+// 입력한 설명에서 해당하는 상황을 모두 찾습니다. 순서가 곧 우선순위입니다(송금이 가장 급함).
+const emergencyRules: [EmergencyKey, RegExp, RegExp?][] = [
+  ["transfer", /송금|이체|(돈|계좌).{0,25}보냈|입금했|입금을 했/, /(송금|이체|입금).{0,4}(안|않)/],
+  ["privacy", /개인정보|신분증|비밀번호|인증번호|주민등록|OTP|보안카드|가림\]/i, /(알려|보내|입력|제공).{0,4}(안|않)/],
+  ["app", /앱.{0,6}(설치|깔)|설치했|설치를 했|apk|원격.{0,4}(앱|프로그램)/i, /설치.{0,4}(안|않)/],
+  ["link", /링크|url|주소.{0,4}(눌|클릭|접속)|눌렀|클릭했/i, /(누르|눌|클릭).{0,4}(안|않)/],
+  ["call", /전화|사칭|검찰|경찰|은행 직원|금감원|수사관/],
+  ["trade", /중고|판매자|물품|당근|번개장터|중고나라|직거래/],
+]
+function detectEmergencyKeys(text: string): EmergencyKey[] {
+  const keys = emergencyRules
+    .filter(([, match, negated]) => match.test(text) && !(negated && negated.test(text) && !match.test(text.replace(negated, ""))))
+    .map(([key]) => key)
+  return keys.length ? keys : ["custom"]
+}
+function mergeEmergencyKeys(current: EmergencyKey[], added: EmergencyKey[]): EmergencyKey[] {
+  const base = current.filter((key) => key !== "custom")
+  const next = [...base, ...added.filter((key) => key !== "custom" && !base.includes(key))]
+  return next.length ? next : current
+}
+
 const organizationData = {
   police: {
     name: "경찰청 112",
@@ -733,13 +882,38 @@ export default function App() {
   const saveEmergencyChat = () => {
     if (!requireLogin("emergencyChat")) return
     if (!account || !emergencyMessages.length) return
-    const item: SavedConversation = { id: crypto.randomUUID(), title: emergency ? emergencyData[emergency].title : "긴급 대응 대화", date: formatDate(), messages: emergencyMessages.map(m => ({ from: m.from, text: m.text, imageCount: m.images?.length || 0 })) }
+    const item: SavedConversation = { id: crypto.randomUUID(), title: emergencyKeys.length ? emergencyKeys.map((key) => emergencyData[key].title).join(" · ") : "긴급 대응 대화", date: formatDate(), messages: emergencyMessages.map(m => ({ from: m.from, text: m.text, imageCount: m.images?.length || 0 })) }
     const next = [item, ...savedChats]; setSavedChats(next)
     try { localStorage.setItem(`wsid-conversations-${account.email}`, JSON.stringify(next)); setSaveNotice("긴급대응 대화를 저장했어요. 사진 원본은 저장하지 않아요.") }
     catch { setSavedChats(savedChats); setSaveNotice("저장 공간이 부족해 저장하지 못했어요.") }
   }
-  const logout = () => { sessionStorage.removeItem(SESSION_KEY); setAccount(null); setSaveNotice(""); go("home") }
-
+  const logout = () => {
+    sessionStorage.removeItem(SESSION_KEY)
+    clearSimulation(false) // 화면에서는 지우되, 다시 로그인하면 이어서 할 수 있게 저장 기록은 남깁니다.
+    hydratedFor.current = null
+    setAccount(null)
+    setSaveNotice("")
+    go("home")
+  }
+  const [loginPopup, setLoginPopup] = useState(false)
+  // fresh=true: 홈의 시작 버튼처럼 새 훈련을 시작합니다. false: 진행 중인 훈련이 있으면 그대로 이어서 보여줍니다.
+  const openSimulation = (fresh = false) => {
+    if (!account) {
+      setReturnAfterLogin("simulation")
+      setLoginPopup(true)
+      return
+    }
+    if (fresh) clearSimulation()
+    go("simulation")
+  }
+  const closeLoginPopup = () => {
+    setLoginPopup(false)
+    setReturnAfterLogin("mypage")
+  }
+  const goLoginFromPopup = () => {
+    setLoginPopup(false)
+    go("login")
+  }
   const [simStage, setSimStage] = useState<SimStage>("input")
   const [simMode, setSimMode] = useState<SimulationMode>("choose")
   const [everydayCategory, setEverydayCategory] = useState<EverydayCategory | null>(null)
@@ -751,6 +925,12 @@ export default function App() {
   const [chatTyping, setChatTyping] = useState(false)
   const [chatMessages, setChatMessages] = useState<SimulationMessage[]>([])
   const [emergency, setEmergency] = useState<EmergencyKey | null>(null)
+  const [emergencyKeys, setEmergencyKeys] = useState<EmergencyKey[]>([])
+  const [endConfirm, setEndConfirm] = useState(false)
+  const simRun = useRef(0)
+  const [contextImages, setContextImages] = useState<UploadedImage[]>([]) // 처음 상황 설명에 첨부한 사진(메모리에만 보관)
+  const [restoredContextImageCount, setRestoredContextImageCount] = useState(0)
+  const hydratedFor = useRef<string | null>(null) // 어느 계정의 진행 상태를 불러왔는지
   const [emergencyText, setEmergencyText] = useState("")
   const [emergencyImages, setEmergencyImages] = useState<UploadedImage[]>([])
   const [emergencyAnalyzing, setEmergencyAnalyzing] = useState(false)
@@ -758,6 +938,50 @@ export default function App() {
   const [emergencyMessages, setEmergencyMessages] =
     useState<AssistantMessage[]>([])
   const [emergencyTyping, setEmergencyTyping] = useState(false)
+
+  // 로그인한 계정의 진행 중 훈련을 불러옵니다(새로고침·재방문 시 복구).
+  useEffect(() => {
+    if (!account) return
+    if (hydratedFor.current === account.email) return
+    hydratedFor.current = account.email
+    const saved = readSimProgress(account.email)
+    if (!saved) return
+    const stage: SimStage = saved.simStage === "loading" ? "input" : saved.simStage
+    let messages = saved.chatMessages
+    const userTurns = messages.filter((m) => m.from === "user").length
+    // 상대 답변을 기다리던 중 새로고침했다면 답변을 이어서 붙여 줍니다.
+    if (stage === "chat" && messages.length && messages[messages.length - 1].from === "user")
+      messages = [...messages, { from: "contact", text: createDemoReply(messages[messages.length - 1].text, userTurns - 1, saved.scenario) }]
+    simRun.current += 1
+    setSimStage(stage === "chat" && userTurns >= 5 ? "complete" : stage)
+    setSimMode(saved.simMode)
+    setEverydayCategory(saved.everydayCategory)
+    setScenarioOptions(saved.scenarioOptions)
+    setContext(saved.context)
+    setScenario(saved.scenario)
+    setChatMessages(messages)
+    setChatTyping(false)
+    setContextImages([])
+    setRestoredContextImageCount(saved.contextImageCount)
+  }, [account])
+  // 진행 중인 훈련(상황 선택·대화·완료)을 바뀔 때마다 저장합니다. 사진은 장수만 남깁니다.
+  useEffect(() => {
+    if (!account || hydratedFor.current !== account.email) return
+    if (simStage !== "summary" && simStage !== "chat" && simStage !== "complete") return
+    const progress: SimProgress = {
+      version: 1,
+      updatedAt: Date.now(),
+      simStage,
+      simMode,
+      everydayCategory,
+      scenarioOptions,
+      context,
+      scenario,
+      chatMessages: chatMessages.map((m) => ({ from: m.from, text: m.text, imageCount: (m.images?.length ?? m.imageCount ?? 0) || undefined })),
+      contextImageCount: contextImages.length + restoredContextImageCount,
+    }
+    try { localStorage.setItem(simProgressKey(account.email), JSON.stringify(progress)) } catch { /* 저장 공간 부족 시 이어하기만 생략 */ }
+  }, [account, simStage, simMode, everydayCategory, scenarioOptions, context, scenario, chatMessages, contextImages, restoredContextImageCount])
 
   const go = (next: Page) => {
     setPage(next)
@@ -797,7 +1021,9 @@ export default function App() {
     () => analyzeConversation(chatMessages),
     [chatMessages],
   )
-  const resetSimulation = () => {
+  // removeSaved=false는 로그아웃처럼 화면 상태만 비우고 저장된 이어하기 기록은 남길 때 씁니다.
+  const clearSimulation = (removeSaved = true) => {
+    simRun.current += 1 // 진행 중이던 답변 타이머가 초기화 이후에 끼어들지 않도록 합니다.
     setSimStage("input")
     setSimMode("choose")
     setEverydayCategory(null)
@@ -806,10 +1032,36 @@ export default function App() {
     setSelectedSituation(null)
     setChatMessages([])
     setChatTyping(false)
+    setContextImages([])
+    setRestoredContextImageCount(0)
+    if (removeSaved && account) removeSimProgress(account.email)
+  }
+  const usedSimImages = contextImages.length + restoredContextImageCount + countImages(chatMessages)
+  const savedProgress = account && page === "home" ? readSimProgress(account.email) : null
+  const resumeInfo = savedProgress
+    ? {
+        title: savedProgress.simStage === "summary" ? "추천받은 상황 선택 중" : savedProgress.scenario.title,
+        label:
+          savedProgress.simStage === "complete"
+            ? "훈련 완료 · 결과 리포트 확인 전"
+            : savedProgress.simStage === "chat"
+              ? `대화 진행 중 · ${savedProgress.chatMessages.filter((m) => m.from === "user").length}/5턴`
+              : "상황 선택 단계",
+        time: new Date(savedProgress.updatedAt).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" }),
+      }
+    : null
+  const resetSimulation = () => {
+    clearSimulation()
     go("simulation")
   }
-  const createScenario = (interviewContext?: string) => {
+  const confirmEndSimulation = () => {
+    setEndConfirm(false)
+    clearSimulation()
+    go("home")
+  }
+  const createScenario = (interviewContext?: string, images: UploadedImage[] = []) => {
     const effectiveContext = interviewContext ?? context
+    if (interviewContext !== undefined) setContextImages(images)
     if (simMode === "mine" && !effectiveContext.trim()) return
     if (simMode === "discover" && !everydayCategory) return
     setSimStage("loading")
@@ -828,87 +1080,92 @@ export default function App() {
     setChatMessages([])
     setChatTyping(true)
     setSimStage("chat")
+    const run = ++simRun.current
     window.setTimeout(() => {
+      if (run !== simRun.current) return
       setChatMessages([{ from: "contact", text: active.opening }])
       setChatTyping(false)
     }, 550)
   }
-  const sendSimulationMessage = (rawMessage: string) => {
+  // 반환값: 전송을 막은 이유(없으면 빈 문자열)
+  const sendSimulationMessage = (rawMessage: string, images: UploadedImage[] = []): string => {
     const message = rawMessage.trim().slice(0, 500)
-    if (!message || simStage !== "chat" || chatTyping) return
+    if ((!message && !images.length) || simStage !== "chat" || chatTyping) return ""
+    const sensitive = detectSensitive(message, true)
+    if (sensitive.length)
+      return `${sensitive.join(", ")}로 보이는 내용이 있어요. 해당 부분을 지운 뒤 다시 입력해 주세요. 시뮬레이션에서도 실제 정보는 입력하지 마세요.`
+    if (usedSimImages + images.length > SIM_IMAGE_LIMITS.max)
+      return `사진은 훈련 한 번에 최대 ${SIM_IMAGE_LIMITS.max}장까지 보낼 수 있어요.`
     const userTurns = chatMessages.filter((item) => item.from === "user").length
-    const sensitive =
-      /(비밀번호|인증번호|보안카드|주민등록번호|계좌번호).{0,12}\d{3,}/.test(
-        message,
-      )
-    const displayedMessage = sensitive
-      ? "민감정보가 포함된 내용은 안전을 위해 전송하지 않았어요."
-      : message
-    setChatMessages((items) => [
-      ...items,
-      { from: "user", text: displayedMessage },
-    ])
+    setChatMessages((items) => [...items, { from: "user", text: message, images: images.length ? images : undefined }])
     setChatTyping(true)
+    const run = simRun.current
     window.setTimeout(() => {
-      const reply = sensitive
-        ? "실제 비밀번호, 인증번호, 계좌번호는 시뮬레이션에서도 입력하면 안 됩니다. 민감정보를 보호하기 위해 대화를 안전하게 종료합니다."
-        : createDemoReply(message, userTurns, scenario)
+      if (run !== simRun.current) return
+      const reply = message
+        ? createDemoReply(message, userTurns, scenario)
+        : `보내주신 사진을 확인했다며, ${scenario.subject} 처리를 위해 지금 이 대화에서 바로 진행하자고 재촉합니다.`
       setChatMessages((items) => [...items, { from: "contact", text: reply }])
       setChatTyping(false)
-      if (sensitive || hasSafeEnding(message) || userTurns + 1 >= 5)
-        setSimStage("complete")
+      if (hasSafeEnding(message) || userTurns + 1 >= 5) setSimStage("complete")
     }, 700)
+    return ""
   }
+  const MASK_NOTICE = "입력하신 내용 중 주민등록번호·카드번호·비밀번호 같은 민감정보는 가려서 처리했어요."
   const openEmergencyChat = (
-    key: EmergencyKey,
+    keys: EmergencyKey[],
     text = "",
     attachments: UploadedImage[] = [],
+    masked = false,
   ) => {
-    setEmergency(key)
+    setEmergency(keys[0])
+    setEmergencyKeys(keys)
     setSubmittedText(text)
     setEmergencyImages(attachments)
+    const intro =
+      keys.length > 1
+        ? `여러 상황이 함께 확인됐어요: ${keys.map((key) => emergencyData[key].title).join(", ")}. 가장 급한 조치부터 순서대로 안내할게요.`
+        : emergencyData[keys[0]].intro
     setEmergencyMessages([
       ...(text || attachments.length ? [{ from: "user" as const, text, images: attachments }] : []),
-      { from: "assistant", text: emergencyData[key].intro },
+      { from: "assistant", text: masked ? `${MASK_NOTICE} ${intro}` : intro },
     ])
     go("emergencyChat")
   }
   const analyzeEmergency = () => {
-    const value = emergencyText.trim()
-    if (!value && emergencyImages.length === 0) return
+    const raw = emergencyText.trim()
+    if (!raw && emergencyImages.length === 0) return
+    const value = maskSensitive(raw)
+    const masked = value !== raw
+    if (masked) setEmergencyText(value) // 원문이 화면 상태에 남지 않도록 가린 내용으로 바꿉니다.
     setEmergencyAnalyzing(true)
-    const key: EmergencyKey = /송금|이체|돈을 보냈|입금/.test(value)
-      ? "transfer"
-      : /앱|설치|파일/.test(value)
-        ? "app"
-        : /링크|주소|눌렀|클릭/.test(value)
-          ? "link"
-          : /개인정보|신분증|비밀번호|인증번호/.test(value)
-            ? "privacy"
-            : /전화|사칭|검찰|경찰|은행 직원/.test(value)
-              ? "call"
-              : /중고|판매자|물품|거래/.test(value)
-                ? "trade"
-                : "custom"
+    const keys = detectEmergencyKeys(value)
     window.setTimeout(() => {
       setEmergencyAnalyzing(false)
-      openEmergencyChat(key, value, emergencyImages)
+      openEmergencyChat(keys, value, emergencyImages, masked)
     }, 750)
   }
   const sendEmergencyMessage = (message: string, images: UploadedImage[] = []) => {
     if ((!message.trim() && !images.length) || emergencyTyping || !emergency) return
-    const value = message.trim()
-    if (/송금|이체|돈을 보냈/.test(value)) setEmergency("transfer")
-    else if (/앱.*설치|파일.*설치/.test(value)) setEmergency("app")
-    else if (/인증번호|신분증|비밀번호.*알려|개인정보.*보냈/.test(value))
-      setEmergency("privacy")
+    const raw = message.trim()
+    const value = maskSensitive(raw)
+    const masked = value !== raw
+    const found = value ? detectEmergencyKeys(value).filter((key) => key !== "custom") : []
+    const addedKeys = found.filter((key) => !emergencyKeys.includes(key))
+    if (addedKeys.length) {
+      const next = mergeEmergencyKeys(emergencyKeys, addedKeys)
+      setEmergencyKeys(next)
+      setEmergency(next[0])
+    }
     setEmergencyMessages((items) => [...items, { from: "user", text: value, images }])
     if (images.length) setEmergencyImages((items) => [...items, ...images])
     setEmergencyTyping(true)
     window.setTimeout(() => {
       let response =
         "현재 안내된 조치를 우선 진행해 주세요. 판단이 어렵다면 관련 공식 기관에 직접 상담하는 것이 가장 안전합니다."
-      if (/입력.*안|입력하지|안 했|안했/.test(value))
+      if (addedKeys.length)
+        response = `새로 확인된 상황(${addedKeys.map((key) => emergencyData[key].title).join(", ")})의 대응 방법을 위 카드에 추가했어요. ${emergencyData[addedKeys[0]].intro}`
+      else if (/입력.*안|입력하지|안 했|안했/.test(value))
         response =
           "개인정보를 입력하지 않았다면 정보 노출 위험은 상대적으로 낮을 수 있어요. 다만 파일 다운로드나 앱 설치가 있었는지 확인하고, 의심스러운 사이트에는 다시 접속하지 마세요."
       else if (/설치.*안|설치하지|아무것도 설치/.test(value))
@@ -920,6 +1177,7 @@ export default function App() {
       else if (/비밀번호|인증번호|신분증|개인정보/.test(value))
         response =
           "정보를 전달했다면 안전한 기기에서 관련 계정 비밀번호를 변경하고 금융회사에 노출 사실을 알려 주세요. 전달한 정보와 시각도 함께 정리해 두세요."
+      if (masked) response = `${MASK_NOTICE} ${response}`
       setEmergencyMessages((items) => [
         ...items,
         { from: "assistant", text: response },
@@ -930,6 +1188,26 @@ export default function App() {
 
   return (
     <div className="app">
+      {loginPopup && (
+        <ConfirmModal
+          title="로그인이 필요해요"
+          message="금융사기 시뮬레이션은 로그인 이후 사용할 수 있습니다."
+          confirmLabel="로그인하러 가기"
+          cancelLabel="닫기"
+          onConfirm={goLoginFromPopup}
+          onCancel={closeLoginPopup}
+        />
+      )}
+      {endConfirm && (
+        <ConfirmModal
+          title="시뮬레이션을 종료하시겠습니까?"
+          message="지금 종료하면 진행한 대화와 결과 리포트가 저장되지 않고 홈 화면으로 이동해요."
+          confirmLabel="예"
+          cancelLabel="아니오"
+          onConfirm={confirmEndSimulation}
+          onCancel={() => setEndConfirm(false)}
+        />
+      )}
       <header className={`nav-shell ${page === "home" ? "home-nav" : ""}`}>
         <nav className="nav" aria-label="주요 메뉴">
           <Logo onClick={() => go("home")} />
@@ -952,7 +1230,7 @@ export default function App() {
                 className={
                   page === "simulation" || page === "report" ? "active" : ""
                 }
-                onClick={() => go("simulation")}
+                onClick={() => openSimulation()}
               >
                 금융사기 시뮬레이션
               </button>
@@ -975,11 +1253,20 @@ export default function App() {
       <main>
         {page === "home" && (
           <Home
-            onSimulation={() => go("simulation")}
+            onSimulation={() => openSimulation(true)}
             onEmergency={() => go("emergency")}
+            resume={resumeInfo}
+            onResume={() => go("simulation")}
           />
         )}
-        {page === "simulation" && (
+        {page === "simulation" && !account && (
+          <AuthGate
+            message="금융사기 시뮬레이션은 로그인 이후 사용할 수 있습니다."
+            onLogin={() => { setReturnAfterLogin("simulation"); go("login") }}
+          />
+        )}
+        {page === "simulation" && account && (
+          
           <Simulation
             stage={simStage}
             context={context}
@@ -995,11 +1282,14 @@ export default function App() {
             chatTyping={chatTyping}
             chatMessages={chatMessages}
             onCreate={() => createScenario()}
-            onInterviewComplete={value => createScenario(value)}
+            onInterviewComplete={(value, images) => createScenario(value, images)}
+            usedImages={usedSimImages}
+            contextImages={contextImages}
+            restoredContextImageCount={restoredContextImageCount}
             onReset={resetSimulation}
             onStart={startChat}
             onSend={sendSimulationMessage}
-            onEnd={() => setSimStage("complete")}
+            onEnd={() => setEndConfirm(true)}
             onReport={() => go("report")}
           />
         )}
@@ -1011,14 +1301,14 @@ export default function App() {
             attachments={emergencyImages}
             setAttachments={setEmergencyImages}
             analyzing={emergencyAnalyzing}
-            onSelect={(key) => openEmergencyChat(key)}
+            onSelect={(key) => openEmergencyChat([key])}
             onAnalyze={analyzeEmergency}
           />
         )}
         {page === "emergencyChat" && emergency && (
           <>
           <EmergencyChat
-            category={emergency}
+            categories={emergencyKeys.length ? emergencyKeys : [emergency]}
             submittedText={submittedText}
             attachments={emergencyImages}
             setAttachments={setEmergencyImages}
@@ -1041,7 +1331,7 @@ export default function App() {
           />
         )}
         {page === "login" && <AuthPage mode="login" onSwitch={() => go("signup")} onLogin={(a) => { setAccount(a); sessionStorage.setItem(SESSION_KEY, a.email); go(returnAfterLogin) }} />}
-        {page === "signup" && <AuthPage mode="signup" onSwitch={() => go("login")} onLogin={(a) => { setAccount(a); sessionStorage.setItem(SESSION_KEY, a.email); go("mypage") }} />}
+        {page === "signup" && <AuthPage mode="signup" onSwitch={() => go("login")} onLogin={(a) => { setAccount(a); sessionStorage.setItem(SESSION_KEY, a.email); go(returnAfterLogin) }} />}
         {page === "mypage" && (account ? <MyPage account={account} reports={savedReports} conversations={savedChats} onLogout={logout} onRemoveReport={(id) => { const next = savedReports.filter(x => x.id !== id); setSavedReports(next); localStorage.setItem(`wsid-reports-${account.email}`, JSON.stringify(next)) }} onRemoveConversation={(id) => { const next = savedChats.filter(x => x.id !== id); setSavedChats(next); localStorage.setItem(`wsid-conversations-${account.email}`, JSON.stringify(next)) }} /> : <AuthGate onLogin={() => { setReturnAfterLogin("mypage"); go("login") }} />)}
       </main>
       {page !== "home" && (
@@ -1063,9 +1353,13 @@ export default function App() {
 function Home({
   onSimulation,
   onEmergency,
+  resume,
+  onResume,
 }: {
   onSimulation: () => void
   onEmergency: () => void
+  resume: { title: string; label: string; time: string } | null
+  onResume: () => void
 }) {
   return (
     <div className="home-page">
@@ -1109,6 +1403,25 @@ function Home({
               </span>
             </button>
           </div>
+          {resume && (
+            <button
+              type="button"
+              className="home-resume"
+              onClick={onResume}
+              aria-label={`진행 중인 훈련 이어서 하기: ${resume.title}`}
+              style={{ marginTop: 18, width: "100%", maxWidth: 720, display: "flex", alignItems: "center", gap: 14, padding: "16px 20px", borderRadius: 18, border: "1px solid rgba(37,99,235,.25)", background: "#fff", color: "#0f172a", textAlign: "left", cursor: "pointer", boxShadow: "0 10px 30px rgba(15,23,42,.08)" }}
+            >
+              <span className="home-action-icon" style={{ flexShrink: 0 }}>
+                <Icon name="refresh" size={26} />
+              </span>
+              <span style={{ display: "grid", gap: 3, flex: 1, minWidth: 0 }}>
+                <strong>이어서 하기</strong>
+                <small style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{resume.title}</small>
+                <small style={{ opacity: 0.7 }}>{resume.label} · 마지막 진행 {resume.time}</small>
+              </span>
+              <Icon name="arrow" size={20} />
+            </button>
+          )}
         </div>
       </section>
     </div>
@@ -1148,14 +1461,17 @@ type SimulationProps = {
   chatTyping: boolean
   chatMessages: SimulationMessage[]
   onCreate: () => void
-  onInterviewComplete: (context: string) => void
+  onInterviewComplete: (context: string, images: UploadedImage[]) => void
+  usedImages: number
+  contextImages: UploadedImage[]
+  restoredContextImageCount: number
   onReset: () => void
   onStart: (scenario?: Scenario) => void
-  onSend: (message: string) => void
+  onSend: (message: string, images: UploadedImage[]) => string
   onEnd: () => void
   onReport: () => void
 }
-type InterviewAnswer = { question: string; answer: string }
+type InterviewAnswer = { question: string; answer: string; images?: UploadedImage[] }
 function interviewQuestion(answers: InterviewAnswer[]) {
   const first = answers[0]?.answer ?? ""
   const second = answers[1]?.answer ?? ""
@@ -1171,39 +1487,70 @@ function interviewQuestion(answers: InterviewAnswer[]) {
   if (/중고|거래|당근|번개/.test(first) || /구매|판매/.test(second)) return { text: "지금 거래는 어느 단계인가요?", choices: ["상대방과 대화 중", "결제 전", "결제 완료", "배송·수령 대기"] }
   return { text: "지금은 어떤 상태인가요?", choices: ["연락을 기다리는 중", "진행 중", "결제·신청 완료", "잘 모르겠어요"] }
 }
-function ExperienceInterview({ onComplete }: { onComplete: (context: string) => void }) {
+const OCR_DEMO_NOTICE = "현재 데모에서는 사진 속 글자를 읽지 못해요. 사진에 담긴 핵심 내용(누가, 무엇을 요구했는지)을 글로도 적어 주세요."
+function ExperienceInterview({ onComplete }: { onComplete: (context: string, images: UploadedImage[]) => void }) {
   const [answers, setAnswers] = useState<InterviewAnswer[]>([])
   const [draft, setDraft] = useState("")
+  const [pendingImages, setPendingImages] = useState<UploadedImage[]>([])
+  const [error, setError] = useState("")
+  const fileRef = useRef<HTMLInputElement>(null)
   const endRef = useRef<HTMLDivElement>(null)
   const current = interviewQuestion(answers)
-  const finish = (items: InterviewAnswer[]) => onComplete(items.map(v => `${v.question} ${v.answer}`).join(" / "))
+  const usedImages = answers.reduce((sum, a) => sum + (a.images?.length ?? 0), 0) + pendingImages.length
+  const finish = (items: InterviewAnswer[]) =>
+    onComplete(items.map(v => `${v.question} ${v.answer}`).join(" / "), items.flatMap(v => v.images ?? []))
   const submit = (value: string) => {
     const v = value.trim()
-    if (!v) return
-    const next = [...answers, {question: current.text, answer: v}]
+    if (!v && !pendingImages.length) return
+    const sensitive = detectSensitive(v, true)
+    if (sensitive.length) {
+      setError(`${sensitive.join(", ")}로 보이는 내용이 있어요. 해당 부분을 지운 뒤 다시 입력해 주세요.`)
+      return
+    }
+    const answer = v || `(사진 ${pendingImages.length}장 첨부)`
+    const next = [...answers, { question: current.text, answer, images: pendingImages.length ? pendingImages : undefined }]
     setAnswers(next)
     setDraft("")
+    setPendingImages([])
+    setError("")
     if (next.length === 3) finish(next)
+  }
+  const addImages = async (files: FileList | null) => {
+    if (!files?.length) return
+    const result = await loadEvidence(Array.from(files), usedImages, SIM_IMAGE_LIMITS)
+    if (result.images.length) setPendingImages((items) => [...items, ...result.images])
+    setError(result.error)
+    if (fileRef.current) fileRef.current.value = ""
   }
   useEffect(() => { endRef.current?.scrollIntoView({block:"nearest", behavior:"smooth"}) }, [answers.length])
   return <div className="experience-interview">
     <div className="interview-topline"><strong>나의 일상 이야기하기</strong><span>최대 3개 질문 · {Math.min(answers.length+1,3)}/3</span></div>
-    <p className="interview-help">길게 설명하지 않아도 괜찮아요. 답변은 선택하거나 직접 적을 수 있어요.</p>
+    <p className="interview-help">길게 설명하지 않아도 괜찮아요. 답변은 선택하거나 직접 적을 수 있고, 받은 문자나 화면 사진을 첨부해도 돼요.</p>
     <div className="interview-thread" aria-live="polite">
       {answers.map((a,i) => <div className="interview-pair" key={i}>
         <div className="interview-assistant"><span className="interview-avatar"><Icon name="shield" size={17}/></span><div className="interview-bubble">{a.question}</div></div>
         <div className="interview-user"><span>{a.answer}</span></div>
+        {a.images && <div className="sent-photo-gallery" style={{ display: "flex", justifyContent: "flex-end" }}><EvidenceGallery images={a.images} /></div>}
       </div>)}
       <div className="interview-assistant"><span className="interview-avatar"><Icon name="shield" size={17}/></span><div className="interview-bubble">{current.text}</div></div>
       <div ref={endRef}/>
     </div>
     <div className="interview-choices">{current.choices.map(choice => <button key={choice} type="button" onClick={() => submit(choice)}>{choice}</button>)}</div>
+    {pendingImages.length > 0 && <div className="chat-attachments pending-photos">
+      <span>함께 보낼 사진: {pendingImages.length}장</span>
+      <EvidenceGallery images={pendingImages} max={SIM_IMAGE_LIMITS.max} onRemove={(id) => setPendingImages((items) => items.filter((item) => item.id !== id))} />
+      <p className="upload-safety"><Icon name="spark" size={15}/> {OCR_DEMO_NOTICE}</p>
+    </div>}
+    {error && <p className="upload-error" role="alert">{error}</p>}
+    <input ref={fileRef} className="visually-hidden-evidence" style={{ display: "none" }} type="file" multiple accept={SIM_IMAGE_ACCEPT} onChange={(e) => void addImages(e.target.files)} aria-label="상황 설명 사진 첨부" />
     <form className="interview-compose" onSubmit={e => {e.preventDefault(); submit(draft)}}>
-      <input aria-label="일상 경험 답변" placeholder="직접 답변하기..." maxLength={180} value={draft} onChange={e => setDraft(e.target.value)}/>
-      <button type="submit" disabled={!draft.trim()}><Icon name="arrow" size={17}/> 답변</button>
+      <button type="button" className="chat-attach-button" title={`사진 첨부 (PNG·JPEG, 최대 ${SIM_IMAGE_LIMITS.max}장, 장당 5MB)`} aria-label="사진 첨부" disabled={usedImages >= SIM_IMAGE_LIMITS.max} onClick={() => fileRef.current?.click()}><Icon name="image" size={18}/></button>
+      <input aria-label="일상 경험 답변" placeholder="직접 답변하기..." maxLength={180} value={draft} onChange={e => { setDraft(e.target.value); if (error && !detectSensitive(e.target.value, true).length) setError("") }}/>
+      <button type="submit" disabled={!draft.trim() && !pendingImages.length}><Icon name="arrow" size={17}/> 답변</button>
     </form>
+    <small style={{ display: "block", marginTop: 6, opacity: 0.7 }}>사진 첨부: PNG·JPEG, 훈련 한 번에 최대 {SIM_IMAGE_LIMITS.max}장, 장당 5MB ({usedImages}/{SIM_IMAGE_LIMITS.max})</small>
     {answers.length >= 2 && <button type="button" className="interview-skip" onClick={() => finish(answers)}>충분히 이야기했어요 · 상황 추천받기 →</button>}
-    <div className="privacy"><Icon name="lock" size={16}/><span>비밀번호·주민등록번호·계좌번호 등 민감한 정보는 입력하지 마세요.</span></div>
+    <div className="privacy"><Icon name="lock" size={16}/><span>비밀번호·주민등록번호·계좌번호 등 민감한 정보는 입력하지 마세요. 사진 속 민감정보도 가린 뒤 첨부해 주세요.</span></div>
   </div>
 }
 
@@ -1262,7 +1609,19 @@ function Typing() {
 
 function SimulationChat(p: SimulationProps) {
   const [input, setInput] = useState("")
+  const [sensitiveWarning, setSensitiveWarning] = useState("")
+  const [pendingImages, setPendingImages] = useState<UploadedImage[]>([])
+  const [dragging, setDragging] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+  const imageSlots = Math.max(0, SIM_IMAGE_LIMITS.max - p.usedImages - pendingImages.length)
+  const addImages = async (files: FileList | null) => {
+    if (!files?.length) return
+    const result = await loadEvidence(Array.from(files), p.usedImages + pendingImages.length, SIM_IMAGE_LIMITS)
+    if (result.images.length) setPendingImages((items) => [...items, ...result.images])
+    setSensitiveWarning(result.error)
+    if (fileRef.current) fileRef.current.value = ""
+  }
   const userTurns = p.chatMessages.filter(
     (message) => message.from === "user",
   ).length
@@ -1272,10 +1631,18 @@ function SimulationChat(p: SimulationProps) {
     if (node) node.scrollTo({ top: node.scrollHeight, behavior: "smooth" })
   }, [p.chatMessages, p.chatTyping, p.stage])
   const submit = () => {
-    if (!input.trim() || p.chatTyping) return
-    p.onSend(input)
+    if ((!input.trim() && !pendingImages.length) || p.chatTyping) return
+    const blocked = p.onSend(input, pendingImages)
+    if (blocked) {
+      // 입력 내용은 그대로 두어 사용자가 민감정보만 지우고 다시 보낼 수 있게 합니다.
+      setSensitiveWarning(blocked)
+      return
+    }
     setInput("")
+    setPendingImages([])
+    setSensitiveWarning("")
   }
+  const contextImageTotal = p.contextImages.length + p.restoredContextImageCount
   return (
     <section className="chat-page">
       <div className="container chat-layout">
@@ -1286,6 +1653,14 @@ function SimulationChat(p: SimulationProps) {
           </div>
           <h1>{p.scenario.title}</h1>
           <p>{p.scenario.description}</p>
+          {contextImageTotal > 0 && (
+            <div style={{ margin: "12px 0" }}>
+              <small>상황 설명에 첨부한 사진 {contextImageTotal}장</small>
+              {p.contextImages.length > 0
+                ? <EvidenceGallery images={p.contextImages} />
+                : <small style={{ display: "block", opacity: 0.7 }}>새로고침 후에는 사진 미리보기가 표시되지 않아요.</small>}
+            </div>
+          )}
           <div className="progress-head">
             <strong>진행 단계</strong>
             <span>{progress} / 5</span>
@@ -1329,7 +1704,13 @@ function SimulationChat(p: SimulationProps) {
                   <span className="sender">
                     {m.from === "contact" ? "의심스러운 연락" : "나"}
                   </span>
-                  <p>{m.text}</p>
+                  {m.text && <p>{m.text}</p>}
+                  {m.images && m.images.length > 0 && (
+                    <div className="sent-photo-gallery"><EvidenceGallery images={m.images} /></div>
+                  )}
+                  {!m.images && !!m.imageCount && (
+                    <p style={{ opacity: 0.75 }}>사진 {m.imageCount}장을 보냈어요. (새로고침 후에는 미리보기가 표시되지 않아요)</p>
+                  )}
                 </div>
               </div>
             ))}
@@ -1348,20 +1729,53 @@ function SimulationChat(p: SimulationProps) {
             )}
           </div>
           {p.stage === "chat" && (
-            <div className="simulation-chat-input">
+            <div
+              className="simulation-chat-input"
+              onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+              onDragLeave={(e) => { e.preventDefault(); if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragging(false) }}
+              onDrop={(e) => { e.preventDefault(); setDragging(false); void addImages(e.dataTransfer.files) }}
+            >
+              <input ref={fileRef} className="visually-hidden-evidence" style={{ display: "none" }} type="file" multiple accept={SIM_IMAGE_ACCEPT} onChange={(e) => void addImages(e.target.files)} aria-label="사진 첨부" />
+              {dragging && <div className="chat-drop-hint">여기에 사진을 놓아 첨부하세요 (PNG·JPEG)</div>}
+              {pendingImages.length > 0 && (
+                <div className="chat-attachments pending-photos">
+                  <span>전송할 사진: {pendingImages.length}장</span>
+                  <EvidenceGallery images={pendingImages} max={SIM_IMAGE_LIMITS.max} onRemove={(id) => setPendingImages((items) => items.filter((item) => item.id !== id))} />
+                  <p className="upload-safety"><Icon name="spark" size={15} /> {OCR_DEMO_NOTICE}</p>
+                </div>
+              )}
               <div className="privacy">
                 <Icon name="lock" size={15} />
                 <span>
-                  실제 비밀번호, 인증번호, 계좌번호는 입력하지 마세요.
+                  실제 비밀번호, 인증번호, 계좌번호는 입력하지 마세요. 사진 첨부는 PNG·JPEG, 훈련 한 번에 최대 {SIM_IMAGE_LIMITS.max}장(남은 {imageSlots}장), 장당 5MB예요.
                 </span>
               </div>
-              <div>
+              {sensitiveWarning && (
+                <p className="upload-error" role="alert">
+                  {sensitiveWarning}
+                </p>
+              )}
+              <div className="chat-input-row">
+                <button
+                  type="button"
+                  className="chat-attach-button"
+                  title="사진 첨부"
+                  aria-label="사진 첨부"
+                  disabled={imageSlots === 0 || p.chatTyping}
+                  onClick={() => fileRef.current?.click()}
+                >
+                  <Icon name="image" size={20} />
+                </button>
                 <textarea
                   rows={1}
                   maxLength={500}
                   value={input}
                   disabled={p.chatTyping}
-                  onChange={(event) => setInput(event.target.value)}
+                  aria-invalid={Boolean(sensitiveWarning)}
+                  onChange={(event) => {
+                    setInput(event.target.value)
+                    if (sensitiveWarning && !detectSensitive(event.target.value, true).length) setSensitiveWarning("")
+                  }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
                       event.preventDefault()
@@ -1371,7 +1785,7 @@ function SimulationChat(p: SimulationProps) {
                   placeholder="상대방에게 보낼 답변을 직접 입력해 주세요."
                 />
                 <button
-                  disabled={!input.trim() || p.chatTyping}
+                  disabled={(!input.trim() && !pendingImages.length) || p.chatTyping}
                   onClick={submit}
                 >
                   <Icon name="send" size={17} /> 전송
@@ -1549,7 +1963,7 @@ function Emergency(p: EmergencyProps) {
 }
 
 type EmergencyChatProps = {
-  category: EmergencyKey
+  categories: EmergencyKey[]
   submittedText: string
   attachments: UploadedImage[]
   setAttachments: (value: UploadedImage[]) => void
@@ -1589,11 +2003,17 @@ function EmergencyChat(p: EmergencyChatProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const initialScrollSet = useRef(false)
   const previousMessageCount = useRef(p.messages.length)
-  const data = emergencyData[p.category]
+  const activeSituations = p.categories.map((key) => ({ key, ...emergencyData[key] }))
+  const multiple = activeSituations.length > 1
+  // 여러 상황의 기관을 중복 없이 합칩니다(112는 항상 맨 앞).
+  const organizations = Array.from(new Set(activeSituations.flatMap((s) => s.organizations))).sort(
+    (a, b) => (a === "police" ? -1 : b === "police" ? 1 : 0),
+  )
+  const hasCategory = (key: EmergencyKey) => p.categories.includes(key)
   const firstResponseEnd = p.submittedText || (p.messages[0]?.from === "user") ? 2 : 1
   const isAnalysis = Boolean(p.submittedText || p.attachments.length)
   const similarCase =
-    p.category === "trade"
+    hasCategory("trade")
       ? {
           type: "중고거래 선입금 사기",
           summary:
@@ -1603,7 +2023,7 @@ function EmergencyChat(p: EmergencyChatProps) {
           signs:
             "시세보다 지나치게 낮은 가격, 안전결제 거부, 플랫폼 밖 연락 유도",
         }
-      : p.category === "link" || p.category === "app"
+      : hasCategory("link") || hasCategory("app")
         ? {
             type: "문자 링크를 이용한 피싱",
             summary:
@@ -1634,6 +2054,29 @@ function EmergencyChat(p: EmergencyChatProps) {
     }
     previousMessageCount.current = p.messages.length
   }, [p.messages, p.typing])
+  // 상황이 여러 개면 상황별로 묶어서 대응 카드를 모두 보여줍니다(우선순위 순서).
+  const renderSteps = () =>
+    activeSituations.map((situation, groupIndex) => (
+      <div key={situation.key} style={multiple ? { marginTop: groupIndex ? 22 : 4 } : undefined}>
+        {multiple && (
+          <h4 style={{ margin: "0 0 10px", display: "flex", alignItems: "center", gap: 8 }}>
+            <span className="badge">{groupIndex === 0 ? "가장 먼저" : `상황 ${groupIndex + 1}`}</span>
+            {situation.title}
+          </h4>
+        )}
+        <div className="action-steps">
+          {situation.steps.map((step, index) => (
+            <div key={step.title}>
+              <span>{index + 1}</span>
+              <div>
+                <h4>{step.title}</h4>
+                <p>{step.body}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    ))
   const submit = () => {
     if ((!input.trim() && !pendingImages.length) || p.typing) return
     p.onSend(input, pendingImages)
@@ -1720,7 +2163,7 @@ function EmergencyChat(p: EmergencyChatProps) {
                   </div>
                   <p>
                     {p.submittedText
-                      ? `${data.title} 상황과 관련된 표현이 확인되었어요. 상대의 신원과 요청 내용을 공식 경로에서 별도로 확인하는 것이 필요합니다.`
+                      ? `${activeSituations.map((s) => s.title).join(", ")} 상황과 관련된 표현이 확인되었어요. 상대의 신원과 요청 내용을 공식 경로에서 별도로 확인하는 것이 필요합니다.`
                       : "첨부한 사진이 확인되었어요. 현재 데모에서는 이미지 속 문자를 읽을 수 없으므로 아래 대화창에 핵심 내용을 추가해 주세요."}
                   </p>
 
@@ -1833,17 +2276,7 @@ function EmergencyChat(p: EmergencyChatProps) {
                       <h3>지금 필요한 대응 방법</h3>
                     </div>
                   </div>
-                  <div className="action-steps">
-                    {data.steps.map((step, index) => (
-                      <div key={step.title}>
-                        <span>{index + 1}</span>
-                        <div>
-                          <h4>{step.title}</h4>
-                          <p>{step.body}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  {renderSteps()}
                 </section>
                 <p className="analysis-disclaimer">
                   <Icon name="alert" size={15} /> AI 분석 결과는 참고용이며,
@@ -1862,23 +2295,13 @@ function EmergencyChat(p: EmergencyChatProps) {
                     <h3>지금 해야 할 일</h3>
                   </div>
                 </div>
-                <div className="action-steps">
-                  {data.steps.map((step, index) => (
-                    <div key={step.title}>
-                      <span>{index + 1}</span>
-                      <div>
-                        <h4>{step.title}</h4>
-                        <p>{step.body}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                {renderSteps()}
               </div>
             )}
             <div className="chat-organizations">
               <h3>관련 공식 기관</h3>
               <div className="organization-grid">
-                {data.organizations.map((key) => {
+                {organizations.map((key) => {
                   const item = organizationData[key]
                   return (
                     <a
@@ -2178,7 +2601,7 @@ function AuthPage({ mode, onSwitch, onLogin }: { mode: "login" | "signup"; onSwi
     </form>
   </div></section>
 }
-function AuthGate({ onLogin }: { onLogin: () => void }) { return <section className="subpage account-page"><div className="account-card gate-card"><div className="account-icon"><Icon name="lock" size={28} /></div><h1>로그인이 필요해요</h1><p>마이페이지와 저장한 기록은 로그인 후 확인할 수 있어요.</p><button className="primary-button" onClick={onLogin}>로그인하러 가기 <Icon name="arrow"/></button></div></section> }
+function AuthGate({ onLogin, message = "마이페이지와 저장한 기록은 로그인 후 확인할 수 있어요." }: { onLogin: () => void; message?: string }) { return <section className="subpage account-page"><div className="account-card gate-card"><div className="account-icon"><Icon name="lock" size={28} /></div><h1>로그인이 필요해요</h1><p>{message}</p><button className="primary-button" onClick={onLogin}>로그인하러 가기 <Icon name="arrow"/></button></div></section> }
 function MyPage({ account, reports, conversations, onLogout, onRemoveReport, onRemoveConversation }: { account: DemoAccount; reports: SavedReport[]; conversations: SavedConversation[]; onLogout: () => void; onRemoveReport: (id: string) => void; onRemoveConversation: (id: string) => void }) {
   const [tab, setTab] = useState<"reports" | "chats">("reports")
   const [openReport, setOpenReport] = useState<SavedReport | null>(null)
