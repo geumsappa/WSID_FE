@@ -22,6 +22,7 @@ interface SimulationMessage {
   text: string
   images?: UploadedImage[]
   imageCount?: number // 새로고침 후 복구된 메시지: 사진 원본은 저장하지 않고 장수만 남깁니다.
+  leaked?: string[] // 이 메시지에서 입력한 개인정보 "종류"만 기록합니다(실제 값은 저장하지 않음).
 }
 interface SituationOption {
   key: SituationKey
@@ -61,22 +62,33 @@ async function hashDemoPassword(password: string, salt: string) {
   return Array.from(new Uint8Array(digest)).map(x => x.toString(16).padStart(2, "0")).join("")
 }
 // 민감정보 감지·가림 (프런트 데모용 규칙)
-const isPhoneNumber = (value: string) => /^01[016789][-\s]?\d{3,4}[-\s]?\d{4}$/.test(value.trim())
 const SECRET_PATTERN = /(비밀번호|인증번호|보안카드|OTP|otp|PIN|pin)(.{0,12}?)(\d{4,})/g
 const RRN_PATTERN = /\d{6}\s?-\s?[1-4]\d{6}/g
 const CARD_PATTERN = /\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}/g
 const ACCOUNT_PATTERN = /\d{2,6}-\d{2,6}-\d{2,7}/g
-function detectSensitive(text: string, includeAccount: boolean): string[] {
-  const found: string[] = []
-  if (new RegExp(RRN_PATTERN.source).test(text)) found.push("주민등록번호")
-  if (new RegExp(CARD_PATTERN.source).test(text)) found.push("카드번호")
-  if (new RegExp(SECRET_PATTERN.source).test(text)) found.push("비밀번호·인증번호")
-  if (includeAccount) {
-    const rest = text.replace(RRN_PATTERN, "").replace(CARD_PATTERN, "")
-    const accounts = rest.match(new RegExp(ACCOUNT_PATTERN.source, "g")) ?? []
-    if (accounts.some((value) => !isPhoneNumber(value)) || /계좌.{0,8}\d{10,14}/.test(rest)) found.push("계좌번호")
-  }
-  return found
+const PHONE_PATTERN = /01[016789][-\s]?\d{3,4}[-\s]?\d{4}/g
+const EMAIL_PATTERN = /[\w.+-]+@[\w-]+\.[\w.]+/g
+// 시뮬레이션용 개인정보 처리
+// - 입력은 막지 않습니다(사용자가 실제로 정보를 내주는지가 훈련 평가 대상이기 때문).
+// - 어떤 "종류"의 정보를 입력했는지만 남기고, 실제 값은 전송하는 순간 [주민등록번호]처럼 바꿔 버립니다.
+//   그래서 화면 상태·이어하기 저장·리포트 어디에도 원래 값이 남지 않습니다.
+// - askedForCode=true: 상대가 직전에 인증번호·비밀번호를 요구했다면 숫자만 보낸 답장도 인증번호로 봅니다.
+function scrubPersonalInfo(input: string, askedForCode = false): { text: string; types: string[] } {
+  const types = new Set<string>()
+  let text = input
+  text = text.replace(RRN_PATTERN, () => { types.add("주민등록번호"); return "[주민등록번호]" })
+  text = text.replace(CARD_PATTERN, () => { types.add("카드번호"); return "[카드번호]" })
+  text = text.replace(SECRET_PATTERN, (_m, key: string, mid: string) => {
+    const label = /비밀번호|PIN|pin/.test(key) ? "비밀번호" : "인증번호"
+    types.add(label)
+    return `${key}${mid}[${label}]`
+  })
+  text = text.replace(PHONE_PATTERN, () => { types.add("전화번호"); return "[전화번호]" })
+  text = text.replace(ACCOUNT_PATTERN, () => { types.add("계좌번호"); return "[계좌번호]" })
+  text = text.replace(/(계좌.{0,8}?)(\d{10,14})/g, (_m, head: string) => { types.add("계좌번호"); return `${head}[계좌번호]` })
+  text = text.replace(EMAIL_PATTERN, () => { types.add("이메일"); return "[이메일]" })
+  if (askedForCode) text = text.replace(/(^|\D)(\d{4,8})(?!\d)/g, (_m, head: string) => { types.add("인증번호"); return `${head}[인증번호]` })
+  return { text, types: Array.from(types) }
 }
 // 피해 대응에서는 본인 민감정보만 가립니다. 상대방 계좌·전화번호는 신고 이력 조회에 쓰이므로 남겨 둡니다.
 function maskSensitive(text: string) {
@@ -244,6 +256,7 @@ type ConversationAnalysis = {
   risky: string[]
   missed: string[]
   summary: string
+  leaked?: string[] // 훈련 중 입력한 개인정보 종류(값 없음). 예전에 저장한 리포트에는 없을 수 있어 선택 항목입니다.
 }
 
 const situations: SituationOption[] = [
@@ -429,6 +442,8 @@ const analyzeConversation = (
     .filter((m) => m.from === "user")
     .map((m) => m.text)
     .join(" ")
+  // 훈련 중 입력한 개인정보 종류(실제 값은 이미 지워진 상태)
+  const leaked = Array.from(new Set(messages.flatMap((m) => m.leaked ?? [])))
   const checks = {
     recognized: /의심|사기|수상|믿을 수|확인.*필요/.test(text),
     protected:
@@ -456,9 +471,13 @@ const analyzeConversation = (
       "민감정보를 전달하려는 표현이 있었어요.",
     ],
   ] as const
-  const risky = riskyPatterns
-    .filter(([pattern]) => pattern.test(text))
-    .map(([, label]) => label)
+  const risky = [
+    ...(leaked.length
+      ? [`대화 중 ${leaked.join(", ")}을(를) 상대에게 보냈어요. 실제 상황이었다면 바로 피해로 이어질 수 있어요.`]
+      : []),
+    ...riskyPatterns.filter(([pattern]) => pattern.test(text)).map(([, label]) => label),
+  ]
+  if (leaked.length) checks.protected = false
   const safe = [
     checks.recognized && "연락의 수상한 점을 인식하고 의심을 표현했어요.",
     checks.protected && "민감한 개인정보를 제공하지 않겠다고 밝혔어요.",
@@ -467,6 +486,8 @@ const analyzeConversation = (
     checks.ended && "의심스러운 대화를 중단하거나 신고·차단하려 했어요.",
   ].filter(Boolean) as string[]
   const missed = [
+    leaked.length > 0 &&
+      "금융기관·택배사·회사는 대화나 메시지로 주민등록번호, 계좌·카드번호, 비밀번호, 인증번호를 요구하지 않아요.",
     !checks.recognized &&
       "상대의 재촉과 불이익 경고를 의심 신호로 명확히 짚지 않았어요.",
     !checks.verified &&
@@ -491,6 +512,7 @@ const analyzeConversation = (
         : score >= 60
           ? "위험 신호를 살펴보며 신중하게 대응했어요."
           : "공식 경로 확인과 대화 중단을 더 적극적으로 활용해 보세요.",
+    leaked,
   }
 }
 
@@ -977,7 +999,7 @@ export default function App() {
       scenarioOptions,
       context,
       scenario,
-      chatMessages: chatMessages.map((m) => ({ from: m.from, text: m.text, imageCount: (m.images?.length ?? m.imageCount ?? 0) || undefined })),
+      chatMessages: chatMessages.map((m) => ({ from: m.from, text: m.text, imageCount: (m.images?.length ?? m.imageCount ?? 0) || undefined, leaked: m.leaked })),
       contextImageCount: contextImages.length + restoredContextImageCount,
     }
     try { localStorage.setItem(simProgressKey(account.email), JSON.stringify(progress)) } catch { /* 저장 공간 부족 시 이어하기만 생략 */ }
@@ -1089,20 +1111,22 @@ export default function App() {
   }
   // 반환값: 전송을 막은 이유(없으면 빈 문자열)
   const sendSimulationMessage = (rawMessage: string, images: UploadedImage[] = []): string => {
-    const message = rawMessage.trim().slice(0, 500)
-    if ((!message && !images.length) || simStage !== "chat" || chatTyping) return ""
-    const sensitive = detectSensitive(message, true)
-    if (sensitive.length)
-      return `${sensitive.join(", ")}로 보이는 내용이 있어요. 해당 부분을 지운 뒤 다시 입력해 주세요. 시뮬레이션에서도 실제 정보는 입력하지 마세요.`
+    if ((!rawMessage.trim() && !images.length) || simStage !== "chat" || chatTyping) return ""
+    // 개인정보 입력 여부는 기록하고(리포트 반영), 실제 값은 이 시점에 지워 어디에도 남기지 않습니다.
+    const lastContact = [...chatMessages].reverse().find((m) => m.from === "contact")?.text ?? ""
+    const askedForCode = /인증|비밀번호|코드|본인 확인|번호/.test(lastContact)
+    const { text: message, types: leaked } = scrubPersonalInfo(rawMessage.trim().slice(0, 500), askedForCode)
     if (usedSimImages + images.length > SIM_IMAGE_LIMITS.max)
       return `사진은 훈련 한 번에 최대 ${SIM_IMAGE_LIMITS.max}장까지 보낼 수 있어요.`
     const userTurns = chatMessages.filter((item) => item.from === "user").length
-    setChatMessages((items) => [...items, { from: "user", text: message, images: images.length ? images : undefined }])
+    setChatMessages((items) => [...items, { from: "user", text: message, images: images.length ? images : undefined, leaked: leaked.length ? leaked : undefined }])
     setChatTyping(true)
     const run = simRun.current
     window.setTimeout(() => {
       if (run !== simRun.current) return
-      const reply = message
+      const reply = leaked.length
+        ? `${leaked.join(", ")} 확인 감사하다며, 처리를 마치려면 추가 확인이 필요하다고 다른 정보도 요구합니다.`
+        : message
         ? createDemoReply(message, userTurns, scenario)
         : `보내주신 사진을 확인했다며, ${scenario.subject} 처리를 위해 지금 이 대화에서 바로 진행하자고 재촉합니다.`
       setChatMessages((items) => [...items, { from: "contact", text: reply }])
@@ -1502,17 +1526,14 @@ function ExperienceInterview({ onComplete }: { onComplete: (context: string, ima
   const submit = (value: string) => {
     const v = value.trim()
     if (!v && !pendingImages.length) return
-    const sensitive = detectSensitive(v, true)
-    if (sensitive.length) {
-      setError(`${sensitive.join(", ")}로 보이는 내용이 있어요. 해당 부분을 지운 뒤 다시 입력해 주세요.`)
-      return
-    }
-    const answer = v || `(사진 ${pendingImages.length}장 첨부)`
+    // 상황 설명에 들어간 개인정보도 실제 값은 바로 지웁니다.
+    const { text: cleaned, types } = scrubPersonalInfo(v)
+    const answer = cleaned || `(사진 ${pendingImages.length}장 첨부)`
     const next = [...answers, { question: current.text, answer, images: pendingImages.length ? pendingImages : undefined }]
     setAnswers(next)
     setDraft("")
     setPendingImages([])
-    setError("")
+    setError(types.length ? `입력한 ${types.join(", ")}은(는) 저장하지 않고 바로 지웠어요.` : "")
     if (next.length === 3) finish(next)
   }
   const addImages = async (files: FileList | null) => {
@@ -1545,12 +1566,12 @@ function ExperienceInterview({ onComplete }: { onComplete: (context: string, ima
     <input ref={fileRef} className="visually-hidden-evidence" style={{ display: "none" }} type="file" multiple accept={SIM_IMAGE_ACCEPT} onChange={(e) => void addImages(e.target.files)} aria-label="상황 설명 사진 첨부" />
     <form className="interview-compose" onSubmit={e => {e.preventDefault(); submit(draft)}}>
       <button type="button" className="chat-attach-button" title={`사진 첨부 (PNG·JPEG, 최대 ${SIM_IMAGE_LIMITS.max}장, 장당 5MB)`} aria-label="사진 첨부" disabled={usedImages >= SIM_IMAGE_LIMITS.max} onClick={() => fileRef.current?.click()}><Icon name="image" size={18}/></button>
-      <input aria-label="일상 경험 답변" placeholder="직접 답변하기..." maxLength={180} value={draft} onChange={e => { setDraft(e.target.value); if (error && !detectSensitive(e.target.value, true).length) setError("") }}/>
+      <input aria-label="일상 경험 답변" placeholder="직접 답변하기..." maxLength={180} value={draft} onChange={e => setDraft(e.target.value)}/>
       <button type="submit" disabled={!draft.trim() && !pendingImages.length}><Icon name="arrow" size={17}/> 답변</button>
     </form>
     <small style={{ display: "block", marginTop: 6, opacity: 0.7 }}>사진 첨부: PNG·JPEG, 훈련 한 번에 최대 {SIM_IMAGE_LIMITS.max}장, 장당 5MB ({usedImages}/{SIM_IMAGE_LIMITS.max})</small>
     {answers.length >= 2 && <button type="button" className="interview-skip" onClick={() => finish(answers)}>충분히 이야기했어요 · 상황 추천받기 →</button>}
-    <div className="privacy"><Icon name="lock" size={16}/><span>비밀번호·주민등록번호·계좌번호 등 민감한 정보는 입력하지 마세요. 사진 속 민감정보도 가린 뒤 첨부해 주세요.</span></div>
+    <div className="privacy"><Icon name="lock" size={16}/><span>입력한 번호·계좌 등 개인정보는 저장하지 않고 바로 지워요. 사진 속 개인정보는 가린 뒤 첨부해 주세요.</span></div>
   </div>
 }
 
@@ -1634,7 +1655,7 @@ function SimulationChat(p: SimulationProps) {
     if ((!input.trim() && !pendingImages.length) || p.chatTyping) return
     const blocked = p.onSend(input, pendingImages)
     if (blocked) {
-      // 입력 내용은 그대로 두어 사용자가 민감정보만 지우고 다시 보낼 수 있게 합니다.
+      // 사진 장수 초과처럼 보낼 수 없을 때만 안내합니다.
       setSensitiveWarning(blocked)
       return
     }
@@ -1708,6 +1729,9 @@ function SimulationChat(p: SimulationProps) {
                   {m.images && m.images.length > 0 && (
                     <div className="sent-photo-gallery"><EvidenceGallery images={m.images} /></div>
                   )}
+                  {m.leaked && m.leaked.length > 0 && (
+                    <small style={{ display: "block", opacity: 0.7 }}>입력한 {m.leaked.join(", ")}은(는) 저장하지 않고 지웠어요.</small>
+                  )}
                   {!m.images && !!m.imageCount && (
                     <p style={{ opacity: 0.75 }}>사진 {m.imageCount}장을 보냈어요. (새로고침 후에는 미리보기가 표시되지 않아요)</p>
                   )}
@@ -1747,7 +1771,7 @@ function SimulationChat(p: SimulationProps) {
               <div className="privacy">
                 <Icon name="lock" size={15} />
                 <span>
-                  실제 비밀번호, 인증번호, 계좌번호는 입력하지 마세요. 사진 첨부는 PNG·JPEG, 훈련 한 번에 최대 {SIM_IMAGE_LIMITS.max}장(남은 {imageSlots}장), 장당 5MB예요.
+                  입력한 번호·계좌 등 개인정보는 저장하지 않고 바로 지워요. 사진 첨부는 PNG·JPEG, 훈련 한 번에 최대 {SIM_IMAGE_LIMITS.max}장(남은 {imageSlots}장), 장당 5MB예요.
                 </span>
               </div>
               {sensitiveWarning && (
@@ -1774,7 +1798,6 @@ function SimulationChat(p: SimulationProps) {
                   aria-invalid={Boolean(sensitiveWarning)}
                   onChange={(event) => {
                     setInput(event.target.value)
-                    if (sensitiveWarning && !detectSensitive(event.target.value, true).length) setSensitiveWarning("")
                   }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter" && !event.shiftKey) {
@@ -2441,6 +2464,18 @@ function Report({
             </div>
           </div>
         </div>
+        {analysis.leaked && analysis.leaked.length > 0 && (
+          <div className="analysis-card caution" role="note" style={{ marginBottom: 20 }}>
+            <span className="analysis-icon">
+              <Icon name="lock" size={23} />
+            </span>
+            <h3>훈련 중 입력한 개인정보</h3>
+            <p style={{ margin: "8px 0" }}>{analysis.leaked.join(", ")}</p>
+            <small style={{ opacity: 0.75 }}>
+              입력한 종류만 기록했고, 실제 값은 입력 즉시 삭제되어 어디에도 저장되지 않았어요.
+            </small>
+          </div>
+        )}
         <div className="analysis-grid">
           <article className="analysis-card good">
             <span className="analysis-icon">
@@ -2612,7 +2647,7 @@ function MyPage({ account, reports, conversations, onLogout, onRemoveReport, onR
     <div className="profile-card"><div className="profile-avatar"><Icon name="user" size={26}/></div><div><strong>{account.name}님, 안녕하세요!</strong><p>{account.email}</p></div><span className="profile-status"><Icon name="check" size={15}/> 가입 완료</span></div>
     <div className="mypage-stats"><div><span>저장한 리포트</span><strong>{reports.length}<small>개</small></strong></div><div><span>긴급대응 대화</span><strong>{conversations.length}<small>개</small></strong></div></div>
     <div className="mypage-records"><div className="mypage-tabs"><button className={tab === "reports" ? "active" : ""} onClick={() => { setTab("reports"); setOpenReport(null); setOpenChat(null) }}>내 리포트 <span>{reports.length}</span></button><button className={tab === "chats" ? "active" : ""} onClick={() => { setTab("chats"); setOpenReport(null); setOpenChat(null) }}>긴급대응 대화 <span>{conversations.length}</span></button></div>
-      {openReport ? <div className="record-detail"><button className="record-back" onClick={() => setOpenReport(null)}>← 목록으로</button><h2>{openReport.title}</h2><p>{openReport.date} · {openReport.type}</p><div className="record-score">대응 점수 <strong>{openReport.analysis.score}점</strong></div><h3>{openReport.analysis.summary}</h3><div className="record-detail-columns"><div><h4>잘한 대응</h4><ul>{openReport.analysis.safe.map((v,i) => <li key={i}>{v}</li>)}</ul></div><div><h4>주의할 대응</h4><ul>{openReport.analysis.risky.map((v,i) => <li key={i}>{v}</li>)}</ul></div><div><h4>놓친 위험 신호</h4><ul>{openReport.analysis.missed.map((v,i) => <li key={i}>{v}</li>)}</ul></div></div><button className="outline-button" onClick={() => window.print()}><Icon name="download" size={17}/> 인쇄 / PDF로 저장</button></div>
+      {openReport ? <div className="record-detail"><button className="record-back" onClick={() => setOpenReport(null)}>← 목록으로</button><h2>{openReport.title}</h2><p>{openReport.date} · {openReport.type}</p><div className="record-score">대응 점수 <strong>{openReport.analysis.score}점</strong></div><h3>{openReport.analysis.summary}</h3>{openReport.analysis.leaked && openReport.analysis.leaked.length > 0 && <p className="record-leaked">훈련 중 입력한 개인정보: <strong>{openReport.analysis.leaked.join(", ")}</strong> (값은 저장되지 않음)</p>}<div className="record-detail-columns"><div><h4>잘한 대응</h4><ul>{openReport.analysis.safe.map((v,i) => <li key={i}>{v}</li>)}</ul></div><div><h4>주의할 대응</h4><ul>{openReport.analysis.risky.map((v,i) => <li key={i}>{v}</li>)}</ul></div><div><h4>놓친 위험 신호</h4><ul>{openReport.analysis.missed.map((v,i) => <li key={i}>{v}</li>)}</ul></div></div><button className="outline-button" onClick={() => window.print()}><Icon name="download" size={17}/> 인쇄 / PDF로 저장</button></div>
       : openChat ? <div className="record-detail"><button className="record-back" onClick={() => setOpenChat(null)}>← 목록으로</button><h2>{openChat.title}</h2><p>{openChat.date}</p><div className="saved-chat-messages">{openChat.messages.map((m, i) => <div className={`saved-chat-line ${m.from}`} key={i}><span>{m.from === "user" ? "나" : "어떡하지 도우미"}</span><div>{m.text || (m.imageCount ? "사진을 전송했어요." : "")}{!!m.imageCount && <small>첨부 사진 {m.imageCount}장 · 원본은 저장되지 않았습니다</small>}</div></div>)}</div></div>
       : items.length ? <div className="record-list">{tab === "reports" ? reports.map(r => <div className="record-row" key={r.id}><div className="record-icon"><Icon name="shield" size={22}/></div><div className="record-info"><strong>{r.title}</strong><p>{r.type} · {r.date}</p></div><span className="record-badge">{r.analysis.score}점</span><button className="record-view" onClick={() => setOpenReport(r)}>상세보기</button><button className="record-delete" onClick={() => { if (window.confirm("이 리포트를 삭제할까요?")) onRemoveReport(r.id) }}>삭제</button></div>) : conversations.map(c => <div className="record-row" key={c.id}><div className="record-icon"><Icon name="chat" size={22}/></div><div className="record-info"><strong>{c.title}</strong><p>{c.date} · 메시지 {c.messages.length}개</p></div><button className="record-view" onClick={() => setOpenChat(c)}>대화 보기</button><button className="record-delete" onClick={() => { if (window.confirm("이 대화를 삭제할까요?")) onRemoveConversation(c.id) }}>삭제</button></div>)}</div>
       : <div className="record-empty"><div className="record-empty-icon"><Icon name={tab === "reports" ? "shield" : "chat"} size={30}/></div><h3>{tab === "reports" ? "아직 저장한 리포트가 없어요" : "아직 저장한 대화가 없어요"}</h3><p>{tab === "reports" ? "시뮬레이션을 마치고 결과 화면에서 리포트를 저장해 보세요." : "긴급대응 채팅에서 ‘이 대화 저장’을 누르면 여기에 나타나요."}</p></div>}
