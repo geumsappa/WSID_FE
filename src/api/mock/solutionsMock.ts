@@ -8,11 +8,12 @@ import type {
   SolutionMessageRequest, SolutionMessageResponse, StartSolutionRequest, StartSolutionResponse,
   UpdateFactsRequest, UpdateFactsResponse, YesNoUnknown,
 } from "../types"
-import { checkVersion, delay, nextId } from "./delay"
+import { checkVersion, delay, nextId, persistedMap, withSave } from "./delay"
 import { toCard } from "./guidesMock"
 
 type MockSolution = { id: number; status: "ACTIVE" | "COMPLETED"; stateVersion: number; facts: SolutionFacts; extra: EmergencyKey[]; messages: ChatMessage[] }
-const sessions = new Map<number, MockSolution>()
+const store = persistedMap<MockSolution>("wsid-mock-solutions")
+const sessions = store.map
 const QUESTIONS: Record<FactKey, string> = {
   transferredMoney: "상대에게 돈을 보낸 적이 있나요?",
   sharedInformation: "개인정보를 전달한 적이 있나요?",
@@ -53,7 +54,7 @@ function nextQuestion(s: MockSolution): NextQuestion | null {
   return key ? { factKey: key, content: QUESTIONS[key], options: OPTIONS } : null
 }
 
-export const solutionsMock = {
+export const solutionsMock = withSave({
   async start(body: StartSolutionRequest): Promise<StartSolutionResponse> {
     await delay(750)
     const s: MockSolution = { id: nextId(), status: "ACTIVE", stateVersion: 0, facts: { transferredMoney: "UNKNOWN", sharedInformation: "UNKNOWN", installedApp: "UNKNOWN", contactContinues: "UNKNOWN" }, extra: [], messages: [] }
@@ -99,4 +100,4 @@ export const solutionsMock = {
     s.status = "COMPLETED"
     return { solutionId: s.id, status: s.status }
   },
-}
+}, store.save)

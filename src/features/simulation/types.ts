@@ -1,6 +1,29 @@
+import type { ChoiceOption, MockPage } from "@/api"
 import type { UploadedImage } from "@/types/common"
 
-export type SimStage = "input" | "loading" | "summary" | "chat" | "complete"
+// ───────── 화면이 쓰는 타입 (백엔드 훈련 API와 연결) ─────────
+/**
+ * 화면 단계. 서버의 phase(DISCOVERY·SCENARIO_READY·SIMULATION·RESULT)에 로딩 상태를 더한 것이에요.
+ * loading: 훈련을 만들거나 불러오는 중 / discovery: 상황 대화 / generating: 시나리오 생성 중
+ * ready: 시나리오 준비 완료 / chat: 가상 훈련 대화 / finishing: 종료·리포트 생성 중 / done: 종료됨
+ */
+export type SimStage = "idle" | "loading" | "failed" | "discovery" | "generating" | "ready" | "chat" | "finishing" | "done"
+
+/** 채팅 한 줄 */
+export type ChatLine = {
+  key: string
+  from: "ai" | "user"
+  text: string
+  /** AI가 준 선택지 (있으면 버튼으로 표시) */
+  options?: ChoiceOption[]
+  /** 내 메시지 아래 작은 안내 (예: 입력한 개인정보를 가렸다는 문구) */
+  note?: string
+  /** 이 대사와 함께 온 모의 페이지 링크 */
+  mockPage?: MockPage
+}
+export type ScenarioInfo = { title: string; description: string }
+
+// ───────── 아래는 mock(서버 없는 데모) 데이터가 쓰는 타입 ─────────
 
 export type SituationKey = "trade" | "delivery" | "loan" | "job" | "institution"
 
@@ -26,43 +49,4 @@ export interface SituationOption {
 export type SimulationMode = "choose" | "mine" | "discover"
 export type EverydayCategory = "shopping" | "job" | "finance" | "housing" | "travel" | "social"
 
-export type SimProgress = {
-  version: 1
-  updatedAt: number
-  simStage: SimStage
-  simMode: SimulationMode
-  everydayCategory: EverydayCategory | null
-  scenarioOptions: Scenario[]
-  context: string
-  scenario: Scenario
-  chatMessages: SimulationMessage[]
-  contextImageCount: number
-}
-
 export type InterviewAnswer = { question: string; answer: string; images?: UploadedImage[] }
-
-export type SimulationProps = {
-  stage: SimStage
-  context: string
-  setContext: (value: string) => void
-  selectedSituation: SituationKey | null
-  setSelectedSituation: (value: SituationKey | null) => void
-  scenario: Scenario
-  simMode: SimulationMode
-  setSimMode: (value: SimulationMode) => void
-  everydayCategory: EverydayCategory | null
-  setEverydayCategory: (value: EverydayCategory | null) => void
-  scenarioOptions: Scenario[]
-  chatTyping: boolean
-  chatMessages: SimulationMessage[]
-  onCreate: () => void
-  onInterviewComplete: (context: string, images: UploadedImage[]) => void
-  usedImages: number
-  contextImages: UploadedImage[]
-  restoredContextImageCount: number
-  onReset: () => void
-  onStart: (scenario?: Scenario) => void
-  onSend: (message: string, images: UploadedImage[]) => string
-  onEnd: () => void
-  onReport: () => void
-}

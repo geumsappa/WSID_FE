@@ -54,7 +54,15 @@ export type TrainingPhase = "DISCOVERY" | "SCENARIO_READY" | "SIMULATION" | "RES
 export type TrainingStatus = "ACTIVE" | "COMPLETED"
 /** 선택지. 노션 예시가 빈 배열이라 형식 미정 — 가안: { code, label } */
 export type ChoiceOption = { code: string; label: string }
-export type ChatMessage = { id?: number; sender: Sender; inputKind?: InputKind; content: string; options?: ChoiceOption[] }
+export type ChatMessage = {
+  id?: number
+  sender: Sender
+  inputKind?: InputKind
+  content: string
+  options?: ChoiceOption[]
+  /** 가안(노션에 없음): 이 메시지가 상황 대화인지 가상 훈련인지. 있으면 복원 때 정확히 나눠요 */
+  phase?: TrainingPhase
+}
 
 export type CreateTrainingResponse = { trainingId: number; phase: TrainingPhase; status: TrainingStatus; stateVersion: number; firstMessage: ChatMessage }
 /** 진행 중 훈련이 없으면 null */
@@ -68,6 +76,8 @@ export type TrainingDetail = {
   messages: ChatMessage[]
   availableOptions: ChoiceOption[]
   mockPage: MockPage | null
+  /** 가안(노션에 없음): 복원 때 시나리오 제목·설명을 다시 보여 주려면 필요해요 */
+  scenario?: { title: string; description: string } | null
 }
 
 export type DiscoveryMessageRequest = Versioned & { content: string }
@@ -115,7 +125,10 @@ export type Evaluation = {
   turnFeedback: unknown[] // 형식 미정
   mockPageEvaluation: MockPageEvaluation
   recommendations: string[]
+  /** 가안(노션에 없음): 11/16 팀 결정 — 요구받은 개인정보 종류와 실제로 넘긴 종류. 값은 없음 */
+  infoDisclosure?: InfoDisclosure
 }
+export type InfoDisclosure = { requested: string[]; provided: string[] }
 /** RPT-01 훈련 직후 결과 */
 export type TrainingReport = { reportId: number; trainingId: number; title: string; fraudTypeCode: string; saved: boolean; evaluation: Evaluation }
 export type SaveReportResponse = { reportId: number; saved: boolean; savedAt: string }

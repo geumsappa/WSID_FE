@@ -1,183 +1,439 @@
-import { useEffect, useMemo, useRef, useState } from "react"
-import type { Page, UploadedImage } from "@/types/common"
+import { useEffect, useRef, useState } from "react"
+import { errorMessage, isStateConflict, reportsApi, trainingApi } from "@/api"
+import type { ActiveTrainingResponse, ChatMessage, ChoiceOption, MockActionCode, MockPage, TrainingDetail, TrainingReport } from "@/api"
+import type { Page } from "@/types/common"
 import { SIM_IMAGE_LIMITS } from "@/lib/image"
 import { scrubPersonalInfo } from "@/lib/privacy"
-import type { DemoAccount } from "@/features/auth/types"
-import { analyzeConversation } from "@/features/report/lib/analyzeConversation"
-import { scenarios } from "../data/scenarios"
-import { createDemoReply, hasSafeEnding } from "../lib/demoReply"
-import { countImages, readSimProgress, removeSimProgress, simProgressKey } from "../lib/progressStorage"
-import { categoryFromContext, createEverydayOptions, createInterviewOptions } from "../lib/scenarioFactory"
-import type { EverydayCategory, Scenario, SimProgress, SimStage, SimulationMessage, SimulationMode, SituationKey } from "../types"
+import type { Account } from "@/features/auth/types"
+import { readLastFinished, readScenarioInfo, saveLastFinished, saveScenarioInfo } from "../lib/progressStorage"
+import type { ChatLine, ScenarioInfo, SimStage } from "../types"
 
-// 시뮬레이션 진행 상태·이어하기 저장·대화 처리를 모두 담당합니다.
-export function useSimulation(account: DemoAccount | null, page: Page, go: (next: Page) => void) {
-  const [simStage, setSimStage] = useState<SimStage>("input")
-  const [simMode, setSimMode] = useState<SimulationMode>("choose")
-  const [everydayCategory, setEverydayCategory] = useState<EverydayCategory | null>(null)
-  const [scenarioOptions, setScenarioOptions] = useState<Scenario[]>([])
-  const [context, setContext] = useState("")
-  const [selectedSituation, setSelectedSituation] =
-    useState<SituationKey | null>(null)
-  const [scenario, setScenario] = useState<Scenario>(scenarios.delivery)
-  const [chatTyping, setChatTyping] = useState(false)
-  const [chatMessages, setChatMessages] = useState<SimulationMessage[]>([])
-  const [endConfirm, setEndConfirm] = useState(false)
-  const simRun = useRef(0)
-  const [contextImages, setContextImages] = useState<UploadedImage[]>([]) // 처음 상황 설명에 첨부한 사진(메모리에만 보관)
-  const [restoredContextImageCount, setRestoredContextImageCount] = useState(0)
-  const hydratedFor = useRef<string | null>(null) // 어느 계정의 진행 상태를 불러왔는지
+let lineSeq = 0
+const lineKey = () => `line-${++lineSeq}`
+const toLine = (m: ChatMessage): ChatLine => ({
+  key: lineKey(),
+  from: m.sender === "AI" ? "ai" : "user",
+  text: m.content,
+  options: m.options?.length ? m.options : undefined,
+})
+const PHASE_LABEL: Record<string, string> = {
+  DISCOVERY: "상황 대화 진행 중",
+  SCENARIO_READY: "시나리오 준비 완료 · 훈련 시작 전",
+  SIMULATION: "가상 훈련 대화 진행 중",
+}
 
-  // 로그인한 계정의 진행 중 훈련을 불러옵니다(새로고침·재방문 시 복구).
-  useEffect(() => {
-    if (!account) return
-    if (hydratedFor.current === account.email) return
-    hydratedFor.current = account.email
-    const saved = readSimProgress(account.email)
-    if (!saved) return
-    const stage: SimStage = saved.simStage === "loading" ? "input" : saved.simStage
-    let messages = saved.chatMessages
-    const userTurns = messages.filter((m) => m.from === "user").length
-    // 상대 답변을 기다리던 중 새로고침했다면 답변을 이어서 붙여 줍니다.
-    if (stage === "chat" && messages.length && messages[messages.length - 1].from === "user")
-      messages = [...messages, { from: "contact", text: createDemoReply(messages[messages.length - 1].text, userTurns - 1, saved.scenario) }]
-    simRun.current += 1
-    setSimStage(stage === "chat" && userTurns >= 5 ? "complete" : stage)
-    setSimMode(saved.simMode)
-    setEverydayCategory(saved.everydayCategory)
-    setScenarioOptions(saved.scenarioOptions)
-    setContext(saved.context)
-    setScenario(saved.scenario)
-    setChatMessages(messages)
-    setChatTyping(false)
-    setContextImages([])
-    setRestoredContextImageCount(saved.contextImageCount)
-  }, [account])
-  // 진행 중인 훈련(상황 선택·대화·완료)을 바뀔 때마다 저장합니다. 사진은 장수만 남깁니다.
-  useEffect(() => {
-    if (!account || hydratedFor.current !== account.email) return
-    if (simStage !== "summary" && simStage !== "chat" && simStage !== "complete") return
-    const progress: SimProgress = {
-      version: 1,
-      updatedAt: Date.now(),
-      simStage,
-      simMode,
-      everydayCategory,
-      scenarioOptions,
-      context,
-      scenario,
-      chatMessages: chatMessages.map((m) => ({ from: m.from, text: m.text, imageCount: (m.images?.length ?? m.imageCount ?? 0) || undefined, leaked: m.leaked })),
-      contextImageCount: contextImages.length + restoredContextImageCount,
-    }
-    try { localStorage.setItem(simProgressKey(account.email), JSON.stringify(progress)) } catch { /* 저장 공간 부족 시 이어하기만 생략 */ }
-  }, [account, simStage, simMode, everydayCategory, scenarioOptions, context, scenario, chatMessages, contextImages, restoredContextImageCount])
-  const analysis = useMemo(
-    () => analyzeConversation(chatMessages),
-    [chatMessages],
-  )
-  // removeSaved=false는 로그아웃처럼 화면 상태만 비우고 저장된 이어하기 기록은 남길 때 씁니다.
-  const clearSimulation = (removeSaved = true) => {
-    simRun.current += 1 // 진행 중이던 답변 타이머가 초기화 이후에 끼어들지 않도록 합니다.
-    setSimStage("input")
-    setSimMode("choose")
-    setEverydayCategory(null)
-    setScenarioOptions([])
-    setContext("")
-    setSelectedSituation(null)
-    setChatMessages([])
-    setChatTyping(false)
-    setContextImages([])
-    setRestoredContextImageCount(0)
-    if (removeSaved && account) removeSimProgress(account.email)
+/** 서버가 준 전체 메시지를 "상황 대화"와 "가상 훈련"으로 나눕니다. */
+function splitMessages(d: TrainingDetail) {
+  const all = d.messages ?? []
+  if (all.some((m) => m.phase)) {
+    return { discovery: all.filter((m) => m.phase === "DISCOVERY"), simulation: all.filter((m) => m.phase === "SIMULATION") }
   }
-  const usedSimImages = contextImages.length + restoredContextImageCount + countImages(chatMessages)
-  const savedProgress = account && page === "home" ? readSimProgress(account.email) : null
-  const resumeInfo = savedProgress
-    ? {
-        title: savedProgress.simStage === "summary" ? "추천받은 상황 선택 중" : savedProgress.scenario.title,
-        label:
-          savedProgress.simStage === "complete"
-            ? "훈련 완료 · 결과 리포트 확인 전"
-            : savedProgress.simStage === "chat"
-              ? `대화 진행 중 · ${savedProgress.chatMessages.filter((m) => m.from === "user").length}/5턴`
-              : "상황 선택 단계",
-        time: new Date(savedProgress.updatedAt).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" }),
+  // phase 표시가 없으면: 훈련 대화는 "첫 대사 1개 + 턴마다 2개"이므로 뒤에서부터 그만큼을 훈련 대화로 봅니다.
+  if (d.phase === "SIMULATION" || d.phase === "RESULT") {
+    const n = Math.min(all.length, d.turnCount * 2 + 1)
+    return { discovery: all.slice(0, all.length - n), simulation: all.slice(all.length - n) }
+  }
+  return { discovery: all, simulation: [] }
+}
+
+/**
+ * 금융사기 시뮬레이션의 상태와 동작. 전부 백엔드 훈련 API(TRN-01~11, RPT-01·02·05)로 움직입니다.
+ * 흐름: 훈련 생성 → 상황 대화 → 시나리오 생성 → 가상 훈련 대화 → 종료 → 리포트
+ * @param onUnauthorized 세션이 끝났을 때(401) 호출. 처리했으면 true
+ */
+export function useSimulation(
+  account: Account | null,
+  page: Page,
+  go: (next: Page) => void,
+  onUnauthorized: (err: unknown, destination: Page) => boolean,
+) {
+  const [stage, setStage] = useState<SimStage>("idle")
+  const [trainingId, setTrainingId] = useState<number | null>(null)
+  const [discoveryLines, setDiscoveryLines] = useState<ChatLine[]>([])
+  const [canGenerate, setCanGenerate] = useState(false)
+  const [scenario, setScenario] = useState<ScenarioInfo | null>(null)
+  const [chatLines, setChatLines] = useState<ChatLine[]>([])
+  const [turnCount, setTurnCount] = useState(0)
+  const [shouldFinish, setShouldFinish] = useState(false)
+  const [typing, setTyping] = useState(false)
+  const [error, setError] = useState("")
+  const [usedImages, setUsedImages] = useState(0)
+  const [openMockPage, setOpenMockPage] = useState<MockPage | null>(null)
+  const [endConfirm, setEndConfirm] = useState(false)
+  const [report, setReport] = useState<TrainingReport | null>(null)
+  const [reportState, setReportState] = useState<"idle" | "loading" | "missing">("idle")
+  const [saveNotice, setSaveNotice] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [active, setActive] = useState<ActiveTrainingResponse>(null)
+  const [bootTick, setBootTick] = useState(0)
+
+  // 비동기 함수 안에서 "지금 값"이 필요한 것들은 ref에도 둡니다(state는 다음 렌더에야 바뀌기 때문).
+  const idRef = useRef<number | null>(null)
+  const versionRef = useRef(0)
+  const freshRef = useRef(false) // true면 진행 중 훈련을 이어받지 않고 새로 만듭니다
+  const bootingRef = useRef(false) // 개발 모드(StrictMode)에서 effect가 두 번 돌아도 한 번만 요청
+  const queueRef = useRef<Promise<unknown>>(Promise.resolve()) // stateVersion이 꼬이지 않게 요청을 한 줄로 세웁니다
+
+  /** 요청을 차례대로 실행합니다. 앞 요청이 끝나 stateVersion을 받은 뒤 다음 요청이 나가요. */
+  const inOrder = <T,>(work: () => Promise<T>): Promise<T> => {
+    const next = queueRef.current.then(work, work)
+    queueRef.current = next.catch(() => undefined)
+    return next
+  }
+  const fail = (err: unknown) => {
+    if (onUnauthorized(err, "simulation")) return
+    setError(errorMessage(err))
+  }
+
+  const resetLocal = () => {
+    idRef.current = null
+    versionRef.current = 0
+    setTrainingId(null)
+    setStage("idle")
+    setDiscoveryLines([])
+    setCanGenerate(false)
+    setScenario(null)
+    setChatLines([])
+    setTurnCount(0)
+    setShouldFinish(false)
+    setTyping(false)
+    setError("")
+    setUsedImages(0)
+    setOpenMockPage(null)
+    setEndConfirm(false)
+  }
+
+  /** 서버가 준 훈련 상태(TRN-03)를 화면 상태로 옮깁니다. */
+  const applyDetail = (d: TrainingDetail) => {
+    idRef.current = d.trainingId
+    versionRef.current = d.stateVersion
+    setTrainingId(d.trainingId)
+    const parts = splitMessages(d)
+    const disc = parts.discovery.map(toLine)
+    const sim = parts.simulation.map(toLine)
+    const target = d.phase === "DISCOVERY" ? disc : sim
+    const last = target[target.length - 1]
+    if (last && last.from === "ai" && !last.options && d.availableOptions?.length) last.options = d.availableOptions
+    if (d.mockPage && sim.length) {
+      const lastAi = [...sim].reverse().find((l) => l.from === "ai")
+      if (lastAi) lastAi.mockPage = d.mockPage
+    }
+    setDiscoveryLines(disc)
+    setChatLines(sim)
+    setTurnCount(d.turnCount ?? 0)
+    setShouldFinish(false)
+    setScenario(d.scenario ?? readScenarioInfo(d.trainingId))
+    // 복원 응답에는 "시나리오를 만들어도 되는지"가 없어서, 한 번이라도 답했다면 버튼을 보여 줍니다(부족하면 서버가 알려 줘요).
+    setCanGenerate(d.phase === "DISCOVERY" && disc.some((l) => l.from === "user"))
+    setStage(d.phase === "DISCOVERY" ? "discovery" : d.phase === "SCENARIO_READY" ? "ready" : d.phase === "SIMULATION" ? "chat" : "done")
+  }
+  /** stateVersion이 어긋났을 때: 서버의 최신 상태를 다시 불러옵니다. */
+  const reloadAfterConflict = async () => {
+    const id = idRef.current
+    if (id === null) return
+    try {
+      applyDetail(await trainingApi.detail(id))
+      setError("다른 화면에서 진행된 내용이 있어 최신 상태를 불러왔어요. 다시 시도해 주세요.")
+    } catch (err) {
+      fail(err)
+    }
+  }
+  const recover = async (err: unknown) => {
+    if (isStateConflict(err)) await reloadAfterConflict()
+    else fail(err)
+  }
+
+  // 시뮬레이션 화면에 들어오면: 진행 중인 훈련이 있으면 이어받고(TRN-02·03), 없으면 새로 만듭니다(TRN-01).
+  useEffect(() => {
+    if (!account || page !== "simulation") return
+    if (idRef.current !== null || bootingRef.current) return
+    bootingRef.current = true
+    setStage("loading")
+    setError("")
+    void (async () => {
+      try {
+        const current = freshRef.current ? null : await trainingApi.active()
+        freshRef.current = false
+        if (current) {
+          applyDetail(await trainingApi.detail(current.trainingId))
+        } else {
+          const created = await trainingApi.create()
+          idRef.current = created.trainingId
+          versionRef.current = created.stateVersion
+          setTrainingId(created.trainingId)
+          setDiscoveryLines([toLine(created.firstMessage)])
+          setStage("discovery")
+        }
+        setActive(null)
+      } catch (err) {
+        setStage("failed")
+        fail(err)
+      } finally {
+        bootingRef.current = false
       }
-    : null
-  const resetSimulation = () => {
-    clearSimulation()
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account, page, bootTick])
+
+  // 홈 화면: 진행 중인 훈련이 있는지 확인해 "이어서 하기"를 보여 줍니다(TRN-02).
+  useEffect(() => {
+    if (!account) { setActive(null); return }
+    if (page !== "home") return
+    let alive = true
+    trainingApi.active().then((a) => { if (alive) setActive(a) }).catch(() => { if (alive) setActive(null) })
+    return () => { alive = false }
+  }, [account, page])
+
+  // 결과 화면에서 새로고침했을 때: 방금 끝낸 훈련의 리포트를 다시 불러옵니다(RPT-01).
+  useEffect(() => {
+    if (!account || page !== "report" || report || reportState !== "idle") return
+    const id = idRef.current ?? readLastFinished()
+    if (id === null) { setReportState("missing"); return }
+    setReportState("loading")
+    trainingApi
+      .report(id)
+      .then((r) => { setReport(r); setReportState("idle") })
+      .catch((err) => { setReportState("missing"); fail(err) })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account, page, report, reportState])
+
+  /** 새 훈련 시작(홈의 시작 버튼, "다시 시뮬레이션 하기") */
+  const startNew = () => {
+    resetLocal()
+    setReport(null)
+    setReportState("idle")
+    setSaveNotice("")
+    freshRef.current = true
+    setBootTick((n) => n + 1)
     go("simulation")
   }
-  const confirmEndSimulation = () => {
+  /** 불러오기에 실패했을 때 다시 시도 */
+  const retry = () => setBootTick((n) => n + 1)
+
+  /** TRN-04 상황 대화 한 턴. 성공하면 true (실패하면 입력창에 글을 되돌려 놓기 위해) */
+  const sendDiscovery = async (raw: string): Promise<boolean> => {
+    const id = idRef.current
+    if (id === null || typing || stage !== "discovery") return false
+    // 상황 설명에는 실제 번호가 필요 없으므로, 값은 가리고 종류만 남긴 글을 보냅니다.
+    const { text, types } = scrubPersonalInfo(raw.trim().slice(0, 500))
+    if (!text) return false
+    const mine: ChatLine = { key: lineKey(), from: "user", text, note: types.length ? `입력한 ${types.join(", ")}은(는) 가려서 보냈어요.` : undefined }
+    setError("")
+    setDiscoveryLines((lines) => [...lines.map((l) => ({ ...l, options: undefined })), mine])
+    setTyping(true)
+    try {
+      const res = await inOrder(() => trainingApi.discoveryMessage(id, { stateVersion: versionRef.current, content: text }))
+      versionRef.current = res.stateVersion
+      setDiscoveryLines((lines) => [...lines, toLine(res.reply)])
+      setCanGenerate(res.canGenerateScenario)
+      return true
+    } catch (err) {
+      setDiscoveryLines((lines) => lines.filter((l) => l.key !== mine.key))
+      await recover(err)
+      return false
+    } finally {
+      setTyping(false)
+    }
+  }
+
+  /** TRN-05 사진 첨부·문자 인식. 읽어낸 글을 돌려주고, 못 읽었으면 빈 문자열 */
+  const uploadDiscoveryImages = async (files: File[]): Promise<{ text: string; usable: boolean } | null> => {
+    const id = idRef.current
+    if (id === null || stage !== "discovery" || !files.length) return null
+    if (usedImages + files.length > SIM_IMAGE_LIMITS.max) {
+      setError(`사진은 훈련 한 번에 최대 ${SIM_IMAGE_LIMITS.max}장까지 보낼 수 있어요.`)
+      return null
+    }
+    for (const f of files) {
+      if (!SIM_IMAGE_LIMITS.types.includes(f.type) && !SIM_IMAGE_LIMITS.ext.test(f.name)) { setError(`${f.name}: ${SIM_IMAGE_LIMITS.typeLabel} 파일만 첨부할 수 있어요.`); return null }
+      if (f.size > SIM_IMAGE_LIMITS.maxBytes) { setError(`${f.name}: 사진 한 장은 ${SIM_IMAGE_LIMITS.sizeLabel} 이하여야 해요.`); return null }
+    }
+    setError("")
+    setTyping(true)
+    try {
+      const res = await trainingApi.discoveryImages(id, files)
+      setUsedImages((n) => n + files.length)
+      return { text: res.usable ? res.recognizedText : "", usable: res.usable }
+    } catch (err) {
+      fail(err)
+      return null
+    } finally {
+      setTyping(false)
+    }
+  }
+
+  /** TRN-06 개인화 시나리오 생성 (최대 1분) */
+  const generateScenario = async () => {
+    const id = idRef.current
+    if (id === null || stage !== "discovery") return
+    setError("")
+    setStage("generating")
+    try {
+      const res = await inOrder(() => trainingApi.scenario(id, { stateVersion: versionRef.current }))
+      versionRef.current = res.stateVersion
+      setScenario(res.scenario)
+      saveScenarioInfo(id, res.scenario)
+      setStage("ready")
+    } catch (err) {
+      setStage("discovery")
+      await recover(err)
+    }
+  }
+
+  /** TRN-07 가상 훈련 시작 */
+  const startTraining = async () => {
+    const id = idRef.current
+    if (id === null || stage !== "ready" || typing) return
+    setError("")
+    setTyping(true)
+    try {
+      const res = await inOrder(() => trainingApi.start(id, { stateVersion: versionRef.current }))
+      versionRef.current = res.stateVersion
+      setChatLines([toLine(res.firstMessage)])
+      setTurnCount(0)
+      setShouldFinish(false)
+      setStage("chat")
+    } catch (err) {
+      await recover(err)
+    } finally {
+      setTyping(false)
+    }
+  }
+
+  /** TRN-08 훈련 대화 한 턴. 글을 직접 쓰거나(text) AI가 준 선택지(option)를 고릅니다. */
+  const sendTraining = async (input: { text: string } | { option: ChoiceOption }): Promise<boolean> => {
+    const id = idRef.current
+    if (id === null || typing || stage !== "chat") return false
+    let mine: ChatLine
+    let body: { inputKind: "TEXT"; content: string } | { inputKind: "CHOICE"; selectedCode: string }
+    if ("option" in input) {
+      mine = { key: lineKey(), from: "user", text: input.option.label }
+      body = { inputKind: "CHOICE", selectedCode: input.option.code }
+    } else {
+      const content = input.text.trim().slice(0, 500)
+      if (!content) return false
+      // 훈련에서는 "개인정보를 넘겼는지"를 서버가 판정해야 하므로 입력 그대로 보냅니다.
+      // 대신 화면에는 값을 가린 글만 남겨요(서버도 값은 저장하지 않고 종류만 기록).
+      const shown = scrubPersonalInfo(content)
+      mine = { key: lineKey(), from: "user", text: shown.text, note: shown.types.length ? `입력한 ${shown.types.join(", ")}은(는) 화면에 남기지 않고 가렸어요.` : undefined }
+      body = { inputKind: "TEXT", content }
+    }
+    setError("")
+    setChatLines((lines) => [...lines.map((l) => ({ ...l, options: undefined })), mine])
+    setTyping(true)
+    try {
+      const res = await inOrder(() => trainingApi.message(id, { stateVersion: versionRef.current, ...body }))
+      versionRef.current = res.stateVersion
+      setChatLines((lines) => [...lines, { ...toLine(res.reply), mockPage: res.mockPage ?? undefined }])
+      setTurnCount(res.turnCount)
+      setShouldFinish(res.shouldFinish)
+      return true
+    } catch (err) {
+      setChatLines((lines) => lines.filter((l) => l.key !== mine.key))
+      await recover(err)
+      return false
+    } finally {
+      setTyping(false)
+    }
+  }
+
+  /** TRN-10 모의 페이지에서 한 행동 기록. 실패해도 훈련은 계속할 수 있게 조용히 넘어갑니다. */
+  const recordAction = (actionCode: MockActionCode, pageInfo: MockPage) => {
+    const id = idRef.current
+    if (id === null) return
+    void inOrder(async () => {
+      const res = await trainingApi.action(id, { stateVersion: versionRef.current, actionCode, actionMeta: { templateCode: pageInfo.templateCode, screenCode: pageInfo.screenCode } })
+      versionRef.current = res.stateVersion
+    }).catch((err) => { if (isStateConflict(err)) void reloadAfterConflict() })
+  }
+  /** 채팅 속 링크를 눌러 모의 페이지 열기 (TRN-09로 최신 화면 정보를 받고, 열었다는 행동을 기록) */
+  const showMockPage = async (fallback: MockPage) => {
+    const id = idRef.current
+    if (id === null) return
+    let pageInfo = fallback
+    try { pageInfo = await trainingApi.mockPage(id) } catch { /* 조회에 실패하면 대화에 함께 온 정보로 엽니다 */ }
+    setOpenMockPage(pageInfo)
+    recordAction("MOCK_PAGE_OPEN", pageInfo)
+  }
+  const closeMockPage = () => {
+    if (openMockPage) recordAction("MOCK_PAGE_CLOSE", openMockPage)
+    setOpenMockPage(null)
+  }
+
+  /** TRN-11 훈련 종료 → RPT-01 결과 조회 → 리포트 화면으로 */
+  const finish = async () => {
+    const id = idRef.current
+    if (id === null || stage !== "chat") return
     setEndConfirm(false)
-    clearSimulation()
+    setOpenMockPage(null)
+    setError("")
+    setStage("finishing")
+    try {
+      await inOrder(() => trainingApi.finish(id, { stateVersion: versionRef.current, reason: "USER_FINISH" }))
+      saveLastFinished(id)
+      setSaveNotice("")
+      setReport(await trainingApi.report(id))
+      setReportState("idle")
+      setStage("done")
+      go("report")
+    } catch (err) {
+      setStage("chat")
+      await recover(err)
+    }
+  }
+  /** 상황 대화·시나리오 단계에서 나가기: 평가할 훈련이 없으므로 종료 처리 없이 홈으로(서버에는 남아 이어서 할 수 있어요) */
+  const leave = () => {
+    setEndConfirm(false)
+    resetLocal()
     go("home")
   }
-  const createScenario = (interviewContext?: string, images: UploadedImage[] = []) => {
-    const effectiveContext = interviewContext ?? context
-    if (interviewContext !== undefined) setContextImages(images)
-    if (simMode === "mine" && !effectiveContext.trim()) return
-    if (simMode === "discover" && !everydayCategory) return
-    setSimStage("loading")
-    const category = simMode === "discover" ? everydayCategory! : categoryFromContext(effectiveContext)
-    if (interviewContext !== undefined) setContext(interviewContext)
-    const options = simMode === "mine" ? createInterviewOptions(effectiveContext) : createEverydayOptions(category, "")
-    window.setTimeout(() => {
-      setScenarioOptions(options)
-      setScenario(options[0])
-      setSimStage("summary")
-    }, 450)
+
+  /** RPT-02 내 리포트에 저장 */
+  const saveReport = async () => {
+    if (!report || saving) return
+    if (report.saved) { setSaveNotice("이미 내 리포트에 저장되어 있어요."); return }
+    setSaving(true)
+    setSaveNotice("")
+    try {
+      await reportsApi.save(report.reportId)
+      setReport({ ...report, saved: true })
+      setSaveNotice("리포트를 마이페이지에 저장했어요.")
+    } catch (err) {
+      if (!onUnauthorized(err, "report")) setSaveNotice(errorMessage(err))
+    } finally {
+      setSaving(false)
+    }
   }
-  const startChat = (chosen?: Scenario) => {
-    const active = chosen ?? scenario
-    setScenario(active)
-    setChatMessages([])
-    setChatTyping(true)
-    setSimStage("chat")
-    const run = ++simRun.current
-    window.setTimeout(() => {
-      if (run !== simRun.current) return
-      setChatMessages([{ from: "contact", text: active.opening }])
-      setChatTyping(false)
-    }, 550)
+  /** RPT-05 PDF 다운로드 (저장한 리포트만 가능) */
+  const downloadPdf = async () => {
+    if (!report?.saved) return
+    try { await reportsApi.downloadPdf(report.reportId) } catch (err) { if (!onUnauthorized(err, "report")) setSaveNotice(errorMessage(err)) }
   }
-  // 반환값: 전송을 막은 이유(없으면 빈 문자열)
-  const sendSimulationMessage = (rawMessage: string, images: UploadedImage[] = []): string => {
-    if ((!rawMessage.trim() && !images.length) || simStage !== "chat" || chatTyping) return ""
-    // 개인정보 입력 여부는 기록하고(리포트 반영), 실제 값은 이 시점에 지워 어디에도 남기지 않습니다.
-    const lastContact = [...chatMessages].reverse().find((m) => m.from === "contact")?.text ?? ""
-    const askedForCode = /인증|비밀번호|코드|본인 확인|번호/.test(lastContact)
-    const { text: message, types: leaked } = scrubPersonalInfo(rawMessage.trim().slice(0, 500), askedForCode)
-    if (usedSimImages + images.length > SIM_IMAGE_LIMITS.max)
-      return `사진은 훈련 한 번에 최대 ${SIM_IMAGE_LIMITS.max}장까지 보낼 수 있어요.`
-    const userTurns = chatMessages.filter((item) => item.from === "user").length
-    setChatMessages((items) => [...items, { from: "user", text: message, images: images.length ? images : undefined, leaked: leaked.length ? leaked : undefined }])
-    setChatTyping(true)
-    const run = simRun.current
-    window.setTimeout(() => {
-      if (run !== simRun.current) return
-      const reply = leaked.length
-        ? `${leaked.join(", ")} 확인 감사하다며, 처리를 마치려면 추가 확인이 필요하다고 다른 정보도 요구합니다.`
-        : message
-        ? createDemoReply(message, userTurns, scenario)
-        : `보내주신 사진을 확인했다며, ${scenario.subject} 처리를 위해 지금 이 대화에서 바로 진행하자고 재촉합니다.`
-      setChatMessages((items) => [...items, { from: "contact", text: reply }])
-      setChatTyping(false)
-      if (hasSafeEnding(message) || userTurns + 1 >= 5) setSimStage("complete")
-    }, 700)
-    return ""
-  }
-  // 로그아웃: 화면에서는 지우되, 다시 로그인하면 이어서 할 수 있게 저장 기록은 남깁니다.
+
+  /** 로그아웃: 화면 상태만 비웁니다. 진행 중인 훈련은 서버에 남아 다시 로그인하면 이어서 할 수 있어요. */
   const resetForLogout = () => {
-    clearSimulation(false)
-    hydratedFor.current = null
+    resetLocal()
+    setReport(null)
+    setReportState("idle")
+    setSaveNotice("")
+    setActive(null)
+    saveLastFinished(null)
   }
+
+  const resumeInfo = active
+    ? {
+        title: readScenarioInfo(active.trainingId)?.title ?? "진행 중인 훈련",
+        label: PHASE_LABEL[active.phase] ?? "진행 중",
+        time: new Date(active.lastActivityAt).toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" }),
+      }
+    : null
+
   return {
-    simStage, simMode, setSimMode, everydayCategory, setEverydayCategory, scenarioOptions,
-    context, setContext, selectedSituation, setSelectedSituation, scenario,
-    chatTyping, chatMessages, contextImages, restoredContextImageCount,
-    endConfirm, setEndConfirm, analysis, usedSimImages, resumeInfo,
-    clearSimulation, resetSimulation, confirmEndSimulation, resetForLogout,
-    createScenario, startChat, sendSimulationMessage,
+    stage, trainingId, discoveryLines, canGenerate, scenario, chatLines, turnCount, shouldFinish, typing, error,
+    usedImages, openMockPage, endConfirm, setEndConfirm, report, reportState, saveNotice, saving, resumeInfo,
+    startNew, retry, sendDiscovery, uploadDiscoveryImages, generateScenario, startTraining, sendTraining,
+    showMockPage, closeMockPage, recordAction, finish, leave, saveReport, downloadPdf, resetForLogout,
+    clearError: () => setError(""),
   }
 }
+export type Simulation = ReturnType<typeof useSimulation>

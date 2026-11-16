@@ -1,99 +1,172 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { errorMessage, guidesApi, isStateConflict, solutionApi } from "@/api"
+import type { FactKey, Institution, NextQuestion, ResponseCard, SolutionCard, SolutionFacts, YesNoUnknown } from "@/api"
 import type { Page, UploadedImage } from "@/types/common"
 import { maskSensitive } from "@/lib/privacy"
-import { emergencyData } from "../data/emergencyData"
-import { detectEmergencyKeys, mergeEmergencyKeys } from "../lib/detectEmergency"
 import type { AssistantMessage, EmergencyKey } from "../types"
+import { SITUATION_TEXT } from "../types"
 
-const MASK_NOTICE = "입력하신 내용 중 주민등록번호·카드번호·비밀번호 같은 민감정보는 가려서 처리했어요."
+let seq = 0
+const key = () => `em-${++seq}`
+const FACT_LABEL: Record<FactKey, string> = { transferredMoney: "송금", sharedInformation: "정보 제공", installedApp: "앱 설치", contactContinues: "연락 지속" }
+const ANSWER_LABEL: Record<YesNoUnknown, string> = { YES: "예", NO: "아니오", UNKNOWN: "모르겠어요" }
 
-// 긴급 대응 입력·분석·후속 대화 상태를 담당합니다.
+/**
+ * 긴급(피해) 대응. 상담은 SOL-01~05, 카드 내용과 기관 정보는 GUIDE-03·04로 받아요. 로그인 없이 쓸 수 있어요.
+ * 흐름: 상황 카드 선택 또는 직접 설명 → 서버가 피해 사실 추출 → 비어 있는 항목을 질문 → 대응 카드·기관 표시
+ */
 export function useEmergency(go: (next: Page) => void) {
-  const [emergency, setEmergency] = useState<EmergencyKey | null>(null)
-  const [emergencyKeys, setEmergencyKeys] = useState<EmergencyKey[]>([])
-  const [emergencyText, setEmergencyText] = useState("")
-  const [emergencyImages, setEmergencyImages] = useState<UploadedImage[]>([])
-  const [emergencyAnalyzing, setEmergencyAnalyzing] = useState(false)
-  const [submittedText, setSubmittedText] = useState("")
-  const [emergencyMessages, setEmergencyMessages] =
-    useState<AssistantMessage[]>([])
-  const [emergencyTyping, setEmergencyTyping] = useState(false)
-  const openEmergencyChat = (
-    keys: EmergencyKey[],
-    text = "",
-    attachments: UploadedImage[] = [],
-    masked = false,
-  ) => {
-    setEmergency(keys[0])
-    setEmergencyKeys(keys)
-    setSubmittedText(text)
-    setEmergencyImages(attachments)
-    const intro =
-      keys.length > 1
-        ? `여러 상황이 함께 확인됐어요: ${keys.map((key) => emergencyData[key].title).join(", ")}. 가장 급한 조치부터 순서대로 안내할게요.`
-        : emergencyData[keys[0]].intro
-    setEmergencyMessages([
-      ...(text || attachments.length ? [{ from: "user" as const, text, images: attachments }] : []),
-      { from: "assistant", text: masked ? `${MASK_NOTICE} ${intro}` : intro },
-    ])
-    go("emergencyChat")
+  const [text, setText] = useState("")
+  const [images, setImages] = useState<UploadedImage[]>([])
+  const [analyzing, setAnalyzing] = useState(false)
+  const [solutionId, setSolutionId] = useState<number | null>(null)
+  const [facts, setFacts] = useState<SolutionFacts | null>(null)
+  const [cards, setCards] = useState<SolutionCard[]>([])
+  const [cardDetails, setCardDetails] = useState<Record<string, ResponseCard>>({})
+  const [institutions, setInstitutions] = useState<Institution[]>([])
+  const [nextQuestion, setNextQuestion] = useState<NextQuestion | null>(null)
+  const [messages, setMessages] = useState<AssistantMessage[]>([])
+  const [typing, setTyping] = useState(false)
+  const [error, setError] = useState("")
+  const [completed, setCompleted] = useState(false)
+  const versionRef = useRef(0)
+  const idRef = useRef<number | null>(null)
+
+  // 기관 목록(GUIDE-04)은 한 번만 받아 둡니다.
+  useEffect(() => {
+    let alive = true
+    guidesApi.institutions().then((list) => { if (alive) setInstitutions(list) }).catch(() => { /* 카드의 기관 코드만 보여 줌 */ })
+    return () => { alive = false }
+  }, [])
+  // 서버가 준 카드 코드로 카드 본문(GUIDE-03)을 받아 둡니다. 이미 받은 코드는 다시 요청하지 않아요.
+  const fetchCards = async (list: SolutionCard[]) => {
+    const missing = list.map((c) => c.code).filter((code) => !cardDetails[code])
+    if (!missing.length) return
+    try {
+      const got = await guidesApi.responseCards(missing)
+      setCardDetails((prev) => ({ ...prev, ...Object.fromEntries(got.map((c) => [c.code, c])) }))
+    } catch { /* 본문을 못 받으면 제목만 보여 줌 */ }
   }
-  const analyzeEmergency = () => {
-    const raw = emergencyText.trim()
-    if (!raw && emergencyImages.length === 0) return
-    const value = maskSensitive(raw)
-    const masked = value !== raw
-    if (masked) setEmergencyText(value) // 원문이 화면 상태에 남지 않도록 가린 내용으로 바꿉니다.
-    setEmergencyAnalyzing(true)
-    const keys = detectEmergencyKeys(value)
-    window.setTimeout(() => {
-      setEmergencyAnalyzing(false)
-      openEmergencyChat(keys, value, emergencyImages, masked)
-    }, 750)
+  const applyResult = (r: { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion?: NextQuestion | null; stateVersion: number }) => {
+    versionRef.current = r.stateVersion
+    setFacts(r.facts)
+    setCards(r.responseCards)
+    setNextQuestion(r.nextQuestion ?? null)
+    void fetchCards(r.responseCards)
   }
-  const sendEmergencyMessage = (message: string, images: UploadedImage[] = []) => {
-    if ((!message.trim() && !images.length) || emergencyTyping || !emergency) return
-    const raw = message.trim()
-    const value = maskSensitive(raw)
-    const masked = value !== raw
-    const found = value ? detectEmergencyKeys(value).filter((key) => key !== "custom") : []
-    const addedKeys = found.filter((key) => !emergencyKeys.includes(key))
-    if (addedKeys.length) {
-      const next = mergeEmergencyKeys(emergencyKeys, addedKeys)
-      setEmergencyKeys(next)
-      setEmergency(next[0])
+  const resetSession = () => {
+    idRef.current = null
+    versionRef.current = 0
+    setSolutionId(null)
+    setFacts(null)
+    setCards([])
+    setNextQuestion(null)
+    setMessages([])
+    setCompleted(false)
+    setError("")
+  }
+  const recover = async (err: unknown) => {
+    if (isStateConflict(err) && idRef.current !== null) {
+      try {
+        const d = await solutionApi.detail(idRef.current)
+        applyResult(d)
+        setError("상태가 갱신됐어요. 다시 시도해 주세요.")
+        return
+      } catch { /* 아래로 */ }
     }
-    setEmergencyMessages((items) => [...items, { from: "user", text: value, images }])
-    if (images.length) setEmergencyImages((items) => [...items, ...images])
-    setEmergencyTyping(true)
-    window.setTimeout(() => {
-      let response =
-        "현재 안내된 조치를 우선 진행해 주세요. 판단이 어렵다면 관련 공식 기관에 직접 상담하는 것이 가장 안전합니다."
-      if (addedKeys.length)
-        response = `새로 확인된 상황(${addedKeys.map((key) => emergencyData[key].title).join(", ")})의 대응 방법을 위 카드에 추가했어요. ${emergencyData[addedKeys[0]].intro}`
-      else if (/입력.*안|입력하지|안 했|안했/.test(value))
-        response =
-          "개인정보를 입력하지 않았다면 정보 노출 위험은 상대적으로 낮을 수 있어요. 다만 파일 다운로드나 앱 설치가 있었는지 확인하고, 의심스러운 사이트에는 다시 접속하지 마세요."
-      else if (/설치.*안|설치하지|아무것도 설치/.test(value))
-        response =
-          "앱을 설치하지 않았다면 악성앱을 통한 피해 가능성은 상대적으로 낮을 수 있어요. 계정이나 금융거래에 이상이 있는지 살펴보고, 걱정되는 부분은 118에 상담할 수 있어요."
-      else if (/송금|이체|돈을 보냈/.test(value))
-        response =
-          "금전 이체가 있었다면 추가 대화를 중단하고 즉시 112와 해당 금융회사에 연락해 지급정지를 요청하세요. 이체 내역과 연락 기록도 보관해 주세요."
-      else if (/비밀번호|인증번호|신분증|개인정보/.test(value))
-        response =
-          "정보를 전달했다면 안전한 기기에서 관련 계정 비밀번호를 변경하고 금융회사에 노출 사실을 알려 주세요. 전달한 정보와 시각도 함께 정리해 두세요."
-      if (masked) response = `${MASK_NOTICE} ${response}`
-      setEmergencyMessages((items) => [
-        ...items,
-        { from: "assistant", text: response },
-      ])
-      setEmergencyTyping(false)
-    }, 750)
+    setError(errorMessage(err))
   }
+
+  /** SOL-01 상담 시작. description은 상황 카드 문장 또는 직접 쓴 설명 */
+  const start = async (description: string, attachments: UploadedImage[] = []) => {
+    const masked = maskSensitive(description.trim())
+    if (!masked && !attachments.length) return
+    resetSession()
+    setAnalyzing(true)
+    try {
+      // 사진은 서버 API에 보낼 자리가 없어 장수만 설명에 덧붙여요(원본은 보내지 않음).
+      const desc = attachments.length ? `${masked}${masked ? " " : ""}(사진 ${attachments.length}장 첨부함)` : masked
+      const r = await solutionApi.start({ description: desc })
+      idRef.current = r.solutionId
+      setSolutionId(r.solutionId)
+      applyResult(r)
+      setMessages([
+        { key: key(), from: "user", text: masked, images: attachments.length ? attachments : undefined },
+        { key: key(), from: "assistant", text: masked !== description.trim() ? "입력하신 내용 중 민감정보는 가려서 처리했어요. 지금 상황에 필요한 대응 방법을 정리했어요. 가장 급한 조치부터 순서대로 안내할게요." : "지금 상황에 필요한 대응 방법을 정리했어요. 가장 급한 조치부터 순서대로 안내할게요." },
+      ])
+      setText("")
+      setImages([])
+      go("emergencyChat")
+    } catch (err) {
+      setError(errorMessage(err))
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+  const selectSituation = (k: Exclude<EmergencyKey, "custom">) => void start(SITUATION_TEXT[k])
+  const analyze = () => void start(text, images)
+
+  /** SOL-03 추가 질문에 답하기(선택지) */
+  const answer = async (q: NextQuestion, value: YesNoUnknown) => {
+    const id = idRef.current
+    if (id === null || typing) return
+    setMessages((m) => [...m, { key: key(), from: "user", text: `${FACT_LABEL[q.factKey]}: ${ANSWER_LABEL[value]}` }])
+    setTyping(true)
+    setError("")
+    try {
+      const r = await solutionApi.message(id, { stateVersion: versionRef.current, inputKind: "CHOICE", factKey: q.factKey, selectedCode: value })
+      applyResult(r)
+      setMessages((m) => [...m, { key: key(), from: "assistant", text: r.nextQuestion ? "확인했어요. 대응 카드를 갱신했어요." : "확인할 내용을 모두 파악했어요. 위 대응 카드의 순서대로 진행해 주세요." }])
+    } catch (err) {
+      await recover(err)
+    } finally {
+      setTyping(false)
+    }
+  }
+  /** SOL-03 글로 추가 설명·질문하기 */
+  const send = async (raw: string, attachments: UploadedImage[] = []) => {
+    const id = idRef.current
+    const masked = maskSensitive(raw.trim())
+    if (id === null || typing || (!masked && !attachments.length)) return
+    setMessages((m) => [...m, { key: key(), from: "user", text: masked, images: attachments.length ? attachments : undefined }])
+    setTyping(true)
+    setError("")
+    try {
+      const content = attachments.length ? `${masked}${masked ? " " : ""}(사진 ${attachments.length}장 첨부함)` : masked
+      const r = await solutionApi.message(id, { stateVersion: versionRef.current, inputKind: "TEXT", content })
+      const before = cards.map((c) => c.code).join(",")
+      applyResult(r)
+      const changed = r.responseCards.map((c) => c.code).join(",") !== before
+      setMessages((m) => [...m, { key: key(), from: "assistant", text: changed ? "새로 확인된 상황을 반영해 대응 카드를 갱신했어요. 가장 위의 조치부터 진행해 주세요." : "현재 안내된 조치를 우선 진행해 주세요. 판단이 어렵다면 아래 공식 기관에 직접 상담하는 것이 가장 안전합니다." }])
+    } catch (err) {
+      await recover(err)
+    } finally {
+      setTyping(false)
+    }
+  }
+  /** SOL-04 잘못 파악된 사실 정정 */
+  const correctFact = async (factKey: FactKey, value: YesNoUnknown) => {
+    const id = idRef.current
+    if (id === null || typing) return
+    setError("")
+    try {
+      applyResult({ ...(await solutionApi.updateFacts(id, { stateVersion: versionRef.current, changes: { [factKey]: value } })), nextQuestion })
+    } catch (err) {
+      await recover(err)
+    }
+  }
+  /** SOL-05 상담 종료 */
+  const complete = async () => {
+    const id = idRef.current
+    if (id === null) return
+    try { await solutionApi.complete(id); setCompleted(true) } catch (err) { setError(errorMessage(err)) }
+  }
+  const back = () => { resetSession(); go("emergency") }
+
   return {
-    emergency, emergencyKeys, emergencyText, setEmergencyText, emergencyImages, setEmergencyImages,
-    emergencyAnalyzing, submittedText, emergencyMessages, emergencyTyping,
-    openEmergencyChat, analyzeEmergency, sendEmergencyMessage,
+    text, setText, images, setImages, analyzing, error,
+    solutionId, facts, cards, cardDetails, institutions, nextQuestion, messages, typing, completed,
+    selectSituation, analyze, answer, send, correctFact, complete, back,
   }
 }
+export type Emergency = ReturnType<typeof useEmergency>

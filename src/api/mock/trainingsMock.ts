@@ -1,5 +1,5 @@
 // 서버 없이 훈련 API를 흉내 냅니다. 기존 규칙 기반 데모 함수를 재사용하고, 응답은 노션 형식으로 맞춰요.
-// stateVersion 검사도 서버처럼 해서, 화면 연결 때 버전 처리를 미리 확인할 수 있어요.
+// stateVersion 검사도 서버처럼 해서, 버전 처리를 mock에서도 확인할 수 있어요.
 import { scrubPersonalInfo } from "@/lib/privacy"
 import { analyzeConversation } from "@/features/report/lib/analyzeConversation"
 import { createDemoReply, hasSafeEnding } from "@/features/simulation/lib/demoReply"
@@ -7,13 +7,13 @@ import { createInterviewOptions, interviewQuestion } from "@/features/simulation
 import type { InterviewAnswer, Scenario, SimulationMessage, SituationKey } from "@/features/simulation/types"
 import { errorFromCode } from "../client"
 import type {
-  ActiveTrainingResponse, ChatMessage, CreateTrainingResponse, DiscoveryImagesResponse, DiscoveryMessageRequest,
+  ActiveTrainingResponse, ChatMessage, ChoiceOption, CreateTrainingResponse, DiscoveryImagesResponse, DiscoveryMessageRequest,
   DiscoveryMessageResponse, FinishTrainingRequest, FinishTrainingResponse, MockActionCode, MockActionRequest,
   MockActionResponse, MockPage, ScenarioResponse, StartTrainingResponse, TrainingDetail, TrainingMessageRequest,
   TrainingMessageResponse, TrainingPhase, TrainingReport, TrainingStatus, Versioned,
 } from "../types"
 import { requireMockUser } from "./authMock"
-import { checkVersion, delay, nextId } from "./delay"
+import { checkVersion, delay, nextId, persistedMap, withSave } from "./delay"
 
 type MockTraining = {
   id: number
@@ -26,16 +26,19 @@ type MockTraining = {
   imageCount: number
   scenario?: Scenario
   messages: SimulationMessage[]
+  requested: string[]
   actions: MockActionCode[]
   report?: TrainingReport
   updatedAt: number
 }
-const trainings = new Map<number, MockTraining>()
+const store = persistedMap<MockTraining>("wsid-mock-trainings")
+const trainings = store.map
 const MAX_DISCOVERY_TURNS = 3
 const MAX_TRAINING_TURNS = 5
 const MAX_IMAGES = 3
 const FRAUD_TYPE: Record<SituationKey, string> = { trade: "SECONDHAND_TRADE", delivery: "SMISHING", loan: "LOAN_FRAUD", job: "JOB_SCAM", institution: "INSTITUTION_IMPERSONATION" }
 const MOCK_PAGE: MockPage = { templateCode: "BANK_NOTICE", title: "가상 금융 안내", institutionName: "가상금융센터", screenCode: "LOGIN_CHECK", isSimulation: true }
+const ASKS = /인증|비밀번호|코드|본인 확인|번호|계좌/
 
 function get(id: number) {
   const user = requireMockUser()
@@ -51,14 +54,16 @@ function bump(t: MockTraining) {
 function requirePhase(t: MockTraining, phase: TrainingPhase) {
   if (t.phase !== phase) throw errorFromCode(409, "INVALID_TRAINING_PHASE")
 }
-const ai = (content: string): ChatMessage => ({ sender: "AI", inputKind: "TEXT", content })
+const toOptions = (choices: string[]): ChoiceOption[] => choices.map((c) => ({ code: c, label: c }))
+const ai = (content: string, phase: TrainingPhase, options: ChoiceOption[] = []): ChatMessage => ({ sender: "AI", inputKind: "TEXT", content, options, phase })
 
-export const trainingsMock = {
+export const trainingsMock = withSave({
   async create(): Promise<CreateTrainingResponse> {
     await delay(150)
     const user = requireMockUser()
-    const first = ai(interviewQuestion([]).text)
-    const t: MockTraining = { id: nextId(), owner: user.email, phase: "DISCOVERY", status: "ACTIVE", stateVersion: 0, answers: [], log: [first], imageCount: 0, messages: [], actions: [], updatedAt: Date.now() }
+    const q = interviewQuestion([])
+    const first = ai(q.text, "DISCOVERY", toOptions(q.choices))
+    const t: MockTraining = { id: nextId(), owner: user.email, phase: "DISCOVERY", status: "ACTIVE", stateVersion: 0, answers: [], log: [first], imageCount: 0, messages: [], requested: [], actions: [], updatedAt: Date.now() }
     trainings.set(t.id, t)
     return { trainingId: t.id, phase: t.phase, status: t.status, stateVersion: 0, firstMessage: first }
   },
@@ -71,7 +76,12 @@ export const trainingsMock = {
   async detail(id: number): Promise<TrainingDetail> {
     await delay(150)
     const t = get(id)
-    return { trainingId: t.id, phase: t.phase, status: t.status, stateVersion: t.stateVersion, turnCount: t.messages.filter((m) => m.from === "user").length, messages: t.log, availableOptions: [], mockPage: null }
+    return {
+      trainingId: t.id, phase: t.phase, status: t.status, stateVersion: t.stateVersion,
+      turnCount: t.messages.filter((m) => m.from === "user").length,
+      messages: t.log, availableOptions: [], mockPage: null,
+      scenario: t.scenario ? { title: t.scenario.title, description: t.scenario.description } : null,
+    }
   },
   async discoveryMessage(id: number, body: DiscoveryMessageRequest & { requestId: string }): Promise<DiscoveryMessageResponse> {
     await delay(400)
@@ -80,9 +90,12 @@ export const trainingsMock = {
     checkVersion(t.stateVersion, body.stateVersion)
     const { text } = scrubPersonalInfo(body.content.trim()) // 실제 값은 바로 가림
     t.answers.push({ question: interviewQuestion(t.answers).text, answer: text })
-    t.log.push({ sender: "USER", inputKind: "TEXT", content: text })
+    t.log.push({ sender: "USER", inputKind: "TEXT", content: text, phase: "DISCOVERY" })
     const canGenerateScenario = t.answers.length >= MAX_DISCOVERY_TURNS
-    const reply = ai(canGenerateScenario ? "충분히 알려 주셨어요. 이 상황에 맞는 훈련을 준비할게요." : interviewQuestion(t.answers).text)
+    const next = interviewQuestion(t.answers)
+    const reply = canGenerateScenario
+      ? ai("충분히 알려 주셨어요. 이 상황에 맞는 훈련을 준비할 수 있어요.", "DISCOVERY")
+      : ai(next.text, "DISCOVERY", toOptions(next.choices))
     t.log.push(reply)
     return { reply, discoveryTurnCount: t.answers.length, canGenerateScenario, stateVersion: bump(t) }
   },
@@ -117,7 +130,7 @@ export const trainingsMock = {
     requirePhase(t, "SCENARIO_READY")
     checkVersion(t.stateVersion, body.stateVersion)
     t.phase = "SIMULATION"
-    const first = ai(t.scenario!.opening)
+    const first = ai(t.scenario!.opening, "SIMULATION")
     t.messages = [{ from: "contact", text: first.content }]
     t.log.push(first)
     return { phase: t.phase, firstMessage: first, stateVersion: bump(t) }
@@ -129,16 +142,17 @@ export const trainingsMock = {
     checkVersion(t.stateVersion, body.stateVersion)
     const raw = body.inputKind === "TEXT" ? body.content : body.selectedCode
     const lastContact = [...t.messages].reverse().find((m) => m.from === "contact")?.text ?? ""
-    const askedForCode = /인증|비밀번호|코드|본인 확인|번호/.test(lastContact)
-    const { text, types } = scrubPersonalInfo(raw.trim().slice(0, 500), askedForCode)
+    const asked = ASKS.test(lastContact)
+    if (asked && !t.requested.includes("개인정보")) t.requested.push("개인정보")
+    const { text, types } = scrubPersonalInfo(raw.trim().slice(0, 500), asked) // 값은 가리고 종류만 남김
     const turn = t.messages.filter((m) => m.from === "user").length
     t.messages.push({ from: "user", text, leaked: types.length ? types : undefined })
-    t.log.push({ sender: "USER", inputKind: body.inputKind, content: text })
+    t.log.push({ sender: "USER", inputKind: body.inputKind, content: text, phase: "SIMULATION" })
     const content = types.length
       ? `${types.join(", ")} 확인 감사하다며, 처리를 마치려면 추가 확인이 필요하다고 다른 정보도 요구합니다.`
       : createDemoReply(text, turn, t.scenario!)
     t.messages.push({ from: "contact", text: content })
-    const reply = { ...ai(content), options: [] }
+    const reply = ai(content, "SIMULATION")
     t.log.push(reply)
     const recognizedActions = [
       ...(/공식|고객센터|대표번호/.test(text) ? ["OFFICIAL_CHANNEL_CHECK"] : []), // 노션 예시 코드
@@ -151,7 +165,7 @@ export const trainingsMock = {
       recognizedActions,
       turnCount,
       shouldFinish: hasSafeEnding(text) || turnCount >= MAX_TRAINING_TURNS,
-      mockPage: turnCount === 2 ? MOCK_PAGE : null, // 두 번째 턴에 모의 페이지를 띄워 보는 흉내
+      mockPage: turnCount === 2 ? MOCK_PAGE : null, // 두 번째 턴에 모의 페이지 링크를 보내는 흉내
       stateVersion: bump(t),
     }
   },
@@ -190,6 +204,7 @@ export const trainingsMock = {
           checkedOfficialChannel: t.actions.includes("OFFICIAL_CHANNEL_CHECK") || /공식|고객센터/.test(t.messages.map((m) => m.text).join(" ")),
         },
         recommendations: ["메시지 속 연락처 대신 공식 앱·대표번호로 확인하기", "비밀번호·인증번호는 누구에게도 알려주지 않기", "금전 피해가 생기면 112와 금융회사에 바로 연락하기"],
+        infoDisclosure: { requested: t.requested, provided: a.leaked ?? [] },
       },
     }
     t.phase = "RESULT"
@@ -208,4 +223,5 @@ export const trainingsMock = {
     for (const t of trainings.values()) if (t.owner === owner && t.report?.reportId === reportId) return t
     return null
   },
-}
+  _save: store.save,
+}, store.save)
