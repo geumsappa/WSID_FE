@@ -3,7 +3,7 @@
 import { request } from "./client"
 import { USE_MOCK } from "./config"
 import { ENDPOINTS } from "./endpoints"
-import { authMock } from "./mock/authMock"
+import { _mockCodeFor, authMock } from "./mock/authMock"
 import type {
   LoginRequest, LoginResponse, MeResponse, ResendEmailResponse, SessionResponse,
   SignupRequest, SignupResponse, VerifyEmailRequest, VerifyEmailResponse,
@@ -41,6 +41,9 @@ export const authApi = {
 
   /** AUTH-06 로그아웃 (204) */
   logout: (): Promise<void> => (USE_MOCK ? authMock.logout() : request(E.logout, { method: "POST" })),
+
+  /** mock 모드에서만: 방금 발급된 인증번호(화면 시연용). 실서버에서는 항상 undefined */
+  devVerificationCode: (email: string): string | undefined => (USE_MOCK ? _mockCodeFor(email) : undefined),
 
   /** AUTH-07 내 회원정보 */
   me: (): Promise<MeResponse> => (USE_MOCK ? authMock.me() : request(E.me)),

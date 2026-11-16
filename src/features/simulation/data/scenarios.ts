@@ -1,3 +1,4 @@
+// ⚠️ mock 전용: 서버 없이 쓸 때 api/mock이 리포트를 만들려고 씁니다. 화면은 이 파일을 직접 쓰지 않아요.
 import type { IconName } from "@/types/common"
 import type { EverydayCategory, Scenario, SituationKey, SituationOption } from "../types"
 

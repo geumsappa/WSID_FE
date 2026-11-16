@@ -21,6 +21,8 @@ export const recordsMock = {
     const savedAt = new Date().toISOString()
     t.report.saved = true
     t.messages = [] // 노션: 저장하면 훈련 대화 원문 삭제
+    t.log = []
+    trainingsMock._save()
     localStorage.setItem(key(user.email), JSON.stringify([{ ...t.report, savedAt }, ...load(user.email)]))
     return { reportId, saved: true, savedAt }
   },

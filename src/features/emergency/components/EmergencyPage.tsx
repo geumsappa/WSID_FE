@@ -8,21 +8,22 @@ import { emergencyData } from "../data/emergencyData"
 import type { EmergencyKey } from "../types"
 
 export type EmergencyProps = {
-  selected: EmergencyKey | null
   text: string
   setText: (value: string) => void
   attachments: UploadedImage[]
   setAttachments: (value: UploadedImage[]) => void
   analyzing: boolean
-  onSelect: (key: EmergencyKey) => void
+  error: string
+  onSelect: (key: Exclude<EmergencyKey, "custom">) => void
   onAnalyze: () => void
 }
+// 긴급 대응 첫 화면: 상황 카드 6개 또는 직접 설명 → 상담 시작(SOL-01)
 export function EmergencyPage(p: EmergencyProps) {
   const [uploadError, setUploadError] = useState("")
   const [isDragging, setIsDragging] = useState(false)
   const dragDepth = useRef(0)
   const fileRef = useRef<HTMLInputElement>(null)
-  const cards: [EmergencyKey, IconName][] = [
+  const cards: [Exclude<EmergencyKey, "custom">, IconName][] = [
     ["transfer", "send"], ["link", "link"], ["app", "app"],
     ["privacy", "user"], ["call", "phone"], ["trade", "cart"],
   ]
@@ -61,8 +62,8 @@ export function EmergencyPage(p: EmergencyProps) {
         <div className="situation-grid">
           {cards.map(([key, icon]) => (
             <button
-              className={p.selected === key ? "selected" : ""}
               key={key}
+              disabled={p.analyzing}
               onClick={() => p.onSelect(key)}
             >
               <span>
@@ -148,10 +149,11 @@ export function EmergencyPage(p: EmergencyProps) {
               민감정보가 보이지 않도록 사진을 자르거나 가려 주세요.
             </p>
           </div>
+          {p.error && <p className="upload-error" role="alert">{p.error}</p>}
           <div className="direct-footer">
             <span>
-              <Icon name="lock" size={16} /> 첨부 자료는 저장하거나 외부
-              서비스로 전송하지 않습니다.
+              <Icon name="lock" size={16} /> 사진 원본은 서버로 보내지 않고
+              장수만 전달합니다.
             </span>
             <button
               className="primary-button"

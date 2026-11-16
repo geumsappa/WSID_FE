@@ -1,3 +1,4 @@
+// ⚠️ mock 전용: 서버 없이 쓸 때 api/mock이 리포트를 만들려고 씁니다. 화면은 이 파일을 직접 쓰지 않아요.
 // 규칙 기반 데모 답변. 백엔드 AI 대화 API 연결 시 교체 대상입니다.
 import type { Scenario } from "../types"
 

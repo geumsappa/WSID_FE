@@ -1,10 +1,3 @@
-// 프런트 데모용 계정 처리. Spring AUTH API 연결 시 이 파일을 api 호출로 교체합니다.
-
-export const ACCOUNT_KEY = "wsid-demo-accounts-v1"
-export const SESSION_KEY = "wsid-demo-session-v1"
-
-export async function hashDemoPassword(password: string, salt: string) {
-  const bytes = new TextEncoder().encode(`${salt}:${password}`)
-  const digest = await crypto.subtle.digest("SHA-256", bytes)
-  return Array.from(new Uint8Array(digest)).map(x => x.toString(16).padStart(2, "0")).join("")
-}
+// 더 이상 쓰지 않는 파일입니다. 회원 기능은 src/api/auth.ts(백엔드) 또는 src/api/mock/authMock.ts(mock)가 담당해요.
+// 지워도 됩니다: git rm src/features/auth/lib/demoAuth.ts
+export {}
