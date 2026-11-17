@@ -4,6 +4,7 @@ import type { Simulation } from "../hooks/useSimulation"
 import { DiscoveryChat } from "./DiscoveryChat"
 import { SimulationChat } from "./SimulationChat"
 
+
 // 시뮬레이션 화면 전체. 단계(stage)에 따라 상황 대화 → 시나리오 생성 → 가상 훈련 대화를 보여 줘요.
 export function SimulationPage({ sim }: { sim: Simulation }) {
   if (sim.stage === "chat" || sim.stage === "finishing" || sim.stage === "done") return <SimulationChat sim={sim} />
@@ -15,7 +16,7 @@ export function SimulationPage({ sim }: { sim: Simulation }) {
     {sim.stage === "discovery" && <div className="input-card simulation-setup simulation-new-flow">
       <div className="step-label"><span>1</span> 상황 파악</div>
       <DiscoveryChat sim={sim} />
-      <div className="button-row"><button className="text-button" onClick={sim.leave}>나중에 이어서 하기</button></div>
+      <button className="outline-button sim-later-button" onClick={sim.leave}>나중에 이어서 하기</button>
     </div>}
     {sim.stage === "generating" && <div className="loading-card" aria-live="polite"><div className="loader-visual"><Icon name="shield" size={34}/><span/></div><h2>맞춤 시나리오를 만들고 있어요.</h2><p>알려 주신 상황을 분석해 훈련 시나리오를 준비하고 있습니다. 최대 1분 정도 걸릴 수 있어요.</p></div>}
     {sim.stage === "ready" && sim.scenario && <div className="input-card scenario-options-wrap">
@@ -25,7 +26,7 @@ export function SimulationPage({ sim }: { sim: Simulation }) {
       <div className="demo-disclosure">이 시나리오는 교육용 가상 상황입니다. 실제 금융기관이나 업체에서 보낸 연락이 아니며, 대화 중 상대가 개인정보를 요구할 수 있어요. 실제 값을 입력할 필요는 없습니다.</div>
       {sim.error && <p className="upload-error" role="alert">{sim.error}</p>}
       <button className="primary-button full" disabled={sim.typing} onClick={() => void sim.startTraining()}>{sim.typing ? "훈련을 시작하는 중..." : "대화 훈련 시작"} <Icon name="arrow" size={18}/></button>
-      <div className="button-row"><button className="text-button" onClick={sim.leave}>나중에 이어서 하기</button></div>
+      <button className="outline-button sim-later-button" onClick={sim.leave}>나중에 이어서 하기</button>
     </div>}
   </div></section>
 }

@@ -764,3 +764,6 @@ textarea:focus { border-color: #78aaed; background: #fff; outline: 3px solid rgb
 /* 로딩·오류 카드의 버튼 줄: 위쪽 간격은 줄에서 주고, 버튼 margin은 제거 */
 .loading-card .button-row { justify-content: center; margin-top: 26px; }
 .loading-card .button-row .primary-button { margin-top: 0; }
+
+/* 시나리오 카드: '나중에 이어서 하기'를 보조 버튼으로 */
+.sim-later-button { width: 100%; margin-top: 12px; min-height: 54px; }
