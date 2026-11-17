@@ -5,6 +5,7 @@
 
 import { API_BASE_URL, CSRF, TIMEOUT } from "./config"
 import type { ApiEnvelope } from "./types"
+import { ENDPOINTS } from "./endpoints"
 
 export class ApiError extends Error {
   status: number
@@ -26,6 +27,8 @@ type RequestOptions = {
   timeoutMs?: number
   /** "blob"이면 파일(PDF 등)로 받음 */
   responseType?: "json" | "blob"
+  /** true면 요청 전에 GET /api/auth/csrf로 토큰을 받아 헤더에 붙여요 (AUTH-06: 로그아웃·리포트 저장) */
+  csrf?: boolean
 }
 
 /** 중복 처리 방지용 요청 ID. 같은 요청을 다시 보낼 때는 같은 값을 쓰세요 (노션: requestId) */
@@ -40,6 +43,12 @@ function readCookie(name: string) {
   }
 }
 
+/** 백엔드에서 CSRF 토큰을 받아 { [headerName]: token } 형태로 돌려줌 */
+async function fetchCsrfHeader(): Promise<Record<string, string>> {
+  const { headerName, token } = await request<{ headerName: string; token: string }>(ENDPOINTS.auth.csrf)
+  return { [headerName]: token }
+}
+
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const { method = "GET", body, query, timeoutMs = TIMEOUT.default, responseType = "json" } = options
   const isForm = body instanceof FormData // 이미지 업로드: 브라우저가 Content-Type을 알아서 붙임
@@ -50,6 +59,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     const csrf = readCookie(CSRF.cookieName)
     if (csrf) headers[CSRF.headerName] = csrf
   }
+  if (options.csrf) Object.assign(headers, await fetchCsrfHeader())
   const qs = query
     ? Object.entries(query).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join("&")
     : ""

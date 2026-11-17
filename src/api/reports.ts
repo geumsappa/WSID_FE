@@ -10,7 +10,7 @@ const E = ENDPOINTS.reports
 export const reportsApi = {
   /** RPT-02 내 리포트에 저장. 저장하면 서버가 훈련 대화 원문을 지워요 */
   save: (reportId: number): Promise<SaveReportResponse> =>
-    USE_MOCK ? recordsMock.save(reportId) : request(E.save(reportId), { method: "POST" }),
+    USE_MOCK ? recordsMock.save(reportId) : request(E.save(reportId), { method: "POST", csrf: true }),
 
   /** RPT-03 저장된 리포트 목록 (최신순). 다음 쪽은 응답의 nextCursor를 넘기세요 */
   list: (params: { size?: number; cursor?: string | null } = {}): Promise<ReportListResponse> =>
