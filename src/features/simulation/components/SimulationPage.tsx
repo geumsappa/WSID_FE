@@ -9,7 +9,7 @@ import { SimulationChat } from "./SimulationChat"
 export function SimulationPage({ sim }: { sim: Simulation }) {
   if (sim.stage === "chat" || sim.stage === "finishing" || sim.stage === "done") return <SimulationChat sim={sim} />
   return <section className="subpage"><div className="container preparation-container">
-    <PageIntro kicker="일상에서 시작하는 금융사기 대응 훈련" title="오늘 겪은 상황을 알려 주시면, 맞춤 훈련을 만들어 드려요"
+    <PageIntro kicker="일상에서 시작하는 금융사기 대응 훈련" title={"오늘 겪은 상황을 알려 주시면\n맞춤 훈련을 만들어 드려요"}
       subtitle="짧은 대화로 상황을 파악한 뒤, 그 상황에 맞는 가상 사기범과 실제처럼 대화하며 대응 방법을 연습해요." />
     {(sim.stage === "idle" || sim.stage === "loading") && <div className="loading-card" aria-live="polite"><div className="loader-visual"><Icon name="shield" size={34}/><span/></div><h2>훈련을 준비하고 있어요.</h2><p>진행 중인 훈련이 있으면 이어서 보여 드려요.</p></div>}
     {sim.stage === "failed" && <div className="loading-card" role="alert"><div className="loader-visual"><Icon name="alert" size={34}/></div><h2>훈련을 불러오지 못했어요.</h2><p>{sim.error || "서버에 연결할 수 없어요."}</p><div className="button-row" style={{ justifyContent: "center" }}><button className="primary-button" onClick={sim.retry}><Icon name="refresh" size={16}/> 다시 시도</button><button className="text-button" onClick={sim.leave}>홈으로</button></div></div>}
