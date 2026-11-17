@@ -767,3 +767,14 @@ textarea:focus { border-color: #78aaed; background: #fff; outline: 3px solid rgb
 
 /* 시나리오 카드: '나중에 이어서 하기'를 보조 버튼으로 */
 .sim-later-button { width: 100%; margin-top: 12px; min-height: 54px; }
+/* 긴급대응 AI 질문·답변: 입력 종류 선택, 추가 질문 표시, 다시 보내기 */
+.assist-mode { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 9px; }
+.emergency-chat-input .assist-mode button { flex: none; width: auto; height: auto; padding: 6px 12px; border: 1px solid #d8e3f1; border-radius: 99px; background: #fff; color: #5d6c82; font-size: 12px; font-weight: 700; }
+.emergency-chat-input .assist-mode button.active { border-color: #1769e0; background: #eaf3ff; color: #1769e0; }
+.emergency-chat-input .assist-mode button.assist-back { margin-left: auto; border: 0; background: transparent; color: #1769e0; }
+.assist-mode.answering { justify-content: space-between; padding: 9px 12px; border-radius: 10px; background: #eaf3ff; color: #2b4a75; font-size: 12px; }
+.assist-mode.answering > span { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.assist-mode.answering strong { color: #1769e0; }
+.prep-message p.assist-clarification { border-color: #b9d4f7; background: #f3f8ff; }
+.prep-message p.assist-unable { border-color: #f0dcc0; background: #fffaf1; color: #6b5a3c; }
+.emergency-chat-input button.assist-retry { display: inline; width: auto; height: auto; margin-left: 6px; padding: 4px 9px; border: 1px solid #e3b3aa; border-radius: 7px; background: #fff; color: #b0442d; font-size: 11px; }

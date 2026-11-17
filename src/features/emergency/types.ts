@@ -9,6 +9,8 @@ export type AssistantMessage = {
   from: "assistant" | "user"
   text: string
   images?: UploadedImage[]
+  /** 도우미 말의 종류. clarification: AI 추가 질문 / answer: AI 답변 / unable: 답변 불가 안내 (없으면 일반 안내) */
+  kind?: "clarification" | "answer" | "unable"
 }
 
 /** mock 기관 데이터의 키 */

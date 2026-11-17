@@ -154,13 +154,34 @@ export type StartSolutionResponse = {
   responseCards: SolutionCard[]
   nextQuestion: NextQuestion | null
 }
-export type SolutionDetail = StartSolutionResponse & { messages: ChatMessage[] }
-/** TEXT면 content, CHOICE면 selectedCode + factKey */
+// ── AI 질문·답변 (백엔드 초안 11/17, Python 계약 확정 시 바뀔 수 있음) ──
+/**
+ * 글(TEXT) 입력이 무엇인지 구분해요.
+ * - FACT_UPDATE: 상황 설명 (지금 방식. 안 보내면 서버가 이걸로 처리)
+ * - QUESTION: 새 질문 → AI가 답하거나 추가 질문(clarification)을 해요
+ * - CLARIFICATION_ANSWER: AI 추가 질문에 대한 답 (clarificationId 필수)
+ */
+export type MessagePurpose = "FACT_UPDATE" | "QUESTION" | "CLARIFICATION_ANSWER"
+/** AI가 사용자에게 되묻는 질문. 답할 때 clarificationId를 같이 보내요 */
+export type Clarification = { clarificationId: string; content: string }
+/**
+ * - NEED_USER_INPUT: clarification(추가 질문)을 띄워요
+ * - ANSWERED: answer(AI 답변)를 보여 줘요
+ * - UNABLE_TO_ANSWER: "답변하기 어려워요" 안내
+ */
+export type AssistStatus = "NEED_USER_INPUT" | "ANSWERED" | "UNABLE_TO_ANSWER"
+export type Assist = { status: AssistStatus; answer: string | null; clarification: Clarification | null }
+
+/** SOL-02. pendingClarification: 답을 기다리는 AI 추가 질문 (새로고침 후 다시 띄우는 용도) */
+export type SolutionDetail = StartSolutionResponse & { messages: ChatMessage[]; pendingClarification?: Clarification | null }
+/** TEXT면 content(+purpose), CHOICE면 selectedCode + factKey */
 export type SolutionMessageRequest = Versioned & (
-  | { inputKind: "TEXT"; content: string }
+  | { inputKind: "TEXT"; content: string; purpose?: "FACT_UPDATE" | "QUESTION" }
+  | { inputKind: "TEXT"; content: string; purpose: "CLARIFICATION_ANSWER"; clarificationId: string }
   | { inputKind: "CHOICE"; selectedCode: YesNoUnknown; factKey: FactKey }
 )
-export type SolutionMessageResponse = { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion: NextQuestion | null; stateVersion: number }
+/** assist: AI 질문·답변 결과. 상황 설명(FACT_UPDATE)·선택지 답변이면 null, 아직 구현 안 된 서버면 아예 없을 수 있어요 */
+export type SolutionMessageResponse = { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion: NextQuestion | null; stateVersion: number; assist?: Assist | null }
 export type UpdateFactsRequest = Versioned & { changes: Partial<SolutionFacts> }
 /**
  * SOL-04 응답. 백엔드 공유(11/17): SOL-03 응답과 같은 모양으로 바뀌어요.
