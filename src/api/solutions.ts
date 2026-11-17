@@ -27,6 +27,7 @@ export const solutionApi = {
       : request(E.messages(solutionId), { method: "POST", body: { requestId, ...body }, timeoutMs: TIMEOUT.aiTurn }),
 
   /** SOL-04 피해 사실 정정. 바꿀 항목만 changes에 */
+  /** 응답에 다음 질문(nextQuestion)과 전체 사실 기준 카드가 함께 와요. 409면 자동 재전송하지 말고 detail로 다시 불러오세요 */
   updateFacts: (solutionId: number, body: UpdateFactsRequest): Promise<UpdateFactsResponse> =>
     USE_MOCK ? solutionsMock.updateFacts(solutionId, body) : request(E.facts(solutionId), { method: "PATCH", body }),
 
