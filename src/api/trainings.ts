@@ -22,7 +22,7 @@ const E = ENDPOINTS.trainings
 export const trainingApi = {
   /** TRN-01 새 훈련 생성 (201). 첫 질문(firstMessage)과 stateVersion 0이 와요 */
   create: (): Promise<CreateTrainingResponse> =>
-    USE_MOCK ? trainingsMock.create() : request(E.create, { method: "POST", body: {} }),
+    USE_MOCK ? trainingsMock.create() : request(E.create, { method: "POST", body: {}, csrf: true }),
 
   /** TRN-02 진행 중 훈련 (홈의 "이어서 하기"). 없으면 null */
   active: (): Promise<ActiveTrainingResponse> => (USE_MOCK ? trainingsMock.active() : request(E.active)),
@@ -34,7 +34,7 @@ export const trainingApi = {
   /** TRN-04 상황 파악 대화 한 턴 */
   discoveryMessage: (trainingId: number, body: DiscoveryMessageRequest, requestId = newRequestId()): Promise<DiscoveryMessageResponse> =>
     USE_MOCK ? trainingsMock.discoveryMessage(trainingId, { ...body, requestId })
-      : request(E.discoveryMessages(trainingId), { method: "POST", body: { requestId, ...body }, timeoutMs: TIMEOUT.aiTurn }),
+      : request(E.discoveryMessages(trainingId), { method: "POST", body: { requestId, ...body }, timeoutMs: TIMEOUT.aiTurn, csrf: true }),
 
   /** TRN-05 이미지 첨부·OCR (multipart: images, requestId). PNG/JPEG 최대 3장, 장당 5MB */
   discoveryImages: (trainingId: number, files: File[], requestId = newRequestId()): Promise<DiscoveryImagesResponse> => {
@@ -42,23 +42,23 @@ export const trainingApi = {
     const form = new FormData()
     files.forEach((f) => form.append("images", f))
     form.append("requestId", requestId)
-    return request(E.discoveryImages(trainingId), { method: "POST", body: form, timeoutMs: TIMEOUT.aiTurn })
+    return request(E.discoveryImages(trainingId), { method: "POST", body: form, timeoutMs: TIMEOUT.aiTurn, csrf: true })
   },
 
   /** TRN-06 개인화 시나리오 생성. 60초까지 걸릴 수 있어 로딩 화면 필요 */
   scenario: (trainingId: number, body: Versioned, requestId = newRequestId()): Promise<ScenarioResponse> =>
     USE_MOCK ? trainingsMock.scenario(trainingId, body)
-      : request(E.scenario(trainingId), { method: "POST", body: { ...body, requestId }, timeoutMs: TIMEOUT.scenario }),
+      : request(E.scenario(trainingId), { method: "POST", body: { ...body, requestId }, timeoutMs: TIMEOUT.scenario, csrf: true }),
 
   /** TRN-07 가상 훈련 시작. SCENARIO_READY 단계에서만 가능 */
   start: (trainingId: number, body: Versioned, requestId = newRequestId()): Promise<StartTrainingResponse> =>
     USE_MOCK ? trainingsMock.start(trainingId, body)
-      : request(E.start(trainingId), { method: "POST", body: { ...body, requestId }, timeoutMs: TIMEOUT.aiTurn }),
+      : request(E.start(trainingId), { method: "POST", body: { ...body, requestId }, timeoutMs: TIMEOUT.aiTurn, csrf: true }),
 
   /** TRN-08 훈련 대화 한 턴. 글은 { inputKind: "TEXT", content }, 선택지는 { inputKind: "CHOICE", selectedCode } */
   message: (trainingId: number, body: TrainingMessageRequest, requestId = newRequestId()): Promise<TrainingMessageResponse> =>
     USE_MOCK ? trainingsMock.message(trainingId, body)
-      : request(E.messages(trainingId), { method: "POST", body: { requestId, ...body }, timeoutMs: TIMEOUT.aiTurn }),
+      : request(E.messages(trainingId), { method: "POST", body: { requestId, ...body }, timeoutMs: TIMEOUT.aiTurn, csrf: true }),
 
   /** TRN-09 모의 페이지 조회 */
   mockPage: (trainingId: number): Promise<MockPage> =>
@@ -67,12 +67,12 @@ export const trainingApi = {
   /** TRN-10 모의 페이지 행동 기록 */
   action: (trainingId: number, body: MockActionRequest, requestId = newRequestId()): Promise<MockActionResponse> =>
     USE_MOCK ? trainingsMock.action(trainingId, body)
-      : request(E.actions(trainingId), { method: "POST", body: { requestId, ...body } }),
+      : request(E.actions(trainingId), { method: "POST", body: { requestId, ...body }, csrf: true }),
 
   /** TRN-11 훈련 종료 + 리포트 생성. 받은 reportId로 리포트를 저장해요 */
   finish: (trainingId: number, body: FinishTrainingRequest, requestId = newRequestId()): Promise<FinishTrainingResponse> =>
     USE_MOCK ? trainingsMock.finish(trainingId, body)
-      : request(E.finish(trainingId), { method: "POST", body: { requestId, ...body }, timeoutMs: TIMEOUT.scenario }),
+      : request(E.finish(trainingId), { method: "POST", body: { requestId, ...body }, timeoutMs: TIMEOUT.scenario, csrf: true }),
 
   /** RPT-01 훈련 직후 결과 (저장 전에도 조회 가능) */
   report: (trainingId: number): Promise<TrainingReport> =>
