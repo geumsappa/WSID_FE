@@ -9,6 +9,7 @@ export const ENDPOINTS = {
     login: "/api/auth/login", // AUTH-04 로그인 (세션 쿠키 발급)
     session: "/api/auth/session", // AUTH-05 로그인 세션 확인
     logout: "/api/auth/logout", // AUTH-06 로그아웃
+    csrf: "/api/auth/csrf", // AUTH-06 CSRF 토큰 발급 (로그아웃·리포트 저장 전에 호출)
     me: "/api/users/me", // AUTH-07 내 회원정보 조회
   },
   guides: {
