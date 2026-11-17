@@ -728,7 +728,7 @@ textarea:focus { border-color: #78aaed; background: #fff; outline: 3px solid rgb
 .profile-avatar { flex: none; width: 54px; height: 54px; display: grid; place-items: center; border-radius: 16px; background: #eaf3ff; color: #1769e0; }
 .profile-card strong { font-size: 18px; color: #153259; }.profile-card p { color: #8190a4; font-size: 13px; margin: 6px 0 0; }
 .profile-status { display: inline-flex; align-items: center; gap: 5px; color: #187f59; font-size: 12px; margin-left: auto; white-space: nowrap; }
-.mypage-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin: 20px 0 26px; }
+.mypage-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin: 20px 0 26px; }
 .mypage-stats > div { border-radius: 17px; border: 1px solid #dfe9f5; background: white; padding: 25px 27px; display: flex; flex-direction: column; gap: 10px; }
 .mypage-stats span { color: #7184a0; font-size: 13px; }.mypage-stats strong { color: #1769e0; font-weight: 850; font-size: 33px; }.mypage-stats small { font-size: 14px; margin-left: 4px; color: #5d718e; }
 .mypage-records { background: white; border: 1px solid #dfe9f5; border-radius: 19px; overflow: hidden; min-height: 310px; }
