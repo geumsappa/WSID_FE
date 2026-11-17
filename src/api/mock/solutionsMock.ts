@@ -11,7 +11,11 @@ import type {
 import { checkVersion, delay, nextId, persistedMap, withSave } from "./delay"
 import { toCard } from "./guidesMock"
 
-type MockSolution = { id: number; status: "ACTIVE" | "COMPLETED"; stateVersion: number; facts: SolutionFacts; extra: EmergencyKey[]; messages: ChatMessage[] }
+type MockSolution = {
+  id: number; status: "ACTIVE" | "COMPLETED"; stateVersion: number; facts: SolutionFacts; extra: EmergencyKey[]; messages: ChatMessage[]
+  /** 사용자가 직접 답하거나 고친 항목. "모름"으로 답한 항목도 여기 들어가서 다시 묻지 않아요 (백엔드 공유 11/17) */
+  settled?: FactKey[]
+}
 const store = persistedMap<MockSolution>("wsid-mock-solutions")
 const sessions = store.map
 const QUESTIONS: Record<FactKey, string> = {
@@ -49,8 +53,11 @@ function cards(s: MockSolution): SolutionCard[] {
     return { code: c.code, priority: c.priority, title: c.title, institutionCodes: c.institutionCodes }
   })
 }
+function settle(s: MockSolution, key: FactKey) {
+  s.settled = Array.from(new Set([...(s.settled ?? []), key]))
+}
 function nextQuestion(s: MockSolution): NextQuestion | null {
-  const key = (Object.keys(s.facts) as FactKey[]).find((k) => s.facts[k] === "UNKNOWN")
+  const key = (Object.keys(s.facts) as FactKey[]).find((k) => s.facts[k] === "UNKNOWN" && !(s.settled ?? []).includes(k))
   return key ? { factKey: key, content: QUESTIONS[key], options: OPTIONS } : null
 }
 
@@ -77,6 +84,7 @@ export const solutionsMock = withSave({
     checkVersion(s.stateVersion, body.stateVersion)
     if (body.inputKind === "CHOICE") {
       s.facts[body.factKey] = body.selectedCode
+      settle(s, body.factKey)
       s.messages.push({ sender: "USER", inputKind: "CHOICE", content: `${QUESTIONS[body.factKey]} → ${body.selectedCode}` })
     } else {
       const masked = maskSensitive(body.content.trim())
@@ -90,9 +98,15 @@ export const solutionsMock = withSave({
     await delay(200)
     const s = get(id)
     checkVersion(s.stateVersion, body.stateVersion)
-    for (const [k, v] of Object.entries(body.changes) as [FactKey, YesNoUnknown][]) if (k in s.facts && v) s.facts[k] = v
+    for (const [k, v] of Object.entries(body.changes) as [FactKey, YesNoUnknown][]) {
+      if (k in s.facts && v) {
+        s.facts[k] = v
+        settle(s, k)
+      }
+    }
     s.stateVersion += 1
-    return { facts: { ...s.facts }, responseCards: cards(s), stateVersion: s.stateVersion }
+    // 백엔드 공유(11/17): SOL-03과 같은 모양 — 전체 사실 기준 카드 + 다음 질문
+    return { facts: { ...s.facts }, responseCards: cards(s), nextQuestion: nextQuestion(s), stateVersion: s.stateVersion }
   },
   async complete(id: number): Promise<CompleteSolutionResponse> {
     await delay(150)

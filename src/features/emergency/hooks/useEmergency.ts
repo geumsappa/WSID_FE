@@ -150,7 +150,10 @@ export function useEmergency(go: (next: Page) => void) {
     if (id === null || typing) return
     setError("")
     try {
-      applyResult({ ...(await solutionApi.updateFacts(id, { stateVersion: versionRef.current, changes: { [factKey]: value } })), nextQuestion })
+      const r = await solutionApi.updateFacts(id, { stateVersion: versionRef.current, changes: { [factKey]: value } })
+      // 백엔드 공유(11/17): 응답의 nextQuestion으로 질문을 바꿔요(null이면 질문 숨김).
+      // 아직 nextQuestion을 안 주는 서버라면(필드 자체가 없으면) 지금 질문을 그대로 둬요.
+      applyResult({ ...r, nextQuestion: r.nextQuestion !== undefined ? r.nextQuestion : nextQuestion })
     } catch (err) {
       await recover(err)
     }
