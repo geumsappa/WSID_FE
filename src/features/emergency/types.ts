@@ -11,6 +11,8 @@ export type AssistantMessage = {
   images?: UploadedImage[]
   /** 도우미 말의 종류. clarification: AI 추가 질문 / answer: AI 답변 / unable: 답변 불가 안내 (없으면 일반 안내) */
   kind?: "clarification" | "answer" | "unable"
+  /** AI 답변의 근거 카드 코드 (assistant.referenceCodes) */
+  references?: string[]
 }
 
 /** mock 기관 데이터의 키 */

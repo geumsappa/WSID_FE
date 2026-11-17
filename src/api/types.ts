@@ -143,7 +143,11 @@ export type SolutionFacts = { transferredMoney: YesNoUnknown; sharedInformation:
 export type FactKey = keyof SolutionFacts
 /** SOL 응답 안의 카드는 GUIDE-03 카드의 일부 필드만 와요 (SOL-04 예시는 code·priority만) */
 export type SolutionCard = { code: string; priority: CardPriority; title?: string; institutionCodes?: string[] }
-export type NextQuestion = { factKey: FactKey; content: string; options: YesNoUnknown[] }
+/**
+ * 다음 질문 하나. 사실 확인 질문이면 factKey·options(예/아니오/모름)가 있고,
+ * AI 추가 질문(assistant.status = NEED_USER_INPUT)이면 factKey·options가 없을 수 있어요(자유 입력으로 답함)
+ */
+export type NextQuestion = { factKey?: FactKey | null; content: string; options?: YesNoUnknown[] }
 
 export type StartSolutionRequest = { description: string }
 export type StartSolutionResponse = {
@@ -154,34 +158,33 @@ export type StartSolutionResponse = {
   responseCards: SolutionCard[]
   nextQuestion: NextQuestion | null
 }
-// ── AI 질문·답변 (백엔드 초안 11/17, Python 계약 확정 시 바뀔 수 있음) ──
+// ── AI 질문·답변 (백엔드 최종 초안 11/17, Python 계약 확정 시 조금 바뀔 수 있음) ──
 /**
  * 글(TEXT) 입력이 무엇인지 구분해요.
  * - FACT_UPDATE: 상황 설명 (지금 방식. 안 보내면 서버가 이걸로 처리)
- * - QUESTION: 새 질문 → AI가 답하거나 추가 질문(clarification)을 해요
- * - CLARIFICATION_ANSWER: AI 추가 질문에 대한 답 (clarificationId 필수)
+ * - QUESTION: 새 질문 → AI가 답하거나 추가 질문을 해요
+ * - CLARIFICATION_ANSWER: AI 추가 질문에 대한 답 (응답으로 받은 questionId 필수)
  */
 export type MessagePurpose = "FACT_UPDATE" | "QUESTION" | "CLARIFICATION_ANSWER"
-/** AI가 사용자에게 되묻는 질문. 답할 때 clarificationId를 같이 보내요 */
-export type Clarification = { clarificationId: string; content: string }
 /**
- * - NEED_USER_INPUT: clarification(추가 질문)을 띄워요
+ * - NEED_USER_INPUT: AI 추가 질문을 띄워요. 질문 문장은 nextQuestion.content에 와요(질문은 항상 하나)
  * - ANSWERED: answer(AI 답변)를 보여 줘요
  * - UNABLE_TO_ANSWER: "답변하기 어려워요" 안내
  */
-export type AssistStatus = "NEED_USER_INPUT" | "ANSWERED" | "UNABLE_TO_ANSWER"
-export type Assist = { status: AssistStatus; answer: string | null; clarification: Clarification | null }
+export type AssistantStatus = "NEED_USER_INPUT" | "ANSWERED" | "UNABLE_TO_ANSWER"
+/** AI 처리 결과. referenceCodes: 답변 근거가 된 대응 카드 코드(GUIDE-03로 제목을 불러 표시) */
+export type AssistantReply = { status: AssistantStatus; questionId: string | null; answer: string | null; referenceCodes: string[] }
 
-/** SOL-02. pendingClarification: 답을 기다리는 AI 추가 질문 (새로고침 후 다시 띄우는 용도) */
-export type SolutionDetail = StartSolutionResponse & { messages: ChatMessage[]; pendingClarification?: Clarification | null }
+/** SOL-02. assistant: 마지막 AI 처리 결과. NEED_USER_INPUT이면 새로고침 후에도 nextQuestion을 AI 질문으로 다시 띄워요 */
+export type SolutionDetail = StartSolutionResponse & { messages: ChatMessage[]; assistant?: AssistantReply | null }
 /** TEXT면 content(+purpose), CHOICE면 selectedCode + factKey */
 export type SolutionMessageRequest = Versioned & (
   | { inputKind: "TEXT"; content: string; purpose?: "FACT_UPDATE" | "QUESTION" }
-  | { inputKind: "TEXT"; content: string; purpose: "CLARIFICATION_ANSWER"; clarificationId: string }
+  | { inputKind: "TEXT"; content: string; purpose: "CLARIFICATION_ANSWER"; questionId: string }
   | { inputKind: "CHOICE"; selectedCode: YesNoUnknown; factKey: FactKey }
 )
-/** assist: AI 질문·답변 결과. 상황 설명(FACT_UPDATE)·선택지 답변이면 null, 아직 구현 안 된 서버면 아예 없을 수 있어요 */
-export type SolutionMessageResponse = { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion: NextQuestion | null; stateVersion: number; assist?: Assist | null }
+/** assistant: AI 질문·답변 결과. 상황 설명(FACT_UPDATE)·선택지 답변이면 null, 아직 구현 안 된 서버면 아예 없을 수 있어요 */
+export type SolutionMessageResponse = { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion: NextQuestion | null; stateVersion: number; assistant?: AssistantReply | null }
 export type UpdateFactsRequest = Versioned & { changes: Partial<SolutionFacts> }
 /**
  * SOL-04 응답. 백엔드 공유(11/17): SOL-03 응답과 같은 모양으로 바뀌어요.

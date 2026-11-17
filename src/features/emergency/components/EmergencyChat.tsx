@@ -26,7 +26,7 @@ export function EmergencyChat({ em }: { em: Emergency }) {
   const [pendingImages, setPendingImages] = useState<UploadedImage[]>([])
   const [mode, setMode] = useState<InputMode>("question")
   // AI가 추가 질문을 하면 입력창을 "답하기"로, 질문이 끝나면 다시 "질문하기"로 돌려요.
-  const clarificationId = em.clarification?.clarificationId
+  const clarificationId = em.clarification?.questionId
   useEffect(() => {
     setMode((m) => clarificationId ? "answer" : m === "answer" ? "question" : m)
   }, [clarificationId])
@@ -60,6 +60,7 @@ export function EmergencyChat({ em }: { em: Emergency }) {
       <div>
         <small>{m.from === "assistant" ? (m.kind ? KIND_LABEL[m.kind] : "어떡하지 도우미") : "나"}</small>
         {m.text && <p className={m.kind ? `assist-${m.kind}` : undefined}>{m.text}</p>}
+        {m.references && <div className="assist-refs">근거: {m.references.map((code) => em.cardDetails[code]?.title ?? em.cards.find((c) => c.code === code)?.title ?? code).join(" · ")}</div>}
         {m.images && m.images.length > 0 && <div className="sent-photo-gallery"><EvidenceGallery images={m.images} /></div>}
       </div>
     </div>
@@ -95,7 +96,7 @@ export function EmergencyChat({ em }: { em: Emergency }) {
               {em.nextQuestion && !em.typing && (
                 <section className="result-card">
                   <div className="result-card-heading"><span><Icon name="chat" size={21} /></span><div><small>추가 확인</small><h3>{em.nextQuestion.content}</h3></div></div>
-                  <div className="interview-choices" style={{ marginTop: 4 }}>{em.nextQuestion.options.map((v) => <button key={v} type="button" onClick={() => void em.answer(em.nextQuestion!, v)}>{ANSWER_LABEL[v]}</button>)}</div>
+                  <div className="interview-choices" style={{ marginTop: 4 }}>{(em.nextQuestion.options ?? ["YES", "NO", "UNKNOWN"]).map((v) => <button key={v} type="button" onClick={() => void em.answer(em.nextQuestion!, v)}>{ANSWER_LABEL[v]}</button>)}</div>
                 </section>
               )}
               <section className="result-card action-result">
@@ -159,7 +160,8 @@ export function EmergencyChat({ em }: { em: Emergency }) {
             {uploadError && <p className="upload-error" role="alert">{uploadError}</p>}
             {em.error && <p className="upload-error" role="alert">{em.error}{em.failed && <> <button type="button" className="assist-retry" disabled={em.typing} onClick={em.retry}>다시 보내기</button></>}</p>}
             {em.clarification && mode === "answer"
-              ? <div className="assist-mode answering"><span><Icon name="chat" size={14} /> 도우미 질문에 답하는 중: <strong>{em.clarification.content}</strong></span><button type="button" onClick={() => setMode("question")}>새 질문으로 보내기</button></div>
+              ? <div className="assist-mode answering"><span><Icon name="chat" size={14} /> 도우미 질문에 답하는 중: <strong>{em.clarification.content}</strong></span><button type="button" onClick={() => setMode("question")}>새 질문으로 보내기</button>
+                  {em.clarification.options.length > 0 && <div className="assist-quick">{em.clarification.options.map((v) => <button key={v} type="button" disabled={em.typing} onClick={() => void em.send(ANSWER_LABEL[v], [], "answer")}>{ANSWER_LABEL[v]}</button>)}</div>}</div>
               : <div className="assist-mode" role="radiogroup" aria-label="입력 종류">
                   <button type="button" role="radio" aria-checked={mode === "question"} className={mode === "question" ? "active" : ""} onClick={() => setMode("question")}>질문하기</button>
                   <button type="button" role="radio" aria-checked={mode === "fact"} className={mode === "fact" ? "active" : ""} onClick={() => setMode("fact")}>상황 추가 설명</button>

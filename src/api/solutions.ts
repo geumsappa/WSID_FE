@@ -25,8 +25,8 @@ export const solutionApi = {
    * SOL-03 상담 메시지.
    * - 사실 확인 질문에 답할 땐 { inputKind: "CHOICE", factKey, selectedCode }
    * - 글은 { inputKind: "TEXT", content, purpose } — purpose: FACT_UPDATE(상황 설명) / QUESTION(새 질문)
-   *   / CLARIFICATION_ANSWER(AI 추가 질문에 대한 답, clarificationId 함께)
-   * 응답의 assist에 AI 답변 또는 추가 질문이 와요. 실패 후 다시 보낼 땐 같은 requestId를 넘겨 중복 처리를 막아요.
+   *   / CLARIFICATION_ANSWER(AI 추가 질문에 대한 답, 응답으로 받은 questionId 함께)
+   * 응답의 assistant에 AI 처리 결과가 와요. 추가 질문 문장은 nextQuestion에 와요. 실패 후 다시 보낼 땐 같은 requestId를 넘겨 중복 처리를 막아요.
    */
   message: (solutionId: number, body: SolutionMessageRequest, requestId = newRequestId()): Promise<SolutionMessageResponse> =>
     USE_MOCK ? solutionsMock.message(solutionId, body)

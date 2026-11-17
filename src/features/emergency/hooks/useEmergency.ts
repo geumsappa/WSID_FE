@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { errorMessage, guidesApi, isStateConflict, newRequestId, solutionApi } from "@/api"
-import type { Assist, Clarification, FactKey, Institution, NextQuestion, ResponseCard, SolutionCard, SolutionDetail, SolutionFacts, SolutionMessageRequest, YesNoUnknown } from "@/api"
+import type { AssistantReply, FactKey, Institution, NextQuestion, ResponseCard, SolutionCard, SolutionDetail, SolutionFacts, SolutionMessageRequest, YesNoUnknown } from "@/api"
 import type { Page, UploadedImage } from "@/types/common"
 import { maskSensitive } from "@/lib/privacy"
 import type { AssistantMessage, EmergencyKey } from "../types"
@@ -18,6 +18,13 @@ export type InputMode = "question" | "fact" | "answer"
 type RequestId = ReturnType<typeof newRequestId>
 type DistOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
 /** stateVersion을 뺀 글 메시지 본문 (실패 시 같은 본문·requestId로 다시 보내려고 보관) */
+/** 답을 기다리는 AI 추가 질문. 문장은 nextQuestion에서, id는 assistant.questionId에서 와요 */
+export type PendingQuestion = { questionId: string; content: string; options: YesNoUnknown[] }
+/** 응답의 assistant + nextQuestion에서 AI 추가 질문을 꺼내요. 아니면 null */
+const aiQuestionOf = (r: { assistant?: AssistantReply | null; nextQuestion?: NextQuestion | null }): PendingQuestion | null =>
+  r.assistant?.status === "NEED_USER_INPUT" && r.assistant.questionId && r.nextQuestion
+    ? { questionId: r.assistant.questionId, content: r.nextQuestion.content, options: r.nextQuestion.options ?? [] }
+    : null
 type TextBody = DistOmit<Extract<SolutionMessageRequest, { inputKind: "TEXT" }>, "stateVersion">
 const saveSessionId = (id: number | null) => {
   try { id === null ? sessionStorage.removeItem(SESSION_KEY) : sessionStorage.setItem(SESSION_KEY, String(id)) } catch { /* 무시 */ }
@@ -41,8 +48,8 @@ export function useEmergency(go: (next: Page) => void) {
   const [typing, setTyping] = useState(false)
   const [error, setError] = useState("")
   const [completed, setCompleted] = useState(false)
-  /** 답을 기다리는 AI 추가 질문 (assist.clarification / SOL-02 pendingClarification) */
-  const [clarification, setClarification] = useState<Clarification | null>(null)
+  /** 답을 기다리는 AI 추가 질문 (assistant.status = NEED_USER_INPUT일 때) */
+  const [clarification, setClarification] = useState<PendingQuestion | null>(null)
   /** 실패한 글 메시지. "다시 보내기"로 같은 requestId를 써서 재전송해요 */
   const [failed, setFailed] = useState<{ body: TextBody; requestId: RequestId } | null>(null)
   const versionRef = useRef(0)
@@ -75,8 +82,8 @@ export function useEmergency(go: (next: Page) => void) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   // 서버가 준 카드 코드로 카드 본문(GUIDE-03)을 받아 둡니다. 이미 받은 코드는 다시 요청하지 않아요.
-  const fetchCards = async (list: SolutionCard[]) => {
-    const missing = list.map((c) => c.code).filter((code) => !cardDetails[code])
+  const fetchCards = async (list: SolutionCard[] | string[]) => {
+    const missing = list.map((c) => typeof c === "string" ? c : c.code).filter((code) => !cardDetails[code])
     if (!missing.length) return
     try {
       const got = await guidesApi.responseCards(missing)
@@ -90,10 +97,10 @@ export function useEmergency(go: (next: Page) => void) {
     setNextQuestion(r.nextQuestion ?? null)
     void fetchCards(r.responseCards)
   }
-  /** SOL-02 응답 반영. pendingClarification이 오면 기다리던 AI 질문도 되살려요 */
+  /** SOL-02 응답 반영. assistant가 NEED_USER_INPUT이면 기다리던 AI 질문도 되살려요 */
   const applyDetail = (d: SolutionDetail) => {
     applyResult(d)
-    if (d.pendingClarification !== undefined) setClarification(d.pendingClarification)
+    if (d.assistant !== undefined) setClarification(aiQuestionOf(d))
   }
   /** 서버 대화 내역(ChatMessage)을 화면용 메시지로 바꿔요. 첫 설명 뒤에 안내 한 줄을 넣어 화면 배치를 맞춰요 */
   const restoreMessages = (d: SolutionDetail): AssistantMessage[] => {
@@ -161,12 +168,13 @@ export function useEmergency(go: (next: Page) => void) {
   /** SOL-03 추가 질문에 답하기(선택지) */
   const answer = async (q: NextQuestion, value: YesNoUnknown) => {
     const id = idRef.current
-    if (id === null || typing) return
-    setMessages((m) => [...m, { key: key(), from: "user", text: `${FACT_LABEL[q.factKey]}: ${ANSWER_LABEL[value]}` }])
+    const factKey = q.factKey
+    if (id === null || typing || !factKey) return
+    setMessages((m) => [...m, { key: key(), from: "user", text: `${FACT_LABEL[factKey]}: ${ANSWER_LABEL[value]}` }])
     setTyping(true)
     setError("")
     try {
-      const r = await solutionApi.message(id, { stateVersion: versionRef.current, inputKind: "CHOICE", factKey: q.factKey, selectedCode: value })
+      const r = await solutionApi.message(id, { stateVersion: versionRef.current, inputKind: "CHOICE", factKey, selectedCode: value })
       applyResult(r)
       setMessages((m) => [...m, { key: key(), from: "assistant", text: r.nextQuestion ? "확인했어요. 대응 카드를 갱신했어요." : "확인할 내용을 모두 파악했어요. 위 대응 카드의 순서대로 진행해 주세요." }])
     } catch (err) {
@@ -175,21 +183,21 @@ export function useEmergency(go: (next: Page) => void) {
       setTyping(false)
     }
   }
-  /** 서버 응답의 assist를 대화에 반영해요. assist가 없으면(상황 설명이거나 아직 구현 전인 서버) 기존 안내 문구를 써요 */
-  const showAssist = (assist: Assist | null | undefined, cardsChanged: boolean) => {
-    const say = (text: string, kind?: AssistantMessage["kind"]) => setMessages((m) => [...m, { key: key(), from: "assistant", text, kind }])
-    if (!assist) {
+  /** 서버 응답의 assistant를 대화에 반영해요. 없으면(상황 설명이거나 아직 구현 전인 서버) 기존 안내 문구를 써요 */
+  const showAssistant = (r: { assistant?: AssistantReply | null; nextQuestion?: NextQuestion | null }, cardsChanged: boolean) => {
+    const say = (text: string, kind?: AssistantMessage["kind"], references?: string[]) =>
+      setMessages((m) => [...m, { key: key(), from: "assistant", text, kind, references: references?.length ? references : undefined }])
+    const a = r.assistant
+    if (!a) {
       setClarification(null)
       say(cardsChanged ? "새로 확인된 상황을 반영해 대응 카드를 갱신했어요. 가장 위의 조치부터 진행해 주세요." : "현재 안내된 조치를 우선 진행해 주세요. 판단이 어렵다면 아래 공식 기관에 직접 상담하는 것이 가장 안전합니다.")
       return
     }
-    if (assist.status === "NEED_USER_INPUT" && assist.clarification) {
-      setClarification(assist.clarification)
-      say(assist.clarification.content, "clarification")
-      return
-    }
-    setClarification(null)
-    if (assist.status === "ANSWERED" && assist.answer) say(assist.answer, "answer")
+    const q = aiQuestionOf(r)
+    setClarification(q)
+    if (q) { say(q.content, "clarification"); return }
+    if (a.referenceCodes?.length) void fetchCards(a.referenceCodes) // 근거 카드 제목을 보여 주려고
+    if (a.status === "ANSWERED" && a.answer) say(a.answer, "answer", a.referenceCodes)
     else say(UNABLE_TEXT, "unable")
   }
   /** SOL-03 글 메시지 전송(공통). 실패하면 본문·requestId를 보관해 "다시 보내기"를 띄워요 */
@@ -203,7 +211,7 @@ export function useEmergency(go: (next: Page) => void) {
       const before = cards.map((c) => c.code).join(",")
       const r = await solutionApi.message(id, { ...body, stateVersion: versionRef.current }, requestId)
       applyResult(r)
-      showAssist(r.assist, r.responseCards.map((c) => c.code).join(",") !== before)
+      showAssistant(r, r.responseCards.map((c) => c.code).join(",") !== before)
     } catch (err) {
       // 409(상태 충돌)는 자동 재전송하지 않고 최신 상태만 불러와요. 그 밖의 실패는 같은 요청을 다시 보낼 수 있어요.
       if (!isStateConflict(err)) setFailed({ body, requestId })
@@ -214,7 +222,7 @@ export function useEmergency(go: (next: Page) => void) {
   }
   /**
    * SOL-03 글로 질문·설명·답변하기.
-   * mode: question → purpose QUESTION / fact → FACT_UPDATE / answer → CLARIFICATION_ANSWER(+clarificationId)
+   * mode: question → purpose QUESTION / fact → FACT_UPDATE / answer → CLARIFICATION_ANSWER(+questionId)
    */
   const send = async (raw: string, attachments: UploadedImage[] = [], mode: InputMode = "question") => {
     const masked = maskSensitive(raw.trim())
@@ -222,7 +230,7 @@ export function useEmergency(go: (next: Page) => void) {
     setMessages((m) => [...m, { key: key(), from: "user", text: masked, images: attachments.length ? attachments : undefined }])
     const content = attachments.length ? `${masked}${masked ? " " : ""}(사진 ${attachments.length}장 첨부함)` : masked
     const body: TextBody = mode === "answer" && clarification
-      ? { inputKind: "TEXT", content, purpose: "CLARIFICATION_ANSWER", clarificationId: clarification.clarificationId }
+      ? { inputKind: "TEXT", content, purpose: "CLARIFICATION_ANSWER", questionId: clarification.questionId }
       : { inputKind: "TEXT", content, purpose: mode === "fact" ? "FACT_UPDATE" : "QUESTION" }
     await postText(body, newRequestId())
   }
@@ -254,7 +262,9 @@ export function useEmergency(go: (next: Page) => void) {
 
   return {
     text, setText, images, setImages, analyzing, error,
-    solutionId, facts, cards, cardDetails, institutions, nextQuestion, messages, typing, completed, clarification, failed: failed !== null,
+    solutionId, facts, cards, cardDetails, institutions, messages,
+    /** 사실 확인 질문(예/아니오/모름 버튼). AI 추가 질문일 땐 null이고 clarification으로 보여 줘요 */
+    nextQuestion: !clarification && nextQuestion?.factKey ? nextQuestion : null, typing, completed, clarification, failed: failed !== null,
     selectSituation, analyze, answer, send, retry, correctFact, complete, back,
   }
 }
