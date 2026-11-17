@@ -4,7 +4,7 @@ import { detectEmergencyKeys } from "@/features/emergency/lib/detectEmergency"
 import type { EmergencyKey } from "@/features/emergency/types"
 import { errorFromCode } from "../client"
 import type {
-  Assist, ChatMessage, Clarification, CompleteSolutionResponse, FactKey, NextQuestion, SolutionCard, SolutionDetail, SolutionFacts,
+  AssistantReply, ChatMessage, CompleteSolutionResponse, FactKey, NextQuestion, SolutionCard, SolutionDetail, SolutionFacts,
   SolutionMessageRequest, SolutionMessageResponse, StartSolutionRequest, StartSolutionResponse,
   UpdateFactsRequest, UpdateFactsResponse, YesNoUnknown,
 } from "../types"
@@ -16,8 +16,10 @@ type MockSolution = {
   /** 사용자가 직접 답하거나 고친 항목. "모름"으로 답한 항목도 여기 들어가서 다시 묻지 않아요 (백엔드 공유 11/17) */
   settled?: FactKey[]
   /** 답을 기다리는 AI 추가 질문 */
-  pending?: (Clarification & { factKey: FactKey }) | null
-  clarSeq?: number
+  pending?: { questionId: string; content: string; factKey: FactKey } | null
+  qSeq?: number
+  /** 마지막 AI 처리 결과 (SOL-02 복원용) */
+  lastAssistant?: AssistantReply | null
 }
 const store = persistedMap<MockSolution>("wsid-mock-solutions")
 const sessions = store.map
@@ -94,33 +96,37 @@ const TOPIC: [FactKey, RegExp][] = [
   ["contactContinues", /연락|전화|문자|차단/],
 ]
 
-/** 질문(QUESTION) 처리: 관련 사실이 아직 모르면 되묻고, 알면 바로 답해요 */
-function assistQuestion(s: MockSolution, text: string): Assist {
-  if (/주식|코인|투자|대출.{0,4}추천/.test(text)) return { status: "UNABLE_TO_ANSWER", answer: null, clarification: null }
+const CARD_OF: Record<FactKey, EmergencyKey> = { transferredMoney: "transfer", sharedInformation: "privacy", installedApp: "app", contactContinues: "call" }
+const reply = (status: AssistantReply["status"], answer: string | null = null, refs: FactKey[] = [], questionId: string | null = null): AssistantReply =>
+  ({ status, questionId, answer, referenceCodes: refs.map((f) => toCard(CARD_OF[f]).code) })
+
+/** 질문(QUESTION) 처리: 관련 사실을 아직 모르면 되묻고, 알면 바로 답해요 */
+function assistQuestion(s: MockSolution, text: string): AssistantReply {
+  if (/주식|코인|투자|대출.{0,4}추천/.test(text)) return reply("UNABLE_TO_ANSWER")
   const topics = TOPIC.filter(([, re]) => re.test(text)).map(([f]) => f)
   const unknown = topics.find((f) => s.facts[f] === "UNKNOWN")
   if (unknown) {
-    s.clarSeq = (s.clarSeq ?? 0) + 1
-    s.pending = { clarificationId: `c-${s.id}-${s.clarSeq}`, content: CLARIFY[unknown], factKey: unknown }
-    return { status: "NEED_USER_INPUT", answer: null, clarification: { clarificationId: s.pending.clarificationId, content: s.pending.content } }
+    s.qSeq = (s.qSeq ?? 0) + 1
+    s.pending = { questionId: `q-${s.id}-${s.qSeq}`, content: CLARIFY[unknown], factKey: unknown }
+    return reply("NEED_USER_INPUT", null, [], s.pending.questionId)
   }
   const known = topics.find((f) => s.facts[f] !== "UNKNOWN")
-  const answer = known ? (s.facts[known] === "YES" ? ANSWER_YES : ANSWER_NO)[known] : GENERAL_ANSWER
-  return { status: "ANSWERED", answer, clarification: null }
+  return known ? reply("ANSWERED", (s.facts[known] === "YES" ? ANSWER_YES : ANSWER_NO)[known], [known]) : reply("ANSWERED", GENERAL_ANSWER)
 }
 /** 추가 질문에 대한 답(CLARIFICATION_ANSWER) 처리: 답으로 사실을 채우고 그에 맞게 답해요 */
-function assistClarification(s: MockSolution, clarificationId: string, text: string): Assist {
+function assistAnswer(s: MockSolution, questionId: string, text: string): AssistantReply {
   const p = s.pending
-  if (!p || p.clarificationId !== clarificationId) throw errorFromCode(409, "CLARIFICATION_NOT_FOUND")
+  if (!p || p.questionId !== questionId) throw errorFromCode(409, "QUESTION_NOT_FOUND")
   s.pending = null
   const no = /아니|안 ?했|않았|없어|안 ?보냈|안 ?깔/.test(text)
   const yes = !no && /네|예|응|맞|했|보냈|깔았|설치/.test(text)
-  if (!yes && !no) return { status: "ANSWERED", answer: `정확히 기억나지 않아도 괜찮아요. ${GENERAL_ANSWER}`, clarification: null }
+  if (!yes && !no) return reply("ANSWERED", `정확히 기억나지 않아도 괜찮아요. ${GENERAL_ANSWER}`)
   s.facts[p.factKey] = yes ? "YES" : "NO"
   settle(s, p.factKey)
-  return { status: "ANSWERED", answer: (yes ? ANSWER_YES : ANSWER_NO)[p.factKey], clarification: null }
+  return reply("ANSWERED", (yes ? ANSWER_YES : ANSWER_NO)[p.factKey], [p.factKey])
 }
-const pendingOf = (s: MockSolution): Clarification | null => s.pending ? { clarificationId: s.pending.clarificationId, content: s.pending.content } : null
+/** AI 추가 질문이 있으면 그게 nextQuestion이에요(질문은 항상 하나). 없으면 사실 확인 질문 */
+const questionOf = (s: MockSolution): NextQuestion | null => s.pending ? { factKey: null, content: s.pending.content, options: [] } : nextQuestion(s)
 
 export const solutionsMock = withSave({
   async start(body: StartSolutionRequest): Promise<StartSolutionResponse> {
@@ -137,7 +143,7 @@ export const solutionsMock = withSave({
   async detail(id: number): Promise<SolutionDetail> {
     await delay(150)
     const s = get(id)
-    return { solutionId: s.id, status: s.status, stateVersion: s.stateVersion, facts: { ...s.facts }, responseCards: cards(s), nextQuestion: nextQuestion(s), messages: s.messages, pendingClarification: pendingOf(s) }
+    return { solutionId: s.id, status: s.status, stateVersion: s.stateVersion, facts: { ...s.facts }, responseCards: cards(s), nextQuestion: questionOf(s), messages: s.messages, assistant: s.lastAssistant ?? null }
   },
   async message(id: number, body: SolutionMessageRequest): Promise<SolutionMessageResponse> {
     await delay(600)
@@ -148,19 +154,21 @@ export const solutionsMock = withSave({
       settle(s, body.factKey)
       s.messages.push({ sender: "USER", inputKind: "CHOICE", content: `${QUESTIONS[body.factKey]} → ${body.selectedCode}` })
       s.stateVersion += 1
-      return { facts: { ...s.facts }, responseCards: cards(s), nextQuestion: nextQuestion(s), stateVersion: s.stateVersion, assist: null }
+      s.lastAssistant = null
+      return { facts: { ...s.facts }, responseCards: cards(s), nextQuestion: questionOf(s), stateVersion: s.stateVersion, assistant: null }
     }
     const masked = maskSensitive(body.content.trim())
     if (/실패 ?테스트/.test(masked)) throw errorFromCode(503, "AI_SERVICE_UNAVAILABLE") // 재시도 흐름 확인용
-    let assist: Assist | null = null
-    if (body.purpose === "CLARIFICATION_ANSWER") assist = assistClarification(s, body.clarificationId, masked)
-    else if (body.purpose === "QUESTION") assist = assistQuestion(s, masked)
+    let assistant: AssistantReply | null = null
+    if (body.purpose === "CLARIFICATION_ANSWER") assistant = assistAnswer(s, body.questionId, masked)
+    else if (body.purpose === "QUESTION") assistant = assistQuestion(s, masked)
     else applyText(s, masked) // FACT_UPDATE(또는 purpose 없음): 지금 방식
     s.messages.push({ sender: "USER", inputKind: "TEXT", content: masked })
-    const aiText = assist?.status === "NEED_USER_INPUT" ? assist.clarification?.content : assist?.answer
+    const aiText = assistant?.status === "NEED_USER_INPUT" ? s.pending?.content : assistant?.answer
     if (aiText) s.messages.push({ sender: "AI", inputKind: "TEXT", content: aiText })
+    s.lastAssistant = assistant
     s.stateVersion += 1
-    return { facts: { ...s.facts }, responseCards: cards(s), nextQuestion: nextQuestion(s), stateVersion: s.stateVersion, assist }
+    return { facts: { ...s.facts }, responseCards: cards(s), nextQuestion: questionOf(s), stateVersion: s.stateVersion, assistant }
   },
   async updateFacts(id: number, body: UpdateFactsRequest): Promise<UpdateFactsResponse> {
     await delay(200)
@@ -174,7 +182,7 @@ export const solutionsMock = withSave({
     }
     s.stateVersion += 1
     // 백엔드 공유(11/17): SOL-03과 같은 모양 — 전체 사실 기준 카드 + 다음 질문
-    return { facts: { ...s.facts }, responseCards: cards(s), nextQuestion: nextQuestion(s), stateVersion: s.stateVersion }
+    return { facts: { ...s.facts }, responseCards: cards(s), nextQuestion: questionOf(s), stateVersion: s.stateVersion }
   },
   async complete(id: number): Promise<CompleteSolutionResponse> {
     await delay(150)
