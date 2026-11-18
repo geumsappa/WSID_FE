@@ -37,13 +37,23 @@ function get(id: number) {
   if (!s) throw errorFromCode(404, "SOLUTION_NOT_FOUND")
   return s
 }
-function applyText(s: MockSolution, text: string) {
+function applyText(s: MockSolution, raw: string) {
+  // "경찰에 신고했어요", "112에 연락했어요"는 사칭 전화를 받은 게 아니라 신고했다는 뜻이라 상황 판단에서 빼요
+  const text = raw.replace(/(경찰서?|112|사이버수사대|수사기관)(에|에서|으로|로|서)? ?(신고|접수|조사|상담|연락|문의|가|갔|다녀)[가-힣]*/g, " ")
   for (const k of detectEmergencyKeys(text)) {
     const f = FACT_KEY[k]
     if (f) s.facts[f] = "YES"
     else if (k !== "custom" && !s.extra.includes(k)) s.extra.push(k)
   }
-  if (/연락이 끊|연락 두절|차단했/.test(text)) s.facts.contactContinues = "NO"
+  // "안 보냈어요"처럼 부정하면 NO로 (화면 키 검출은 부정을 '해당 없음'으로만 처리해서 여기서 따로 봐요)
+  const NEGATED: [FactKey, RegExp][] = [
+    ["transferredMoney", /(송금|이체|입금|돈).{0,8}(안 ?했|안 ?보냈|않았|안 ?줬|안 ?보냄)/],
+    ["sharedInformation", /(개인정보|신분증|비밀번호|인증번호|정보).{0,8}(안 ?알려|안 ?줬|안 ?보냈|않았)/],
+    ["installedApp", /(앱|설치).{0,8}(안 ?깔|안 ?했|않았|안 ?함)/],
+  ]
+  for (const [f, re] of NEGATED) if (re.test(text)) s.facts[f] = "NO"
+  if (/연락이? ?(끊|두절)|연락.{0,4}안 ?(돼|됨|되|받)|차단했|잠수|답이 없/.test(text)) s.facts.contactContinues = "NO"
+  else if (/(아직|계속|지금도|여전히).{0,6}(연락|문자|전화|카톡)/.test(text)) s.facts.contactContinues = "YES"
 }
 /** 사실 조합으로 카드 계산 (긴급 카드가 먼저) */
 function cards(s: MockSolution): SolutionCard[] {

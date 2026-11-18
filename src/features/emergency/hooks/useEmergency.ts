@@ -5,6 +5,8 @@ import type { Page, UploadedImage } from "@/types/common"
 import { maskSensitive } from "@/lib/privacy"
 import type { AssistantMessage, EmergencyKey } from "../types"
 import { SITUATION_TEXT } from "../types"
+import { composeReply, parseShortAnswer } from "../lib/composeReply"
+import type { SolutionView } from "../lib/composeReply"
 
 let seq = 0
 const key = () => `em-${++seq}`
@@ -82,25 +84,40 @@ export function useEmergency(go: (next: Page) => void) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   // 서버가 준 카드 코드로 카드 본문(GUIDE-03)을 받아 둡니다. 이미 받은 코드는 다시 요청하지 않아요.
+  // 답변을 만들 때 카드 본문이 필요해서, 받은 본문 전체를 돌려줘요.
+  // 응답 카드(SolutionCard[])도, AI 답변 근거 코드(string[])도 받을 수 있어요.
+  const detailsRef = useRef<Record<string, ResponseCard>>({})
   const fetchCards = async (list: SolutionCard[] | string[]) => {
-    const missing = list.map((c) => typeof c === "string" ? c : c.code).filter((code) => !cardDetails[code])
-    if (!missing.length) return
-    try {
-      const got = await guidesApi.responseCards(missing)
-      setCardDetails((prev) => ({ ...prev, ...Object.fromEntries(got.map((c) => [c.code, c])) }))
-    } catch { /* 본문을 못 받으면 제목만 보여 줌 */ }
+    const missing = list.map((c) => typeof c === "string" ? c : c.code).filter((code) => !detailsRef.current[code])
+    if (missing.length) {
+      try {
+        const got = await guidesApi.responseCards(missing)
+        detailsRef.current = { ...detailsRef.current, ...Object.fromEntries(got.map((c) => [c.code, c])) }
+        setCardDetails(detailsRef.current)
+      } catch { /* 본문을 못 받으면 제목만 보여 줌 */ }
+    }
+    return detailsRef.current
   }
-  const applyResult = (r: { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion?: NextQuestion | null; stateVersion: number }) => {
+  type Result = { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion?: NextQuestion | null; stateVersion: number; explanation?: string | null }
+  const applyResult = (r: Result) => {
     versionRef.current = r.stateVersion
     setFacts(r.facts)
     setCards(r.responseCards)
     setNextQuestion(r.nextQuestion ?? null)
-    void fetchCards(r.responseCards)
+    return fetchCards(r.responseCards)
+  }
+  /** 지금 화면 상태 (응답 전후 비교용) */
+  const view = (): SolutionView => ({ facts, cards, nextQuestion })
+  /** 응답을 화면에 반영하고, 무엇이 바뀌었는지·질문에 대한 답을 도우미 말로 만들어 돌려줘요 */
+  const reflect = async (kind: "start" | "choice" | "text" | "correct", prev: SolutionView, r: Result, userText?: string, answered?: { factKey: FactKey; value: YesNoUnknown }) => {
+    const details = await applyResult(r)
+    const next: SolutionView = { facts: r.facts, cards: r.responseCards, nextQuestion: r.nextQuestion ?? null }
+    return composeReply({ kind, prev, next, details, institutions, userText, explanation: r.explanation, answered })
   }
   /** SOL-02 응답 반영. assistant가 NEED_USER_INPUT이면 기다리던 AI 질문도 되살려요 */
   const applyDetail = (d: SolutionDetail) => {
-    applyResult(d)
     if (d.assistant !== undefined) setClarification(aiQuestionOf(d))
+    return applyResult(d)
   }
   /** 서버 대화 내역(ChatMessage)을 화면용 메시지로 바꿔요. 첫 설명 뒤에 안내 한 줄을 넣어 화면 배치를 맞춰요 */
   const restoreMessages = (d: SolutionDetail): AssistantMessage[] => {
@@ -115,6 +132,8 @@ export function useEmergency(go: (next: Page) => void) {
     setSolutionId(null)
     setFacts(null)
     setCards([])
+    detailsRef.current = {}
+    setCardDetails({})
     setNextQuestion(null)
     setMessages([])
     setCompleted(false)
@@ -127,7 +146,7 @@ export function useEmergency(go: (next: Page) => void) {
     if (isStateConflict(err) && idRef.current !== null) {
       try {
         const d = await solutionApi.detail(idRef.current)
-        applyDetail(d)
+        await applyDetail(d)
         setError("상태가 갱신됐어요. 다시 시도해 주세요.")
         return
       } catch { /* 아래로 */ }
@@ -148,10 +167,10 @@ export function useEmergency(go: (next: Page) => void) {
       idRef.current = r.solutionId
       setSolutionId(r.solutionId)
       saveSessionId(r.solutionId)
-      applyResult(r)
+      const reply = await reflect("start", { facts: null, cards: [], nextQuestion: null }, r)
       setMessages([
         { key: key(), from: "user", text: masked, images: attachments.length ? attachments : undefined },
-        { key: key(), from: "assistant", text: masked !== description.trim() ? "입력하신 내용 중 민감정보는 가려서 처리했어요. 지금 상황에 필요한 대응 방법을 정리했어요. 가장 급한 조치부터 순서대로 안내할게요." : "지금 상황에 필요한 대응 방법을 정리했어요. 가장 급한 조치부터 순서대로 안내할게요." },
+        { key: key(), from: "assistant", text: masked !== description.trim() ? `입력하신 내용 중 민감정보는 가려서 처리했어요. ${reply}` : reply },
       ])
       setText("")
       setImages([])
@@ -166,33 +185,30 @@ export function useEmergency(go: (next: Page) => void) {
   const analyze = () => void start(text, images)
 
   /** SOL-03 추가 질문에 답하기(선택지) */
-  const answer = async (q: NextQuestion, value: YesNoUnknown) => {
+  const answer = async (q: NextQuestion, value: YesNoUnknown, typed?: string) => {
     const id = idRef.current
-    const factKey = q.factKey
+    const factKey = q.factKey // AI 추가 질문에는 factKey가 없어서, 사실 확인 질문일 때만 처리해요
     if (id === null || typing || !factKey) return
-    setMessages((m) => [...m, { key: key(), from: "user", text: `${FACT_LABEL[factKey]}: ${ANSWER_LABEL[value]}` }])
+    setMessages((m) => [...m, { key: key(), from: "user", text: typed ?? `${FACT_LABEL[factKey]}: ${ANSWER_LABEL[value]}` }])
     setTyping(true)
     setError("")
     try {
+      const prev = view()
       const r = await solutionApi.message(id, { stateVersion: versionRef.current, inputKind: "CHOICE", factKey, selectedCode: value })
-      applyResult(r)
-      setMessages((m) => [...m, { key: key(), from: "assistant", text: r.nextQuestion ? "확인했어요. 대응 카드를 갱신했어요." : "확인할 내용을 모두 파악했어요. 위 대응 카드의 순서대로 진행해 주세요." }])
+      const reply = await reflect("choice", prev, r, undefined, { factKey, value })
+      setMessages((m) => [...m, { key: key(), from: "assistant", text: reply }])
     } catch (err) {
       await recover(err)
     } finally {
       setTyping(false)
     }
   }
-  /** 서버 응답의 assistant를 대화에 반영해요. 없으면(상황 설명이거나 아직 구현 전인 서버) 기존 안내 문구를 써요 */
-  const showAssistant = (r: { assistant?: AssistantReply | null; nextQuestion?: NextQuestion | null }, cardsChanged: boolean) => {
+  /** 서버 응답의 assistant(AI 질문·답변)를 대화에 반영해요. assistant가 있을 때만 불러요 */
+  const showAssistant = (r: { assistant?: AssistantReply | null; nextQuestion?: NextQuestion | null }) => {
     const say = (text: string, kind?: AssistantMessage["kind"], references?: string[]) =>
       setMessages((m) => [...m, { key: key(), from: "assistant", text, kind, references: references?.length ? references : undefined }])
     const a = r.assistant
-    if (!a) {
-      setClarification(null)
-      say(cardsChanged ? "새로 확인된 상황을 반영해 대응 카드를 갱신했어요. 가장 위의 조치부터 진행해 주세요." : "현재 안내된 조치를 우선 진행해 주세요. 판단이 어렵다면 아래 공식 기관에 직접 상담하는 것이 가장 안전합니다.")
-      return
-    }
+    if (!a) return
     const q = aiQuestionOf(r)
     setClarification(q)
     if (q) { say(q.content, "clarification"); return }
@@ -208,10 +224,18 @@ export function useEmergency(go: (next: Page) => void) {
     setError("")
     setFailed(null)
     try {
-      const before = cards.map((c) => c.code).join(",")
+      const prev = view()
       const r = await solutionApi.message(id, { ...body, stateVersion: versionRef.current }, requestId)
-      applyResult(r)
-      showAssistant(r, r.responseCards.map((c) => c.code).join(",") !== before)
+      if (r.assistant) {
+        // AI 질문·답변(main): 서버 AI가 답하거나 되물어요
+        await applyResult(r)
+        showAssistant(r)
+      } else {
+        // 상황 설명이거나 assistant를 아직 안 보내는 서버(feature/emergency-reply): 규칙 기반 도우미 말
+        setClarification(null)
+        const reply = await reflect("text", prev, r, body.content)
+        setMessages((m) => [...m, { key: key(), from: "assistant", text: reply }])
+      }
     } catch (err) {
       // 409(상태 충돌)는 자동 재전송하지 않고 최신 상태만 불러와요. 그 밖의 실패는 같은 요청을 다시 보낼 수 있어요.
       if (!isStateConflict(err)) setFailed({ body, requestId })
@@ -227,6 +251,12 @@ export function useEmergency(go: (next: Page) => void) {
   const send = async (raw: string, attachments: UploadedImage[] = [], mode: InputMode = "question") => {
     const masked = maskSensitive(raw.trim())
     if (idRef.current === null || typing || (!masked && !attachments.length)) return
+    // 사실 확인 질문에 "아뇨", "네" 처럼 짧게 글로 답하면 선택지를 누른 것과 똑같이 처리해요 (AI 질문에 답하는 중이면 제외)
+    const factQ = !clarification && nextQuestion?.factKey ? nextQuestion : null
+    const short = factQ && mode !== "answer" && !attachments.length ? parseShortAnswer(masked) : null
+    if (factQ && short && (factQ.options ?? ["YES", "NO", "UNKNOWN"]).includes(short)) {
+      return answer(factQ, short, masked)
+    }
     setMessages((m) => [...m, { key: key(), from: "user", text: masked, images: attachments.length ? attachments : undefined }])
     const content = attachments.length ? `${masked}${masked ? " " : ""}(사진 ${attachments.length}장 첨부함)` : masked
     const body: TextBody = mode === "answer" && clarification
@@ -243,13 +273,19 @@ export function useEmergency(go: (next: Page) => void) {
     const id = idRef.current
     if (id === null || typing) return
     setError("")
+    setMessages((m) => [...m, { key: key(), from: "user", text: `${FACT_LABEL[factKey]} 항목을 '${ANSWER_LABEL[value]}'(으)로 고쳤어요` }])
+    setTyping(true)
     try {
+      const prev = view()
       const r = await solutionApi.updateFacts(id, { stateVersion: versionRef.current, changes: { [factKey]: value } })
       // 백엔드 공유(11/17): 응답의 nextQuestion으로 질문을 바꿔요(null이면 질문 숨김).
       // 아직 nextQuestion을 안 주는 서버라면(필드 자체가 없으면) 지금 질문을 그대로 둬요.
-      applyResult({ ...r, nextQuestion: r.nextQuestion !== undefined ? r.nextQuestion : nextQuestion })
+      const reply = await reflect("correct", prev, { ...r, nextQuestion: r.nextQuestion !== undefined ? r.nextQuestion : nextQuestion }, undefined, { factKey, value })
+      setMessages((m) => [...m, { key: key(), from: "assistant", text: reply }])
     } catch (err) {
       await recover(err)
+    } finally {
+      setTyping(false)
     }
   }
   /** SOL-05 상담 종료 */

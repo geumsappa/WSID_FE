@@ -183,8 +183,12 @@ export type SolutionMessageRequest = Versioned & (
   | { inputKind: "TEXT"; content: string; purpose: "CLARIFICATION_ANSWER"; questionId: string }
   | { inputKind: "CHOICE"; selectedCode: YesNoUnknown; factKey: FactKey }
 )
-/** assistant: AI 질문·답변 결과. 상황 설명(FACT_UPDATE)·선택지 답변이면 null, 아직 구현 안 된 서버면 아예 없을 수 있어요 */
-export type SolutionMessageResponse = { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion: NextQuestion | null; stateVersion: number; assistant?: AssistantReply | null }
+/**
+ * assistant: AI 질문·답변 결과. 상황 설명(FACT_UPDATE)·선택지 답변이면 null, 아직 구현 안 된 서버면 아예 없을 수 있어요
+ * explanation: 가안(백엔드에 필드명 문의 중). AI-07 근거 설명이 SOL-03/04 응답에 실려 오면 화면이 도우미 말 끝에 붙여 보여 줘요.
+ *   지금 서버·mock은 안 보내서 없어도 돼요(없으면 화면이 규칙 기반 답변만 보여 줌).
+ */
+export type SolutionMessageResponse = { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion: NextQuestion | null; stateVersion: number; assistant?: AssistantReply | null; explanation?: string | null }
 export type UpdateFactsRequest = Versioned & { changes: Partial<SolutionFacts> }
 /**
  * SOL-04 응답. 백엔드 공유(11/17): SOL-03 응답과 같은 모양으로 바뀌어요.
@@ -192,5 +196,5 @@ export type UpdateFactsRequest = Versioned & { changes: Partial<SolutionFacts> }
  * - responseCards: 고친 뒤 "전체 사실" 기준으로 다시 계산된 카드 전부
  * nextQuestion은 백엔드 구현 전까지 안 올 수 있어서 선택(?)으로 둬요. 안 오면 화면은 기존 질문을 유지해요.
  */
-export type UpdateFactsResponse = { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion?: NextQuestion | null; stateVersion: number }
+export type UpdateFactsResponse = { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion?: NextQuestion | null; stateVersion: number; explanation?: string | null }
 export type CompleteSolutionResponse = { solutionId: number; status: SolutionStatus }
