@@ -19,7 +19,7 @@ export const organizationData: Record<OrganizationKey, { name: string; desc: str
     name: "금융감독원",
     desc: "금융 피해 상담 및 피해구제 정보",
     action: "공식 홈페이지 이동",
-    href: "https://www.fss.or.kr",
+    href: "https://www.fss.or.kr/fss/main/sub1.do?menuNo=201287",
     mark: "금융",
   },
   kisa: {
