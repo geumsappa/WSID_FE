@@ -14,7 +14,6 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const lines = sim.chatLines
   const last = lines[lines.length - 1]
-  const options = last?.from === "ai" ? last.options ?? [] : []
   const finished = sim.stage === "done" || sim.stage === "finishing"
   const progress = Math.min(MAX_TURNS, sim.turnCount)
   const senderName = sim.scenario?.senderName || "상대방"
@@ -96,7 +95,7 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
           </div>
           {sim.stage === "chat" && (
             <div className="simulation-chat-input">
-              {options.length > 0 && !sim.typing && <div className="interview-choices" style={{ margin: "0 0 10px" }}>{options.map((o) => <button key={o.code} type="button" onClick={() => void sim.sendTraining({ option: o })}>{o.label}</button>)}</div>}
+              {/* 서버가 주는 빠른 답변 버튼(availableOptions)은 보여 주지 않아요: 사용자가 직접 판단해 입력하게 */}
               <div className="privacy"><Icon name="lock" size={15} /><span>사진은 준비된 가상 자료만 보낼 수 있어요. 실제 신분증을 촬영하거나 첨부하지 마세요.</span></div>
               {sim.error && <p className="upload-error" role="alert">{sim.error}</p>}
               <div className="chat-input-row">
