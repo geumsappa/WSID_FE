@@ -143,7 +143,11 @@ export type SolutionFacts = { transferredMoney: YesNoUnknown; sharedInformation:
 export type FactKey = keyof SolutionFacts
 /** SOL 응답 안의 카드는 GUIDE-03 카드의 일부 필드만 와요 (SOL-04 예시는 code·priority만) */
 export type SolutionCard = { code: string; priority: CardPriority; title?: string; institutionCodes?: string[] }
-export type NextQuestion = { factKey: FactKey; content: string; options: YesNoUnknown[] }
+/**
+ * 다음 질문 하나. 사실 확인 질문이면 factKey·options(예/아니오/모름)가 있고,
+ * AI 추가 질문(assistant.status = NEED_USER_INPUT)이면 factKey·options가 없을 수 있어요(자유 입력으로 답함)
+ */
+export type NextQuestion = { factKey?: FactKey | null; content: string; options?: YesNoUnknown[] }
 
 export type StartSolutionRequest = { description: string }
 export type StartSolutionResponse = {
@@ -154,17 +158,37 @@ export type StartSolutionResponse = {
   responseCards: SolutionCard[]
   nextQuestion: NextQuestion | null
 }
-export type SolutionDetail = StartSolutionResponse & { messages: ChatMessage[] }
-/** TEXT면 content, CHOICE면 selectedCode + factKey */
+// ── AI 질문·답변 (백엔드 최종 초안 11/17, Python 계약 확정 시 조금 바뀔 수 있음) ──
+/**
+ * 글(TEXT) 입력이 무엇인지 구분해요.
+ * - FACT_UPDATE: 상황 설명 (지금 방식. 안 보내면 서버가 이걸로 처리)
+ * - QUESTION: 새 질문 → AI가 답하거나 추가 질문을 해요
+ * - CLARIFICATION_ANSWER: AI 추가 질문에 대한 답 (응답으로 받은 questionId 필수)
+ */
+export type MessagePurpose = "FACT_UPDATE" | "QUESTION" | "CLARIFICATION_ANSWER"
+/**
+ * - NEED_USER_INPUT: AI 추가 질문을 띄워요. 질문 문장은 nextQuestion.content에 와요(질문은 항상 하나)
+ * - ANSWERED: answer(AI 답변)를 보여 줘요
+ * - UNABLE_TO_ANSWER: "답변하기 어려워요" 안내
+ */
+export type AssistantStatus = "NEED_USER_INPUT" | "ANSWERED" | "UNABLE_TO_ANSWER"
+/** AI 처리 결과. referenceCodes: 답변 근거가 된 대응 카드 코드(GUIDE-03로 제목을 불러 표시) */
+export type AssistantReply = { status: AssistantStatus; questionId: string | null; answer: string | null; referenceCodes: string[] }
+
+/** SOL-02. assistant: 마지막 AI 처리 결과. NEED_USER_INPUT이면 새로고침 후에도 nextQuestion을 AI 질문으로 다시 띄워요 */
+export type SolutionDetail = StartSolutionResponse & { messages: ChatMessage[]; assistant?: AssistantReply | null }
+/** TEXT면 content(+purpose), CHOICE면 selectedCode + factKey */
 export type SolutionMessageRequest = Versioned & (
-  | { inputKind: "TEXT"; content: string }
+  | { inputKind: "TEXT"; content: string; purpose?: "FACT_UPDATE" | "QUESTION" }
+  | { inputKind: "TEXT"; content: string; purpose: "CLARIFICATION_ANSWER"; questionId: string }
   | { inputKind: "CHOICE"; selectedCode: YesNoUnknown; factKey: FactKey }
 )
 /**
+ * assistant: AI 질문·답변 결과. 상황 설명(FACT_UPDATE)·선택지 답변이면 null, 아직 구현 안 된 서버면 아예 없을 수 있어요
  * explanation: 가안(백엔드에 필드명 문의 중). AI-07 근거 설명이 SOL-03/04 응답에 실려 오면 화면이 도우미 말 끝에 붙여 보여 줘요.
- * 지금 서버·mock은 안 보내서 없어도 돼요(없으면 화면이 규칙 기반 답변만 보여 줌).
+ *   지금 서버·mock은 안 보내서 없어도 돼요(없으면 화면이 규칙 기반 답변만 보여 줌).
  */
-export type SolutionMessageResponse = { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion: NextQuestion | null; stateVersion: number; explanation?: string | null }
+export type SolutionMessageResponse = { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion: NextQuestion | null; stateVersion: number; assistant?: AssistantReply | null; explanation?: string | null }
 export type UpdateFactsRequest = Versioned & { changes: Partial<SolutionFacts> }
 /**
  * SOL-04 응답. 백엔드 공유(11/17): SOL-03 응답과 같은 모양으로 바뀌어요.
