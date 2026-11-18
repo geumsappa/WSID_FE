@@ -794,3 +794,7 @@ textarea:focus { border-color: #78aaed; background: #fff; outline: 3px solid rgb
 .summary-note svg { flex: none; color: #9aa7b8; }
 @media (max-width: 680px) { .summary-card { padding: 22px 18px; } .summary-body { padding: 16px; } .summary-lead { font-size: 15px; } }
 @media print { .summary-card { box-shadow: none; break-inside: avoid; } .summary-card, .summary-card * { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+
+.mock-photo-preview { width: min(100%, 340px); margin: 10px 0 0; }
+.mock-photo-preview svg { display: block; width: 100%; height: auto; }
+.mock-photo-preview figcaption { margin-top: 5px; font-size: 11px; color: #64748b; }

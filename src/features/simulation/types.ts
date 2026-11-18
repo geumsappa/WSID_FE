@@ -1,4 +1,4 @@
-import type { ChoiceOption, MockPage } from "@/api"
+import type { ChoiceOption, MockAttachment, MockPage } from "@/api"
 import type { UploadedImage } from "@/types/common"
 
 // ───────── 화면이 쓰는 타입 (백엔드 훈련 API와 연결) ─────────
@@ -19,6 +19,7 @@ export type ChatLine = {
   /** 내 메시지 아래 작은 안내 (예: 입력한 개인정보를 가렸다는 문구) */
   note?: string
   /** 이 대사와 함께 온 모의 페이지 링크 */
+  mockAttachment?: MockAttachment
   mockPage?: MockPage
 }
 export type ScenarioInfo = { title: string; description: string }

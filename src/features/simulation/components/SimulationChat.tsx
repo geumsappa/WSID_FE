@@ -4,6 +4,7 @@ import { Icon } from "@/components/Icon"
 import { Typing } from "@/components/Typing"
 import type { Simulation } from "../hooks/useSimulation"
 import { MockPageModal } from "./MockPageModal"
+import { MockPhotoPreview } from "./MockPhotoPreview"
 
 const MAX_TURNS = 15 // 명세 초안: 전체 최대 15턴
 
@@ -62,6 +63,7 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
                 <div>
                   <span className="sender">{m.from === "ai" ? "의심스러운 연락" : "나"}</span>
                   {m.text && <p>{m.text}</p>}
+                  {m.mockAttachment && <MockPhotoPreview attachment={m.mockAttachment} />}
                   {m.mockPage && (
                     <button type="button" className="outline-button" style={{ marginTop: 8, padding: "9px 13px", fontSize: 12 }} onClick={() => void sim.showMockPage(m.mockPage!)}>
                       <Icon name="link" size={15} /> 안내 페이지 열기 ({m.mockPage.institutionName})
@@ -85,7 +87,7 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
           {sim.stage === "chat" && (
             <div className="simulation-chat-input">
               {options.length > 0 && !sim.typing && <div className="interview-choices" style={{ margin: "0 0 10px" }}>{options.map((o) => <button key={o.code} type="button" onClick={() => void sim.sendTraining({ option: o })}>{o.label}</button>)}</div>}
-              <div className="privacy"><Icon name="lock" size={15} /><span>상대가 요구해도 실제 개인정보를 적을 필요는 없어요. 넘겼는지 여부만 리포트에 반영되고 값은 저장하지 않아요.</span></div>
+              <div className="privacy"><Icon name="lock" size={15} /><span>사진은 준비된 가상 자료만 보낼 수 있어요. 실제 신분증을 촬영하거나 첨부하지 마세요.</span></div>
               {sim.error && <p className="upload-error" role="alert">{sim.error}</p>}
               <div className="chat-input-row">
                 <textarea rows={1} maxLength={500} value={input} disabled={sim.typing}
