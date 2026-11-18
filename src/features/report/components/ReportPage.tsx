@@ -2,6 +2,7 @@ import { Icon } from "@/components/Icon"
 import { PageIntro } from "@/components/PageIntro"
 import type { Simulation } from "@/features/simulation/hooks/useSimulation"
 import { EvaluationView } from "./EvaluationView"
+import { ReportSummary } from "./ReportSummary"
 
 // 훈련 직후 결과 리포트(RPT-01). 저장(RPT-02)과 PDF(RPT-05)도 여기서.
 export function ReportPage({ sim, onEmergency }: { sim: Simulation; onEmergency: () => void }) {
@@ -15,14 +16,8 @@ export function ReportPage({ sim, onEmergency }: { sim: Simulation; onEmergency:
         {!r && sim.reportState === "missing" && <div className="loading-card" role="alert"><div className="loader-visual"><Icon name="alert" size={34}/></div><h2>표시할 리포트가 없어요.</h2><p>{sim.error || "훈련을 마친 뒤 결과를 볼 수 있어요. 저장한 리포트는 마이페이지에서 확인하세요."}</p><button className="primary-button" onClick={sim.startNew}>새 훈련 시작하기 <Icon name="arrow" size={17}/></button></div>}
         {r && <>
           <div className="report-date">{r.title} · 오늘 완료</div>
-          <div className="score-card" style={{ gridTemplateColumns: "1fr" }}>
-            <div className="score-copy">
-              <span>종합 평가</span>
-              <h2>{r.title}</h2>
-              <h3>{r.evaluation.overallFeedback}</h3>
-              <p>개인정보를 넘겼는지, 공식 채널로 확인했는지, 위험한 요청을 거절했는지를 중심으로 대화를 분석했어요.</p>
-            </div>
-          </div>
+          <ReportSummary title={r.title} feedback={r.evaluation.overallFeedback}
+            note="개인정보를 넘겼는지, 공식 채널로 확인했는지, 위험한 요청을 거절했는지를 중심으로 대화를 분석했어요." />
           <div style={{ marginTop: 24 }}><EvaluationView evaluation={r.evaluation} /></div>
           <div className="report-actions no-print">
             <button className="primary-button" disabled={sim.saving || r.saved} onClick={() => void sim.saveReport()}><Icon name="shield" size={18} /> {r.saved ? "내 리포트에 저장됨" : sim.saving ? "저장 중..." : "내 리포트에 저장"}</button>
