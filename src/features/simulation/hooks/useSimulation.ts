@@ -15,6 +15,7 @@ const toLine = (m: ChatMessage): ChatLine => ({
   from: m.sender === "AI" ? "ai" : "user",
   text: m.content,
   options: m.options?.length ? m.options : undefined,
+  mockAttachment: m.mockAttachment ?? undefined,
 })
 const PHASE_LABEL: Record<string, string> = {
   DISCOVERY: "상황 대화 진행 중",
@@ -289,7 +290,7 @@ export function useSimulation(
     try {
       const res = await inOrder(() => trainingApi.start(id, { stateVersion: versionRef.current }))
       versionRef.current = res.stateVersion
-      setChatLines([toLine(res.firstMessage)])
+      setChatLines([{ ...toLine(res.firstMessage), options: res.availableOptions ?? res.firstMessage.options }])
       setTurnCount(0)
       setShouldFinish(false)
       setStage("chat")
@@ -307,7 +308,9 @@ export function useSimulation(
     let mine: ChatLine
     let body: { inputKind: "TEXT"; content: string } | { inputKind: "CHOICE"; selectedCode: string }
     if ("option" in input) {
-      mine = { key: lineKey(), from: "user", text: input.option.label }
+      mine = { key: lineKey(), from: "user", text: input.option.label,
+        mockAttachment: input.option.mockAttachment ?? undefined,
+        note: input.option.mockAttachment ? "준비된 가상 자료를 보냈어요. 실제 사진은 사용하지 않았어요." : undefined }
       body = { inputKind: "CHOICE", selectedCode: input.option.code }
     } else {
       const content = input.text.trim().slice(0, 500)

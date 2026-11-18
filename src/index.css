@@ -780,3 +780,8 @@ textarea:focus { border-color: #78aaed; background: #fff; outline: 3px solid rgb
 .emergency-chat-input button.assist-retry { display: inline; width: auto; height: auto; margin-left: 6px; padding: 4px 9px; border: 1px solid #e3b3aa; border-radius: 7px; background: #fff; color: #b0442d; font-size: 11px; }
 .assist-refs { margin-top: 5px; color: #7a8798; font-size: 11px; }
 .assist-quick { display: flex; gap: 6px; width: 100%; margin-top: 7px; }
+
+
+.mock-photo-preview { width: min(100%, 340px); margin: 10px 0 0; }
+.mock-photo-preview svg { display: block; width: 100%; height: auto; }
+.mock-photo-preview figcaption { margin-top: 5px; font-size: 11px; color: #64748b; }
