@@ -12,7 +12,8 @@ export function saveScenarioInfo(trainingId: number, scenario: ScenarioInfo) {
 }
 export function readScenarioInfo(trainingId: number): ScenarioInfo | null {
   const saved = readStore<(ScenarioInfo & { trainingId: number }) | null>(SCENARIO_KEY, null)
-  return saved && saved.trainingId === trainingId ? { title: saved.title, description: saved.description } : null
+  return saved && saved.trainingId === trainingId ? { title: saved.title, description: saved.description,
+    senderName: saved.senderName, organizationName: saved.organizationName } : null
 }
 /** 결과 화면에서 새로고침해도 리포트를 다시 불러올 수 있게, 방금 끝낸 훈련 번호를 탭에 기억해 둡니다. */
 export function saveLastFinished(trainingId: number | null) {
