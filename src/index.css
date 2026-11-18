@@ -785,3 +785,64 @@ textarea:focus { border-color: #78aaed; background: #fff; outline: 3px solid rgb
 .mock-photo-preview { width: min(100%, 340px); margin: 10px 0 0; }
 .mock-photo-preview svg { display: block; width: 100%; height: auto; }
 .mock-photo-preview figcaption { margin-top: 5px; font-size: 11px; color: #64748b; }
+
+
+.training-disclaimer { display: flex; align-items: flex-start; gap: 10px; padding: 13px 20px; background: #fff8e8; color: #77571c; border-bottom: 1px solid #f1e4c6; font-size: 12px; line-height: 1.7; flex: none; }
+.training-disclaimer svg { flex: none; margin-top: 2px; }
+.training-disclaimer strong { font-weight: 700; }
+.training-disclaimer p { margin-top: 2px; }
+.messenger-header h2, .message-row .sender { overflow-wrap: anywhere; }
+
+
+.simulation-inline-link { display: inline; padding: 0; margin: 0 3px; border: 0; background: transparent; color: #1769e0; text-decoration: underline; text-underline-offset: 3px; font: inherit; font-weight: 600; overflow-wrap: anywhere; }
+.simulation-inline-link:disabled { color: #64748b; }
+
+
+/* Standalone local applicant page; no official logos or external resources. */
+.training-check-page { min-height: 100vh; background: #f5f7fa; color: #182b47; }
+.training-check-container { width: min(1080px, calc(100% - 40px)); margin: 0 auto; }
+.training-check-banner { display: flex; align-items: flex-start; gap: 10px; padding: 12px max(20px, calc((100vw - 1080px) / 2)); background: #fff4d9; color: #74551d; border-bottom: 1px solid #eadebe; font-size: 12px; line-height: 1.7; }
+.training-check-banner svg { flex: none; margin-top: 2px; }
+.training-check-banner strong { font-weight: 700; }
+.training-check-header { background: #fff; border-bottom: 1px solid #dfe5ee; }
+.training-check-header-inner { min-height: 94px; display: flex; justify-content: space-between; align-items: center; gap: 20px; }
+.training-check-brand { display: block; font-size: 26px; font-weight: 800; letter-spacing: -1px; overflow-wrap: anywhere; }
+.training-check-header-inner > div > span { display: block; font-size: 10px; letter-spacing: 2px; margin-top: 3px; color: #758398; }
+.training-check-nav { font-size: 14px; font-weight: 700; color: #214776; border-bottom: 3px solid #214776; padding: 35px 8px; white-space: nowrap; }
+.training-check-main { padding-top: 48px; padding-bottom: 60px; }
+.training-check-heading > span { color: #66809e; font-size: 11px; font-weight: 700; letter-spacing: 1.8px; }
+.training-check-heading h1 { margin: 8px 0 10px; font-size: 34px; font-weight: 800; letter-spacing: -1px; }
+.training-check-heading > p { color: #69788b; font-size: 14px; }
+.training-check-layout { display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 24px; margin-top: 30px; align-items: start; }
+.training-check-card { padding: 34px; background: #fff; border: 1px solid #dfe5ed; border-radius: 12px; }
+.training-check-heading + .training-check-card { margin-top: 30px; }
+.training-check-section-head { display: flex; align-items: center; gap: 10px; }
+.training-check-section-head > span { color: #53749b; font-size: 12px; font-weight: 800; }
+.training-check-section-head h2 { font-size: 19px; font-weight: 700; }
+.training-check-description { color: #718095; font-size: 12px; margin: 10px 0 26px; }
+.training-check-card form { display: grid; gap: 18px; }
+.training-check-card label { display: grid; gap: 8px; font-size: 12px; font-weight: 700; color: #41536d; }
+.training-check-card input { width: 100%; min-width: 0; height: 48px; padding: 0 14px; background: #f8fafc; border: 1px solid #d9e1eb; border-radius: 6px; color: #41516a; font-size: 14px; font-weight: 400; }
+.training-check-data-note { display: flex; align-items: flex-start; gap: 8px; color: #6b7f98; font-size: 11px; line-height: 1.8; padding: 12px 0; }
+.training-check-data-note svg { flex: none; margin-top: 2px; }
+.training-check-submit { display: flex; justify-content: center; align-items: center; gap: 9px; padding: 15px; background: #1d416d; border: 0; border-radius: 6px; color: #fff; font-size: 14px; font-weight: 700; }
+.training-check-verify { color: #596d87; background: transparent; font-size: 12px; text-decoration: underline; text-underline-offset: 4px; padding: 5px; }
+.training-check-return { display: block; width: 100%; margin-top: 24px; padding-top: 18px; border-top: 1px solid #e8edf4; color: #63758d; font-size: 12px; }
+.training-check-aside { padding: 26px 22px; border-top: 3px solid #25476f; background: #edf1f6; }
+.training-check-aside h2 { font-size: 15px; font-weight: 700; margin-bottom: 24px; }
+.training-check-aside ol { display: grid; gap: 22px; }
+.training-check-aside li { display: flex; gap: 12px; align-items: start; color: #8b97a7; font-size: 12px; }
+.training-check-aside li > span { display: grid; place-items: center; border-radius: 50%; background: #dce3ed; width: 24px; height: 24px; flex: none; font-weight: 700; }
+.training-check-aside li.active { color: #244d7d; }
+.training-check-aside li.active > span { background: #244d7d; color: #fff; }
+.training-check-aside li strong { display: block; font-size: 13px; font-weight: 700; }
+.training-check-aside li p { font-size: 11px; margin-top: 5px; }
+.training-check-aside-note { display: flex; gap: 8px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #d9e1ec; color: #71839a; font-size: 11px; line-height: 1.8; }
+.training-check-aside-note svg { flex: none; }
+.training-check-result { padding: 28px 0; }
+.training-check-result > svg { color: #3c6d9f; margin-bottom: 13px; }
+.training-check-result h3 { font-size: 18px; font-weight: 700; }
+.training-check-result p { margin-top: 12px; color: #65778f; font-size: 13px; line-height: 1.8; }
+.training-check-error { color: #b83a33; font-size: 12px; line-height: 1.7; padding: 12px 0; }
+.training-check-footer { padding: 24px 20px; text-align: center; border-top: 1px solid #e0e6ef; color: #8490a0; font-size: 11px; }
+@media (max-width: 760px) { .training-check-layout { grid-template-columns: 1fr; } .training-check-main { padding-top: 28px; } .training-check-card { padding: 24px; } .training-check-heading h1 { font-size: 28px; } .training-check-brand { font-size: 22px; } .training-check-aside { display: none; } }

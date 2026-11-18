@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test:training-check": "node scripts/test-training-check.mjs",
     "format": "oxfmt"
   },
   "dependencies": {

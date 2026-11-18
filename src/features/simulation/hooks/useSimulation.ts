@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from "react"
 import { errorMessage, isStateConflict, reportsApi, trainingApi } from "@/api"
-import type { ActiveTrainingResponse, ChatMessage, ChoiceOption, MockActionCode, MockPage, TrainingDetail, TrainingReport } from "@/api"
+import type { ActiveTrainingResponse, ChatMessage, ChoiceOption, MockPage, TrainingDetail, TrainingReport } from "@/api"
 import type { Page } from "@/types/common"
 import { SIM_IMAGE_LIMITS } from "@/lib/image"
 import { scrubPersonalInfo } from "@/lib/privacy"
 import type { Account } from "@/features/auth/types"
 import { readLastFinished, readScenarioInfo, saveLastFinished, saveScenarioInfo } from "../lib/progressStorage"
 import type { ChatLine, ScenarioInfo, SimStage } from "../types"
+import { containsMockLink } from "../components/TrainingMessageContent"
+import { openTrainingCheck, trainingChannel } from "../lib/mockPageSession"
 
 let lineSeq = 0
 const lineKey = () => `line-${++lineSeq}`
@@ -59,7 +61,6 @@ export function useSimulation(
   const [typing, setTyping] = useState(false)
   const [error, setError] = useState("")
   const [usedImages, setUsedImages] = useState(0)
-  const [openMockPage, setOpenMockPage] = useState<MockPage | null>(null)
   const [endConfirm, setEndConfirm] = useState(false)
   const [report, setReport] = useState<TrainingReport | null>(null)
   const [reportState, setReportState] = useState<"idle" | "loading" | "missing">("idle")
@@ -100,7 +101,6 @@ export function useSimulation(
     setTyping(false)
     setError("")
     setUsedImages(0)
-    setOpenMockPage(null)
     setEndConfirm(false)
   }
 
@@ -116,8 +116,12 @@ export function useSimulation(
     const last = target[target.length - 1]
     if (last && last.from === "ai" && !last.options && d.availableOptions?.length) last.options = d.availableOptions
     if (d.mockPage && sim.length) {
-      const lastAi = [...sim].reverse().find((l) => l.from === "ai")
-      if (lastAi) lastAi.mockPage = d.mockPage
+      const linked = sim.filter((line) => line.from === "ai" && containsMockLink(line.text))
+      if (linked.length) linked.forEach((line) => { line.mockPage = d.mockPage! })
+      else {
+        const lastAi = [...sim].reverse().find((line) => line.from === "ai")
+        if (lastAi) lastAi.mockPage = d.mockPage
+      }
     }
     setDiscoveryLines(disc)
     setChatLines(sim)
@@ -290,7 +294,7 @@ export function useSimulation(
     try {
       const res = await inOrder(() => trainingApi.start(id, { stateVersion: versionRef.current }))
       versionRef.current = res.stateVersion
-      setChatLines([{ ...toLine(res.firstMessage), options: res.availableOptions ?? res.firstMessage.options }])
+      setChatLines([{ ...toLine(res.firstMessage), options: res.availableOptions ?? res.firstMessage.options, mockPage: res.mockPage ?? undefined }])
       setTurnCount(0)
       setShouldFinish(false)
       setStage("chat")
@@ -340,35 +344,32 @@ export function useSimulation(
     }
   }
 
-  /** TRN-10 모의 페이지에서 한 행동 기록. 실패해도 훈련은 계속할 수 있게 조용히 넘어갑니다. */
-  const recordAction = (actionCode: MockActionCode, pageInfo: MockPage) => {
+  /** Open a separate local tab; that tab records its own actions. */
+  const showMockPage = (_fallback: MockPage) => {
     const id = idRef.current
-    if (id === null) return
-    void inOrder(async () => {
-      const res = await trainingApi.action(id, { stateVersion: versionRef.current, actionCode, actionMeta: { templateCode: pageInfo.templateCode, screenCode: pageInfo.screenCode } })
-      versionRef.current = res.stateVersion
-    }).catch((err) => { if (isStateConflict(err)) void reloadAfterConflict() })
-  }
-  /** 채팅 속 링크를 눌러 모의 페이지 열기 (TRN-09로 최신 화면 정보를 받고, 열었다는 행동을 기록) */
-  const showMockPage = async (fallback: MockPage) => {
-    const id = idRef.current
-    if (id === null) return
-    let pageInfo = fallback
-    try { pageInfo = await trainingApi.mockPage(id) } catch { /* 조회에 실패하면 대화에 함께 온 정보로 엽니다 */ }
-    setOpenMockPage(pageInfo)
-    recordAction("MOCK_PAGE_OPEN", pageInfo)
-  }
-  const closeMockPage = () => {
-    if (openMockPage) recordAction("MOCK_PAGE_CLOSE", openMockPage)
-    setOpenMockPage(null)
+    if (id === null || stage !== "chat") return
+    openTrainingCheck(id)
   }
 
+  // The separate tab records its own actions. Refresh only the authoritative version,
+  // so returning to this tab does not discard chat lines or submit an outdated version.
+  useEffect(() => {
+    if (trainingId === null || stage !== "chat") return
+    const id = trainingId
+    const refresh = () => { void inOrder(async () => {
+      const detail = await trainingApi.detail(id)
+      if (idRef.current === id) versionRef.current = detail.stateVersion
+    }).catch(() => undefined) }
+    const channel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel(trainingChannel(id)) : null
+    if (channel) channel.onmessage = (event) => { if (event.data?.type === "state-changed") refresh() }
+    window.addEventListener("focus", refresh)
+    return () => { channel?.close(); window.removeEventListener("focus", refresh) }
+  }, [trainingId, stage])
   /** TRN-11 훈련 종료 → RPT-01 결과 조회 → 리포트 화면으로 */
   const finish = async () => {
     const id = idRef.current
     if (id === null || stage !== "chat") return
     setEndConfirm(false)
-    setOpenMockPage(null)
     setError("")
     setStage("finishing")
     try {
@@ -433,9 +434,9 @@ export function useSimulation(
 
   return {
     stage, trainingId, discoveryLines, canGenerate, scenario, chatLines, turnCount, shouldFinish, typing, error,
-    usedImages, openMockPage, endConfirm, setEndConfirm, report, reportState, saveNotice, saving, resumeInfo,
+    usedImages, endConfirm, setEndConfirm, report, reportState, saveNotice, saving, resumeInfo,
     startNew, retry, sendDiscovery, uploadDiscoveryImages, generateScenario, startTraining, sendTraining,
-    showMockPage, closeMockPage, recordAction, finish, leave, saveReport, downloadPdf, resetForLogout,
+    showMockPage, finish, leave, saveReport, downloadPdf, resetForLogout,
     clearError: () => setError(""),
   }
 }

@@ -22,7 +22,7 @@ export type ChatLine = {
   mockAttachment?: MockAttachment
   mockPage?: MockPage
 }
-export type ScenarioInfo = { title: string; description: string }
+export type ScenarioInfo = { title: string; description: string; senderName?: string | null; organizationName?: string | null }
 
 // ───────── 아래는 mock(서버 없는 데모) 데이터가 쓰는 타입 ─────────
 
