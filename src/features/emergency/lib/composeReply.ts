@@ -42,7 +42,7 @@ const FACT_ORDER: FactKey[] = ["transferredMoney", "sharedInformation", "install
 
 const has = (cards: SolutionCard[], code: string) => cards.some((c) => c.code === code)
 const titleOf = (c: SolutionCard, d: Details) => d[c.code]?.title ?? c.title ?? c.code
-const isUrgent = (c: SolutionCard, d: Details) => (d[c.code]?.priority ?? c.priority) === "URGENT"
+const isUrgent = (c: SolutionCard, d: Details) => (c.priority ?? d[c.code]?.priority) === "URGENT" // 상담 응답의 우선순위가 먼저
 function actionsOf(code: string, d: Details) {
   return toTextItems(d[code]?.actions).map((a) => (a.title ? `${a.title}: ${a.body}` : a.body))
 }
@@ -70,8 +70,8 @@ export function describeChange(prev: SolutionView, next: SolutionView, d: Detail
     if (step) lines.push(step)
   }
   if (removed.length) lines.push(`${joinKo(removed.map((c) => `'${titleOf(c, d)}'`))} 대응은 지금 상황에 해당하지 않아 뺐어요.`)
-  if (next.nextQuestion && next.nextQuestion.factKey !== prev.nextQuestion?.factKey) lines.push(`이어서 한 가지만 더 확인할게요. ${next.nextQuestion.content}`)
-  else if (!next.nextQuestion && prev.nextQuestion) lines.push("확인할 내용은 모두 파악했어요. 위 대응 카드 순서대로 진행해 주세요.")
+  // 다음 확인 질문은 채팅 맨 아래 [예][아니오][모름] 말풍선이 따로 보여 줘서 여기서는 말하지 않아요
+  if (!next.nextQuestion && prev.nextQuestion) lines.push("확인할 내용은 모두 파악했어요. 대응 방법 순서대로 진행해 주세요.")
   return lines
 }
 
@@ -81,7 +81,7 @@ const SECONDHAND = "SECONDHAND_TRADE_RESPONSE"
 /** 지금 상황에서 할 일을 순서대로 정리 (카드마다 첫 조치, 중고거래 송금은 신고 중심 순서) */
 function planFor(s: SolutionView, d: Details): string {
   if (has(s.cards, SECONDHAND) && s.facts?.transferredMoney === "YES")
-    return "지금 하실 일을 순서대로 정리할게요. 1) 송금한 은행 고객센터에 사기 피해를 알리고 상대 계좌를 사기 계좌로 신고해 주세요. 지급정지는 안 될 수도 있지만 피해 기록이 남아요. 2) 판매 글, 대화 내용, 상대 계좌번호, 송금 내역을 캡처해 두세요. 3) 경찰 사이버범죄 신고시스템에 온라인으로 신고하거나 112에 신고해 주세요. 4) 당근 등 거래한 플랫폼에도 판매자를 신고해 주세요. 신고까지 마치셨다면 '신고했어요'라고 알려 주세요. 그다음 할 일을 안내할게요."
+    return "지금 하실 일을 순서대로 정리할게요. 1) 판매 글, 대화 내용, 상대 계좌번호, 송금 내역을 캡처해 두세요. 2) 경찰 사이버범죄 신고시스템에 온라인으로 신고하거나 112에 신고해 주세요. 3) 송금한 은행 고객센터에도 사기 피해 사실과 상대 계좌를 알려 주세요. 4) 당근 등 거래한 플랫폼에도 판매자를 신고해 주세요. 신고까지 마치셨다면 '신고했어요'라고 알려 주세요. 그다음 할 일을 안내할게요."
   const steps: string[] = []
   const ordered = [...s.cards.filter((c) => isUrgent(c, d)), ...s.cards.filter((c) => !isUrgent(c, d))]
   for (const c of ordered) {
@@ -89,11 +89,24 @@ function planFor(s: SolutionView, d: Details): string {
     if (a) steps.push(a.title ? `${a.title}: ${a.body}` : a.body)
     if (steps.length >= 4) break
   }
+  // 카드가 하나뿐이면 그 카드의 다음 조치까지 이어서 보여 줘요 (최대 3개)
+  if (steps.length < 3 && ordered[0]) {
+    for (const a of toTextItems(d[ordered[0].code]?.actions).slice(1)) {
+      if (steps.length >= 3) break
+      steps.push(a.title ? `${a.title}: ${a.body}` : a.body)
+    }
+  }
   if (!steps.length) return "아래 공식 기관에 상담해 지금 상황에 맞는 조치를 확인하는 게 가장 안전해요."
   return `지금 하실 일을 순서대로 정리할게요. ${steps.map((t, i) => `${i + 1}) ${t}`).join(" ")} 다 하셨다면 '신고했어요'처럼 알려 주세요. 그다음 할 일을 안내할게요.`
 }
 
 const INTENTS: Intent[] = [
+  {
+    // 상대가 돈을 더 보내라고 할 때 (추가 송금·수수료·보증금·환불 조건)
+    test: /또 ?(보내|입금|송금)|더 ?(보내|입금)|추가.{0,4}(송금|입금|결제|돈|비용)|수수료|보증금|선입금|환불.{0,8}(하려면|조건|먼저)/,
+    answer: () =>
+      "더 보내지 마세요. 환불, 수수료, 보증금, 계좌 확인 등 어떤 이유를 대도 추가로 돈을 요구하는 건 피해를 키우는 전형적인 수법이에요. 그 대화는 지우지 말고 캡처해 두고, 상대 연락에는 응하지 말고 차단한 뒤, 신고할 때 함께 알려 주세요.",
+  },
   {
     // 이미 신고한 뒤 "다음엔 뭘 해요?"
     test: /신고 ?(했|를 ?했|하고|완료|접수|해 ?놨|해 ?뒀)|접수 ?(했|완료)|신고 ?(후|다음|이후|하고 나서)/,
@@ -195,7 +208,7 @@ export function parseShortAnswer(text: string): YesNoUnknown | null {
   return null
 }
 
-const SECONDHAND_NOTE = "다만 중고거래 사기는 보이스피싱과 달리 통신사기피해환급법의 지급정지·환급 대상이 아니라서, 은행에 요청해도 지급정지가 안 될 수 있어요. 그래서 112나 경찰 사이버범죄 신고시스템으로 신고하는 게 중심이에요."
+const SECONDHAND_NOTE = "중고거래 사기는 보이스피싱과 달리 통신사기피해환급법의 지급정지·환급 대상이 아니에요. 그래서 112나 경찰 사이버범죄 신고시스템으로 신고하는 게 중심이고, 돈을 돌려받는 건 배상명령이나 민사 절차로 진행해요."
 
 /** 도우미가 할 말 한 덩어리 */
 export function composeReply({ kind, prev, next, details, institutions, userText, explanation, answered }: ReplyInput): string {
@@ -210,19 +223,16 @@ export function composeReply({ kind, prev, next, details, institutions, userText
     // 질문이 섞여 있거나 바뀐 게 없으면 질문에 답해요
     if (userText && !change.length && parseShortAnswer(userText)) {
       // 남은 질문이 없는데 "네", "아니요"처럼 짧게만 답한 경우
-      parts.push("알겠어요. 지금은 더 여쭤볼 질문이 없어요. 상황이 달라졌다면 위 '파악한 피해 사실'에서 고치시거나, 궁금한 점을 문장으로 물어봐 주세요. 예: \"돈 돌려받을 수 있어요?\", \"신고는 어디에 해요?\"")
+      parts.push("알겠어요. 지금은 더 여쭤볼 질문이 없어요. 상황이 달라졌다면 채팅으로 알려 주시거나(예: \"사실 돈은 안 보냈어요\"), 궁금한 점을 물어봐 주세요. 예: \"돈 돌려받을 수 있어요?\", \"신고는 어디에 해요?\"")
     } else if (userText && (!change.length || /\?|까|나요|돼|되나|어떻게|뭐|어디|언제|왜/.test(userText))) parts.push(answerQuestion(userText, next, details, institutions))
   } else {
     const factChanged = change.length > 0 && change[0].endsWith("반영했어요.")
     if (answered && !factChanged) {
-      parts.push(answered.value === "UNKNOWN" ? `알겠어요. ${FACT_PHRASE[answered.factKey].UNKNOWN}으로 둘게요. 나중에 확인되면 위 '파악한 피해 사실'에서 바꿔 주세요.` : "확인했어요.")
+      parts.push(answered.value === "UNKNOWN" ? `알겠어요. ${FACT_PHRASE[answered.factKey].UNKNOWN}으로 둘게요. 나중에 확인되면 채팅으로 알려 주세요.` : "확인했어요.")
     }
     parts.push(...(change.length ? change : answered ? ["지금 안내된 대응은 그대로예요."] : ["확인했어요. 지금 안내된 대응은 그대로예요."]))
   }
   // 선택·정정 뒤에도 같은 질문이 남아 있으면 다시 보여 줘서, 다음에 "네/아니요"로 답할 때 무엇에 답하는지 알 수 있게 해요
-  if (kind !== "start" && kind !== "text" && next.nextQuestion && !parts.some((p) => p.startsWith("이어서"))) {
-    parts.push(`이어서 확인할게요. ${next.nextQuestion.content}`)
-  }
   // 중고거래 + 송금이 새로 확인되면, 지급정지가 안 될 수 있다는 점을 한 번 알려요
   const secondhandPaid = (v: SolutionView) => has(v.cards, SECONDHAND) && v.facts?.transferredMoney === "YES"
   if (secondhandPaid(next) && !secondhandPaid(prev) && !parts.some((p) => p.includes("환급"))) {
