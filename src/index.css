@@ -781,6 +781,19 @@ textarea:focus { border-color: #78aaed; background: #fff; outline: 3px solid rgb
 .assist-refs { margin-top: 5px; color: #7a8798; font-size: 11px; }
 .assist-quick { display: flex; gap: 6px; width: 100%; margin-top: 7px; }
 
+/* 리포트 종합 평가 카드: 아래 분석 카드(흰 배경·연한 테두리·파란 아이콘)와 같은 톤 */
+.summary-card { padding: 30px 34px; border: 1px solid #dce7f5; border-radius: 22px; background: #fff; box-shadow: 0 10px 32px rgba(30,63,110,.06); }
+.summary-head { display: flex; align-items: center; gap: 14px; }
+.summary-icon { flex: none; width: 48px; height: 48px; display: grid; place-items: center; color: #1769e0; border-radius: 15px; background: #eaf3ff; }
+.summary-head small { color: #1769e0; font-size: 12px; font-weight: 800; letter-spacing: .02em; }
+.summary-head h2 { margin-top: 3px; color: #172b4d; font-size: 20px; font-weight: 800; letter-spacing: -.5px; }
+.summary-body { margin-top: 20px; padding: 20px 22px; border-left: 4px solid #1769e0; border-radius: 4px 14px 14px 4px; background: #f5f9ff; }
+.summary-lead { color: #172b4d; font-size: 17px; line-height: 1.7; font-weight: 800; letter-spacing: -.3px; }
+.summary-rest { margin-top: 8px; color: #526174; font-size: 14px; line-height: 1.8; }
+.summary-note { display: flex; align-items: center; gap: 6px; margin-top: 16px; color: #8a95a4; font-size: 12px; }
+.summary-note svg { flex: none; color: #9aa7b8; }
+@media (max-width: 680px) { .summary-card { padding: 22px 18px; } .summary-body { padding: 16px; } .summary-lead { font-size: 15px; } }
+@media print { .summary-card { box-shadow: none; break-inside: avoid; } .summary-card, .summary-card * { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
 
 .mock-photo-preview { width: min(100%, 340px); margin: 10px 0 0; }
 .mock-photo-preview svg { display: block; width: 100%; height: auto; }
