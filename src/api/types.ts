@@ -69,6 +69,7 @@ export type ChatMessage = {
 export type CreateTrainingResponse = { trainingId: number; phase: TrainingPhase; status: TrainingStatus; stateVersion: number; firstMessage: ChatMessage }
 /** 진행 중 훈련이 없으면 null */
 export type ActiveTrainingResponse = { trainingId: number; phase: TrainingPhase; status: TrainingStatus; lastActivityAt: string } | null
+export type TrainingScenarioSummary = { title: string; description: string; senderName?: string | null; organizationName?: string | null }
 export type TrainingDetail = {
   trainingId: number
   phase: TrainingPhase
@@ -77,9 +78,10 @@ export type TrainingDetail = {
   turnCount: number
   messages: ChatMessage[]
   availableOptions: ChoiceOption[]
+  mockPageSubmitted?: boolean
   mockPage: MockPage | null
   /** 가안(노션에 없음): 복원 때 시나리오 제목·설명을 다시 보여 주려면 필요해요 */
-  scenario?: { title: string; description: string } | null
+  scenario?: TrainingScenarioSummary | null
 }
 
 export type DiscoveryMessageRequest = Versioned & { content: string }
@@ -91,11 +93,11 @@ export type ScenarioResponse = {
   trainingId: number
   phase: TrainingPhase
   fraudTypeCode: string
-  scenario: { title: string; description: string }
+  scenario: TrainingScenarioSummary
   mockPageTemplateCode: string | null
   stateVersion: number
 }
-export type StartTrainingResponse = { phase: TrainingPhase; firstMessage: ChatMessage; stateVersion: number; availableOptions?: ChoiceOption[] }
+export type StartTrainingResponse = { phase: TrainingPhase; firstMessage: ChatMessage; stateVersion: number; availableOptions?: ChoiceOption[]; mockPage?: MockPage | null }
 
 /** TEXT면 content, CHOICE면 selectedCode */
 export type TrainingMessageRequest = Versioned & ({ inputKind: "TEXT"; content: string } | { inputKind: "CHOICE"; selectedCode: string })

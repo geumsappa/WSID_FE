@@ -3,8 +3,8 @@ import { USE_MOCK } from "@/api"
 import { Icon } from "@/components/Icon"
 import { Typing } from "@/components/Typing"
 import type { Simulation } from "../hooks/useSimulation"
-import { MockPageModal } from "./MockPageModal"
 import { MockPhotoPreview } from "./MockPhotoPreview"
+import { containsMockLink, TrainingMessageContent } from "./TrainingMessageContent"
 
 const MAX_TURNS = 15 // 명세 초안: 전체 최대 15턴
 
@@ -17,6 +17,10 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
   const options = last?.from === "ai" ? last.options ?? [] : []
   const finished = sim.stage === "done" || sim.stage === "finishing"
   const progress = Math.min(MAX_TURNS, sim.turnCount)
+  const senderName = sim.scenario?.senderName || "상대방"
+  const disclaimer = sim.scenario?.organizationName
+    ? `${sim.scenario.organizationName} 측이 운영하거나 승인한 서비스가 아닙니다. 실제 해당 기관과 무관한 가상 대화입니다.`
+    : "실제 기관이나 인물이 운영하거나 승인한 서비스가 아닌 교육용 가상 대화입니다."
 
   useEffect(() => {
     const node = scrollRef.current
@@ -33,7 +37,6 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
 
   return (
     <section className="chat-page">
-      {sim.openMockPage && <MockPageModal page={sim.openMockPage} onAction={(code) => sim.recordAction(code, sim.openMockPage!)} onClose={sim.closeMockPage} />}
       <div className="container chat-layout">
         <aside className="scenario-sidebar">
           <span className="sidebar-kicker">현재 체험 중인 상황</span>
@@ -51,21 +54,28 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
         <div className="messenger">
           <div className="messenger-header">
             <div>
-              <h2>가상 대화 시뮬레이션</h2>
+              <h2>{senderName}</h2>
               <p><span /> {USE_MOCK ? "mock 모드 (서버 없음)" : "AI 훈련 연결됨"}</p>
             </div>
             <span className="header-shield"><Icon name="shield" size={22} /></span>
+          </div>
+          <div className="training-disclaimer" role="note">
+            <Icon name="shield" size={18} />
+            <div><strong>사기 예방을 위한 가상 훈련입니다.</strong><p>{disclaimer}</p></div>
           </div>
           <div className="messages" ref={scrollRef} aria-live="polite">
             {lines.map((m) => (
               <div className={`message-row ${m.from === "ai" ? "contact" : "user"}`} key={m.key}>
                 {m.from === "ai" && <span className="avatar"><Icon name="chat" size={18} /></span>}
                 <div>
-                  <span className="sender">{m.from === "ai" ? "의심스러운 연락" : "나"}</span>
-                  {m.text && <p>{m.text}</p>}
+                  <span className="sender">{m.from === "ai" ? senderName : "나"}</span>
+                  {m.text && (m.from === "ai"
+                    ? <TrainingMessageContent text={m.text} page={m.mockPage} disabled={finished || sim.typing}
+                        onOpen={(page) => void sim.showMockPage(page)} />
+                    : <p>{m.text}</p>)}
                   {m.mockAttachment && <MockPhotoPreview attachment={m.mockAttachment} />}
-                  {m.mockPage && (
-                    <button type="button" className="outline-button" style={{ marginTop: 8, padding: "9px 13px", fontSize: 12 }} onClick={() => void sim.showMockPage(m.mockPage!)}>
+                  {m.mockPage && !containsMockLink(m.text) && (
+                    <button type="button" className="outline-button" style={{ marginTop: 8, padding: "9px 13px", fontSize: 12 }} disabled={finished || sim.typing} onClick={() => void sim.showMockPage(m.mockPage!)}>
                       <Icon name="link" size={15} /> 안내 페이지 열기 ({m.mockPage.institutionName})
                     </button>
                   )}
