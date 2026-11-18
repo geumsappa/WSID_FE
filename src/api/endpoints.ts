@@ -44,5 +44,6 @@ export const ENDPOINTS = {
     messages: (solutionId: number) => `/api/solutions/sessions/${solutionId}/messages`, // SOL-03 피해 대응 상담 메시지
     facts: (solutionId: number) => `/api/solutions/sessions/${solutionId}/facts`, // SOL-04 피해 사실 수정 (PATCH)
     complete: (solutionId: number) => `/api/solutions/sessions/${solutionId}/complete`, // SOL-05 피해 대응 상담 종료
+    csrf: "/api/solutions/csrf", // 긴급대응용 CSRF 토큰 (비회원도 받을 수 있음. /api/auth/csrf는 로그인 필요)
   },
 } as const

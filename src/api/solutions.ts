@@ -15,7 +15,7 @@ const E = ENDPOINTS.solutions
 export const solutionApi = {
   /** SOL-01 상담 시작 (201). 피해 사실·대응 카드·다음 질문이 함께 와요 */
   start: (body: StartSolutionRequest): Promise<StartSolutionResponse> =>
-    USE_MOCK ? solutionsMock.start(body) : request(E.start, { method: "POST", body, timeoutMs: TIMEOUT.aiTurn }),
+    USE_MOCK ? solutionsMock.start(body) : request(E.start, { method: "POST", body, timeoutMs: TIMEOUT.aiTurn, csrf: E.csrf }),
 
   /** SOL-02 상담 복원 */
   detail: (solutionId: number): Promise<SolutionDetail> =>
@@ -30,14 +30,14 @@ export const solutionApi = {
    */
   message: (solutionId: number, body: SolutionMessageRequest, requestId = newRequestId()): Promise<SolutionMessageResponse> =>
     USE_MOCK ? solutionsMock.message(solutionId, body)
-      : request(E.messages(solutionId), { method: "POST", body: { requestId, ...body }, timeoutMs: TIMEOUT.aiTurn }),
+      : request(E.messages(solutionId), { method: "POST", body: { requestId, ...body }, timeoutMs: TIMEOUT.aiTurn, csrf: E.csrf }),
 
   /** SOL-04 피해 사실 정정. 바꿀 항목만 changes에 */
   /** 응답에 다음 질문(nextQuestion)과 전체 사실 기준 카드가 함께 와요. 409면 자동 재전송하지 말고 detail로 다시 불러오세요 */
   updateFacts: (solutionId: number, body: UpdateFactsRequest): Promise<UpdateFactsResponse> =>
-    USE_MOCK ? solutionsMock.updateFacts(solutionId, body) : request(E.facts(solutionId), { method: "PATCH", body }),
+    USE_MOCK ? solutionsMock.updateFacts(solutionId, body) : request(E.facts(solutionId), { method: "PATCH", body, csrf: E.csrf }),
 
   /** SOL-05 상담 종료 */
   complete: (solutionId: number): Promise<CompleteSolutionResponse> =>
-    USE_MOCK ? solutionsMock.complete(solutionId) : request(E.complete(solutionId), { method: "POST" }),
+    USE_MOCK ? solutionsMock.complete(solutionId) : request(E.complete(solutionId), { method: "POST", csrf: E.csrf }),
 }
