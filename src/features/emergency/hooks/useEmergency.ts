@@ -5,6 +5,7 @@ import type { Page, UploadedImage } from "@/types/common"
 import { maskSensitive } from "@/lib/privacy"
 import type { AssistantMessage, EmergencyKey } from "../types"
 import { SITUATION_TEXT } from "../types"
+import { emergencyData } from "../data/emergencyData"
 import { composeReply, parseShortAnswer } from "../lib/composeReply"
 import type { SolutionView } from "../lib/composeReply"
 
@@ -16,7 +17,27 @@ const SESSION_KEY = "wsid-solution-id" // 새로고침 후 상담을 이어 가�
 const UNABLE_TEXT = "이 질문에는 정확히 답변드리기 어려워요. 위 대응 카드를 먼저 진행하시고, 아래 공식 기관에 직접 상담하시는 것이 가장 안전해요."
 
 /** 입력창 모드. question: 새 질문 / fact: 상황 추가 설명 / answer: AI 추가 질문에 답하기 */
-export type InputMode = "question" | "fact" | "answer"
+export type InputMode = "auto" | "question" | "fact" | "answer"
+
+/** 질문처럼 보이는 말 (물음표, 어떻게·뭐·어디, ~나요, 알려줘 등) */
+const QUESTION_LIKE = /\?|까\s*$|나요|어떻게|어떡|뭐|뭘|무엇|어디|언제|왜|되나|돼\s*$|돼요\s*$|알려\s?줘|알려\s?주세요|방법|할\s?수\s?있|가능/
+/** 새로 생긴 상황을 말하는 것처럼 보이는 말 (송금·설치·정보 제공·연락 변화 등) */
+const FACT_LIKE = /보냈|송금|이체|입금|깔았|설치했|알려\s?줬|넘겨\s?줬|개인정보|신분증|비밀번호|인증번호|링크.{0,4}눌|눌렀|연락이?\s?(끊|두절|안\s?돼|계속|또|다시)|차단|전화가?\s?(왔|또)|문자가?\s?(왔|또)/
+
+/**
+ * 입력 종류를 자동으로 정해요 (질문하기/상황 추가 설명 버튼 없이).
+ * - 도우미가 되물은 질문이 있으면: 새 질문처럼 길게 묻지 않는 한 그 질문에 대한 답
+ * - 상황 + 질문이 섞이면("앱도 깔았는데 어떻게 해요?"): 상황 반영 후 질문 (두 번 보냄)
+ * - 상황만 말하면("앱도 깔았어") 상황 반영, 그 밖에는 질문으로 보내 도우미가 답해요
+ */
+function decideModes(text: string, awaitingAnswer: boolean): ("question" | "fact" | "answer")[] {
+  const isQuestion = QUESTION_LIKE.test(text)
+  const hasFact = FACT_LIKE.test(text)
+  if (awaitingAnswer) return isQuestion && text.length > 6 && !/^(네|예|응|아니|아뇨|모르)/.test(text) ? ["question"] : ["answer"]
+  if (isQuestion && hasFact) return ["fact", "question"]
+  // 상황만 말하면 상황 반영, 그 밖의 말("신고했어요", "또 돈 보내래")은 도우미가 답하도록 질문으로 보내요
+  return hasFact && !isQuestion ? ["fact"] : ["question"]
+}
 type RequestId = ReturnType<typeof newRequestId>
 type DistOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
 /** stateVersion을 뺀 글 메시지 본문 (실패 시 같은 본문·requestId로 다시 보내려고 보관) */
@@ -154,8 +175,11 @@ export function useEmergency(go: (next: Page) => void) {
     setError(errorMessage(err))
   }
 
-  /** SOL-01 상담 시작. description은 상황 카드 문장 또는 직접 쓴 설명 */
-  const start = async (description: string, attachments: UploadedImage[] = []) => {
+  /**
+   * SOL-01 상담 시작. description은 상황 카드 문장 또는 직접 쓴 설명.
+   * situation: 상황 카드를 골라 시작했으면 그 카드 키 → 첫 안내는 정해진 문구(emergencyData.intro)를 보여 줘요 (AI 답 X).
+   */
+  const start = async (description: string, attachments: UploadedImage[] = [], situation?: Exclude<EmergencyKey, "custom">) => {
     const masked = maskSensitive(description.trim())
     if (!masked && !attachments.length) return
     resetSession()
@@ -167,7 +191,9 @@ export function useEmergency(go: (next: Page) => void) {
       idRef.current = r.solutionId
       setSolutionId(r.solutionId)
       saveSessionId(r.solutionId)
-      const reply = await reflect("start", { facts: null, cards: [], nextQuestion: null }, r)
+      const reply = situation
+        ? (await applyResult(r), emergencyData[situation].intro) // 카드 선택: 정해진 안내 문구
+        : await reflect("start", { facts: null, cards: [], nextQuestion: null }, r) // 직접 입력: 파악한 내용에 맞춘 안내
       setMessages([
         { key: key(), from: "user", text: masked, images: attachments.length ? attachments : undefined },
         { key: key(), from: "assistant", text: masked !== description.trim() ? `입력하신 내용 중 민감정보는 가려서 처리했어요. ${reply}` : reply },
@@ -181,7 +207,7 @@ export function useEmergency(go: (next: Page) => void) {
       setAnalyzing(false)
     }
   }
-  const selectSituation = (k: Exclude<EmergencyKey, "custom">) => void start(SITUATION_TEXT[k])
+  const selectSituation = (k: Exclude<EmergencyKey, "custom">) => void start(SITUATION_TEXT[k], [], k)
   const analyze = () => void start(text, images)
 
   /** SOL-03 추가 질문에 답하기(선택지) */
@@ -217,9 +243,9 @@ export function useEmergency(go: (next: Page) => void) {
     else say(UNABLE_TEXT, "unable")
   }
   /** SOL-03 글 메시지 전송(공통). 실패하면 본문·requestId를 보관해 "다시 보내기"를 띄워요 */
-  const postText = async (body: TextBody, requestId: RequestId) => {
+  const postText = async (body: TextBody, requestId: RequestId): Promise<boolean> => {
     const id = idRef.current
-    if (id === null) return
+    if (id === null) return false
     setTyping(true)
     setError("")
     setFailed(null)
@@ -236,33 +262,39 @@ export function useEmergency(go: (next: Page) => void) {
         const reply = await reflect("text", prev, r, body.content)
         setMessages((m) => [...m, { key: key(), from: "assistant", text: reply }])
       }
+      return true
     } catch (err) {
       // 409(상태 충돌)는 자동 재전송하지 않고 최신 상태만 불러와요. 그 밖의 실패는 같은 요청을 다시 보낼 수 있어요.
       if (!isStateConflict(err)) setFailed({ body, requestId })
       await recover(err)
+      return false
     } finally {
       setTyping(false)
     }
   }
   /**
    * SOL-03 글로 질문·설명·답변하기.
-   * mode: question → purpose QUESTION / fact → FACT_UPDATE / answer → CLARIFICATION_ANSWER(+questionId)
+   * mode: auto(기본, 자동 판단) / question → purpose QUESTION / fact → FACT_UPDATE / answer → CLARIFICATION_ANSWER(+questionId)
    */
-  const send = async (raw: string, attachments: UploadedImage[] = [], mode: InputMode = "question") => {
+  const send = async (raw: string, attachments: UploadedImage[] = [], requested: InputMode = "auto") => {
     const masked = maskSensitive(raw.trim())
     if (idRef.current === null || typing || (!masked && !attachments.length)) return
     // 사실 확인 질문에 "아뇨", "네" 처럼 짧게 글로 답하면 선택지를 누른 것과 똑같이 처리해요 (AI 질문에 답하는 중이면 제외)
     const factQ = !clarification && nextQuestion?.factKey ? nextQuestion : null
-    const short = factQ && mode !== "answer" && !attachments.length ? parseShortAnswer(masked) : null
+    const modes = requested === "auto" ? decideModes(masked, !!clarification) : [requested]
+    const short = factQ && !modes.includes("answer") && !attachments.length ? parseShortAnswer(masked) : null
     if (factQ && short && (factQ.options ?? ["YES", "NO", "UNKNOWN"]).includes(short)) {
       return answer(factQ, short, masked)
     }
     setMessages((m) => [...m, { key: key(), from: "user", text: masked, images: attachments.length ? attachments : undefined }])
     const content = attachments.length ? `${masked}${masked ? " " : ""}(사진 ${attachments.length}장 첨부함)` : masked
-    const body: TextBody = mode === "answer" && clarification
-      ? { inputKind: "TEXT", content, purpose: "CLARIFICATION_ANSWER", questionId: clarification.questionId }
-      : { inputKind: "TEXT", content, purpose: mode === "fact" ? "FACT_UPDATE" : "QUESTION" }
-    await postText(body, newRequestId())
+    for (const mode of modes) {
+      const body: TextBody = mode === "answer" && clarification
+        ? { inputKind: "TEXT", content, purpose: "CLARIFICATION_ANSWER", questionId: clarification.questionId }
+        : { inputKind: "TEXT", content, purpose: mode === "fact" ? "FACT_UPDATE" : "QUESTION" }
+      const ok = await postText(body, newRequestId())
+      if (!ok) break // 앞 요청이 실패하면 뒤 요청은 보내지 않아요 ("다시 보내기"로 이어서)
+    }
   }
   /** 실패한 메시지를 같은 requestId로 다시 보내요 (말풍선은 다시 추가하지 않음) */
   const retry = () => {
