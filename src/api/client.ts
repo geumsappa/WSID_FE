@@ -27,8 +27,12 @@ type RequestOptions = {
   timeoutMs?: number
   /** "blob"이면 파일(PDF 등)로 받음 */
   responseType?: "json" | "blob"
-  /** true면 요청 전에 GET /api/auth/csrf로 토큰을 받아 헤더에 붙여요 (AUTH-06: 로그아웃·리포트 저장) */
-  csrf?: boolean
+  /**
+   * 요청 전에 CSRF 토큰을 받아 헤더에 붙여요.
+   * - true: GET /api/auth/csrf (로그인 사용자용, AUTH-06)
+   * - 주소 문자열: 그 주소에서 받기. 예) 긴급대응은 비회원도 쓰니까 /api/solutions/csrf
+   */
+  csrf?: boolean | string
 }
 
 /** 중복 처리 방지용 요청 ID. 같은 요청을 다시 보낼 때는 같은 값을 쓰세요 (노션: requestId) */
@@ -44,8 +48,8 @@ function readCookie(name: string) {
 }
 
 /** 백엔드에서 CSRF 토큰을 받아 { [headerName]: token } 형태로 돌려줌 */
-async function fetchCsrfHeader(): Promise<Record<string, string>> {
-  const { headerName, token } = await request<{ headerName: string; token: string }>(ENDPOINTS.auth.csrf)
+async function fetchCsrfHeader(path: string = ENDPOINTS.auth.csrf): Promise<Record<string, string>> {
+  const { headerName, token } = await request<{ headerName: string; token: string }>(path)
   return { [headerName]: token }
 }
 
@@ -59,7 +63,7 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
     const csrf = readCookie(CSRF.cookieName)
     if (csrf) headers[CSRF.headerName] = csrf
   }
-  if (options.csrf) Object.assign(headers, await fetchCsrfHeader())
+  if (options.csrf) Object.assign(headers, await fetchCsrfHeader(typeof options.csrf === "string" ? options.csrf : undefined))
   const qs = query
     ? Object.entries(query).filter(([, v]) => v !== undefined && v !== null).map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`).join("&")
     : ""
