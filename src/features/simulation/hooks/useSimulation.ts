@@ -345,7 +345,7 @@ export function useSimulation(
   }
 
   /** Open a separate local tab; that tab records its own actions. */
-  const showMockPage = (_fallback: MockPage) => {
+  const showMockPage = (_fallback?: MockPage) => {
     const id = idRef.current
     if (id === null || stage !== "chat") return
     openTrainingCheck(id)
