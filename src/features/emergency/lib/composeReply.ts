@@ -38,6 +38,13 @@ const FACT_PHRASE: Record<FactKey, Record<YesNoUnknown, string>> = {
   installedApp: { YES: "앱을 설치하신 것", NO: "앱은 설치하지 않으신 것", UNKNOWN: "앱 설치 여부는 아직 모르는 것" },
   contactContinues: { YES: "상대와 아직 연락이 이어지는 것", NO: "상대와 연락이 끊긴 것", UNKNOWN: "연락 지속 여부는 아직 모르는 것" },
 }
+/** 사실을 새로 알게 됐을 때 하는 말 ("반영했어요" 같은 시스템 말투 대신 대화체로) */
+const FACT_ACK: Record<FactKey, Record<YesNoUnknown, string>> = {
+  transferredMoney: { YES: "돈을 보내셨군요.", NO: "다행히 돈은 보내지 않으셨네요.", UNKNOWN: "송금했는지는 확인되면 알려 주세요." },
+  sharedInformation: { YES: "개인정보를 알려 주셨군요.", NO: "개인정보는 알려 주지 않으셨네요.", UNKNOWN: "정보를 알려 줬는지는 확인되면 알려 주세요." },
+  installedApp: { YES: "상대가 알려 준 앱을 설치하셨군요.", NO: "앱은 설치하지 않으셨네요.", UNKNOWN: "앱을 설치했는지는 확인되면 알려 주세요." },
+  contactContinues: { YES: "아직 상대와 연락이 이어지고 있군요.", NO: "상대와는 연락이 끊겼군요.", UNKNOWN: "연락이 이어지는지는 확인되면 알려 주세요." },
+}
 const FACT_ORDER: FactKey[] = ["transferredMoney", "sharedInformation", "installedApp", "contactContinues"]
 
 const has = (cards: SolutionCard[], code: string) => cards.some((c) => c.code === code)
@@ -55,14 +62,15 @@ function firstStep(code: string, d: Details) {
 const joinKo = (list: string[]) => (list.length <= 1 ? list.join("") : `${list.slice(0, -1).join(", ")}, ${list[list.length - 1]}`)
 
 /** 서버 응답 전후 비교 → "무엇이 바뀌었는지" 설명. 바뀐 게 없으면 빈 배열 */
-export function describeChange(prev: SolutionView, next: SolutionView, d: Details): string[] {
+export function describeChange(prev: SolutionView, next: SolutionView, d: Details, fixedGuide = false): string[] {
   const lines: string[] = []
   if (next.facts) {
     const changed = FACT_ORDER.filter((k) => prev.facts?.[k] !== next.facts![k] && !(prev.facts === null && next.facts![k] === "UNKNOWN"))
-    if (changed.length) lines.push(`${joinKo(changed.map((k) => FACT_PHRASE[k][next.facts![k]]))}으로 반영했어요.`)
+    lines.push(...changed.map((k) => FACT_ACK[k][next.facts![k]]))
   }
-  const added = next.cards.filter((c) => !has(prev.cards, c.code))
-  const removed = prev.cards.filter((c) => !has(next.cards, c.code))
+  // 유형 카드로 시작했으면 화면에 고정 안내만 보여서, 서버 대응 카드가 늘고 줄어든 건 말하지 않아요
+  const added = fixedGuide ? [] : next.cards.filter((c) => !has(prev.cards, c.code))
+  const removed = fixedGuide ? [] : prev.cards.filter((c) => !has(next.cards, c.code))
   if (added.length) {
     lines.push(`${joinKo(added.map((c) => `'${titleOf(c, d)}'`))} 대응을 추가했어요.`)
     const urgent = added.find((c) => isUrgent(c, d))
@@ -71,7 +79,7 @@ export function describeChange(prev: SolutionView, next: SolutionView, d: Detail
   }
   if (removed.length) lines.push(`${joinKo(removed.map((c) => `'${titleOf(c, d)}'`))} 대응은 지금 상황에 해당하지 않아 뺐어요.`)
   // 다음 확인 질문은 채팅 맨 아래 [예][아니오][모름] 말풍선이 따로 보여 줘서 여기서는 말하지 않아요
-  if (!next.nextQuestion && prev.nextQuestion) lines.push("확인할 내용은 모두 파악했어요. 대응 방법 순서대로 진행해 주세요.")
+  if (!next.nextQuestion && prev.nextQuestion) lines.push("여쭤볼 건 다 여쭤봤어요. 위 대응 방법을 순서대로 진행하시고, 궁금한 점은 편하게 물어봐 주세요.")
   return lines
 }
 
@@ -101,6 +109,12 @@ function planFor(s: SolutionView, d: Details): string {
 }
 
 const INTENTS: Intent[] = [
+  {
+    // 기프트카드·상품권 핀번호를 보낸 경우 (계좌 송금이 아니라 지급정지·환급 제도로 막기 어려움)
+    test: /기프트 ?카드|상품권|핀 ?번호|구글 ?플레이 ?카드|기프티콘/,
+    answer: () =>
+      "기프트카드·상품권은 계좌로 보낸 돈이 아니라서 은행 지급정지나 피해금 환급 제도로 막기 어려워요. 핀번호는 바로 현금처럼 쓰일 수 있으니 서둘러 주세요. 1) 상품권을 산 곳이나 발행사 고객센터에 바로 연락해 보낸 핀번호가 이미 쓰였는지 확인하고, 아직 안 쓰였다면 사용을 막을 수 있는지 물어보세요. 2) 영수증, 카드 실물이나 사진, 상대에게 핀번호를 보낸 대화는 지우지 말고 보관하세요. 3) 112에 신고하면서 핀번호와 보낸 시각을 함께 알려 주세요. 4) 상대가 더 사서 보내라고 해도 절대 응하지 마세요.",
+  },
   {
     // 상대가 돈을 더 보내라고 할 때 (추가 송금·수수료·보증금·환불 조건)
     test: /또 ?(보내|입금|송금)|더 ?(보내|입금)|추가.{0,4}(송금|입금|결제|돈|비용)|수수료|보증금|선입금|환불.{0,8}(하려면|조건|먼저)/,
@@ -191,6 +205,8 @@ export type ReplyInput = {
   explanation?: string | null
   /** 선택지로 답한 항목 (값이 그대로여도 대답했다는 걸 알려 주려고) */
   answered?: { factKey: FactKey; value: YesNoUnknown }
+  /** 사기 유형 카드로 시작해 고정 안내를 보여 주는 중이면 true (서버 카드 변화는 말하지 않아요) */
+  fixedGuide?: boolean
 }
 
 /**
@@ -211,22 +227,22 @@ export function parseShortAnswer(text: string): YesNoUnknown | null {
 const SECONDHAND_NOTE = "중고거래 사기는 보이스피싱과 달리 통신사기피해환급법의 지급정지·환급 대상이 아니에요. 그래서 112나 경찰 사이버범죄 신고시스템으로 신고하는 게 중심이고, 돈을 돌려받는 건 배상명령이나 민사 절차로 진행해요."
 
 /** 도우미가 할 말 한 덩어리 */
-export function composeReply({ kind, prev, next, details, institutions, userText, explanation, answered }: ReplyInput): string {
-  const change = describeChange(prev, next, details)
+export function composeReply({ kind, prev, next, details, institutions, userText, explanation, answered, fixedGuide }: ReplyInput): string {
+  const change = describeChange(prev, next, details, fixedGuide)
   const parts: string[] = []
   if (kind === "start") {
     parts.push("말씀해 주신 내용으로 지금 상황을 정리했어요.")
     parts.push(...change.filter((l) => !l.startsWith("이어서")).map((l) => l.replace("대응을 추가했어요.", "대응 방법을 준비했어요.")))
     if (!change.length) parts.push("아직 피해 사실이 분명하지 않아 기본 대응 원칙부터 안내할게요.")
   } else if (kind === "text") {
-    if (change.length) parts.push(`새로 말씀해 주신 내용으로 ${change[0]}`, ...change.slice(1))
+    if (change.length) parts.push("알겠어요.", ...change)
     // 질문이 섞여 있거나 바뀐 게 없으면 질문에 답해요
     if (userText && !change.length && parseShortAnswer(userText)) {
       // 남은 질문이 없는데 "네", "아니요"처럼 짧게만 답한 경우
       parts.push("알겠어요. 지금은 더 여쭤볼 질문이 없어요. 상황이 달라졌다면 채팅으로 알려 주시거나(예: \"사실 돈은 안 보냈어요\"), 궁금한 점을 물어봐 주세요. 예: \"돈 돌려받을 수 있어요?\", \"신고는 어디에 해요?\"")
     } else if (userText && (!change.length || /\?|까|나요|돼|되나|어떻게|뭐|어디|언제|왜/.test(userText))) parts.push(answerQuestion(userText, next, details, institutions))
   } else {
-    const factChanged = change.length > 0 && change[0].endsWith("반영했어요.")
+    const factChanged = !!next.facts && FACT_ORDER.some((k) => prev.facts?.[k] !== next.facts![k])
     if (answered && !factChanged) {
       parts.push(answered.value === "UNKNOWN" ? `알겠어요. ${FACT_PHRASE[answered.factKey].UNKNOWN}으로 둘게요. 나중에 확인되면 채팅으로 알려 주세요.` : "확인했어요.")
     }
@@ -235,8 +251,8 @@ export function composeReply({ kind, prev, next, details, institutions, userText
   // 선택·정정 뒤에도 같은 질문이 남아 있으면 다시 보여 줘서, 다음에 "네/아니요"로 답할 때 무엇에 답하는지 알 수 있게 해요
   // 중고거래 + 송금이 새로 확인되면, 지급정지가 안 될 수 있다는 점을 한 번 알려요
   const secondhandPaid = (v: SolutionView) => has(v.cards, SECONDHAND) && v.facts?.transferredMoney === "YES"
-  if (secondhandPaid(next) && !secondhandPaid(prev) && !parts.some((p) => p.includes("환급"))) {
-    const i = parts.findIndex((p) => p.startsWith("이어서") || p.startsWith("확인할 내용은"))
+  if (!fixedGuide && secondhandPaid(next) && !secondhandPaid(prev) && !parts.some((p) => p.includes("환급"))) {
+    const i = parts.findIndex((p) => p.startsWith("이어서") || p.startsWith("여쭤볼 건"))
     if (i >= 0) parts.splice(i, 0, SECONDHAND_NOTE); else parts.push(SECONDHAND_NOTE)
   }
   if (explanation?.trim()) parts.push(explanation.trim())

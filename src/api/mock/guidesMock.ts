@@ -17,7 +17,8 @@ export const CARD_CODE: Record<EmergencyKey, string> = {
   trade: "SECONDHAND_TRADE_RESPONSE",
   custom: "GENERAL_RESPONSE",
 }
-const INSTITUTION_CODE: Record<keyof typeof organizationData, string> = { police: "POLICE", cyber: "CYBER_POLICE", fss: "FSS", kisa: "KISA" }
+const INSTITUTION_CODE: Record<keyof typeof organizationData, string> = { police: "POLICE", cyber: "CYBER_POLICE", fss: "FSS", kisa: "KISA",
+  counterscam: "COUNTER_SCAM_1394", pd: "FSS_PD", payinfo: "PAYINFO", msafer: "MSAFER" }
 export const URGENT_KEYS: EmergencyKey[] = ["transfer", "privacy", "app"]
 
 const FRAUD_TYPES: FraudTypeDetail[] = [
