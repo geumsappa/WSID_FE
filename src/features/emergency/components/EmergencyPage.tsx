@@ -1,11 +1,11 @@
 import { useRef, useState } from "react"
-import type { IconName, UploadedImage } from "@/types/common"
+import type { UploadedImage } from "@/types/common"
 import { Icon } from "@/components/Icon"
 import { EvidenceGallery } from "@/components/EvidenceGallery"
 import { PageIntro } from "@/components/PageIntro"
 import { loadEvidence } from "@/lib/image"
-import { emergencyData } from "../data/emergencyData"
-import type { EmergencyKey } from "../types"
+import { SITUATION_ORDER, situationGuides } from "../data/situationGuides"
+import type { SituationKey } from "../types"
 
 export type EmergencyProps = {
   text: string
@@ -14,19 +14,18 @@ export type EmergencyProps = {
   setAttachments: (value: UploadedImage[]) => void
   analyzing: boolean
   error: string
-  onSelect: (key: Exclude<EmergencyKey, "custom">) => void
+  onSelect: (key: SituationKey) => void
   onAnalyze: () => void
+  /** 로그인 여부. 비로그인이면 '기록이 저장되지 않는다'는 안내를 보여 줘요 */
+  loggedIn?: boolean
+  onLogin?: () => void
 }
-// 긴급 대응 첫 화면: 상황 카드 6개 또는 직접 설명 → 상담 시작(SOL-01)
+// 긴급 대응 첫 화면: 사기 유형 카드 6개(고정 안내) 또는 직접 설명 → 상담 시작(SOL-01)
 export function EmergencyPage(p: EmergencyProps) {
   const [uploadError, setUploadError] = useState("")
   const [isDragging, setIsDragging] = useState(false)
   const dragDepth = useRef(0)
   const fileRef = useRef<HTMLInputElement>(null)
-  const cards: [Exclude<EmergencyKey, "custom">, IconName][] = [
-    ["transfer", "send"], ["link", "link"], ["app", "app"],
-    ["privacy", "user"], ["call", "phone"], ["trade", "cart"],
-  ]
   const selectImages = async (files: FileList | null) => {
     if (!files?.length) return
     const result = await loadEvidence(Array.from(files), p.attachments.length)
@@ -36,6 +35,20 @@ export function EmergencyPage(p: EmergencyProps) {
   }
   return (
     <section className="subpage emergency-page">
+      {/* 비로그인 안내: 네비게이션 바로 아래 한 줄 띠 (subpage 위쪽 여백 76px만큼 끌어올려요) */}
+      {p.loggedIn === false && (
+        <div style={{ margin: "-76px 0 56px", background: "#eaf2ff", borderBottom: "1px solid #d6e4fb" }}>
+          <div className="container" style={{ display: "flex", alignItems: "center", gap: 10, padding: "11px 0", fontSize: 14, color: "#33507a", flexWrap: "wrap" }}>
+            <Icon name="lock" size={16} />
+            <span style={{ flex: 1, minWidth: 220 }}>로그인하지 않아도 상담할 수 있지만, 상담 기록은 저장되지 않아요. 기록을 마이페이지에 남기려면 먼저 로그인해 주세요.</span>
+            {p.onLogin && (
+              <button type="button" onClick={p.onLogin} style={{ padding: "7px 16px", border: "1px solid #1769e0", borderRadius: 999, background: "#fff", color: "#1769e0", fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>
+                로그인하기
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       <div className="container">
         <PageIntro
           kicker="상황별 빠른 안내"
@@ -49,29 +62,29 @@ export function EmergencyPage(p: EmergencyProps) {
           <div>
             <strong>이미 돈을 송금하셨나요?</strong>
             <p>
-              사기가 의심된다면 즉시 112와 해당 금융회사에 신고하고 지급정지를
-              요청하세요.
+              보이스피싱으로 돈을 보냈다면 즉시 112나 송금한 금융회사에
+              지급정지를 요청하세요. (중고거래 사기는 경찰 신고가 먼저예요.)
             </p>
           </div>
         </div>
         <div className="section-heading left">
           <span>상황 선택</span>
-          <h2>어떤 상황에 처하셨나요?</h2>
-          <p>가장 가까운 상황을 선택해 주세요.</p>
+          <h2>어떤 사기가 의심되나요?</h2>
+          <p>가장 가까운 유형을 선택하면 대처 방법을 바로 알려 드려요.</p>
         </div>
         <div className="situation-grid">
-          {cards.map(([key, icon]) => (
+          {SITUATION_ORDER.map((key) => (
             <button
               key={key}
               disabled={p.analyzing}
               onClick={() => p.onSelect(key)}
             >
               <span>
-                <Icon name={icon} size={25} />
+                <Icon name={situationGuides[key].icon} size={25} />
               </span>
               <div>
-                <h3>{emergencyData[key].title}</h3>
-                <p>{emergencyData[key].short}</p>
+                <h3>{situationGuides[key].title}</h3>
+                <p>{situationGuides[key].short}</p>
               </div>
               <Icon name="arrow" size={18} />
             </button>

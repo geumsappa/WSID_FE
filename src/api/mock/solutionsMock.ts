@@ -6,9 +6,10 @@ import { errorFromCode } from "../client"
 import { AI_DEV_URL, TIMEOUT } from "../config"
 import type {
   AssistantReply, ChatMessage, CompleteSolutionResponse, FactKey, NextQuestion, SolutionCard, SolutionDetail, SolutionFacts,
-  SolutionMessageRequest, SolutionMessageResponse, StartSolutionRequest, StartSolutionResponse,
+  SolutionListResponse, SolutionMessageRequest, SolutionMessageResponse, StartSolutionRequest, StartSolutionResponse,
   UpdateFactsRequest, UpdateFactsResponse, YesNoUnknown,
 } from "../types"
+import { mockCurrentUser, requireMockUser } from "./authMock"
 import { checkVersion, delay, nextId, persistedMap, withSave } from "./delay"
 import { CARD_CODE, institutionList, toCard } from "./guidesMock"
 import { answerQuestion } from "@/features/emergency/lib/composeReply"
@@ -22,14 +23,18 @@ type MockSolution = {
   qSeq?: number
   /** 마지막 AI 처리 결과 (SOL-02 복원용) */
   lastAssistant?: AssistantReply | null
+  /** 회원으로 시작한 상담이면 회원 ID (비회원은 null → 마이페이지에 안 남아요) */
+  ownerId?: number | null
+  createdAt?: string
+  completedAt?: string | null
 }
 const store = persistedMap<MockSolution>("wsid-mock-solutions")
 const sessions = store.map
 const QUESTIONS: Record<FactKey, string> = {
-  transferredMoney: "상대에게 돈을 보낸 적이 있나요?",
-  sharedInformation: "개인정보를 전달한 적이 있나요?",
-  installedApp: "상대 안내로 앱을 설치했나요?",
-  contactContinues: "지금도 상대와 연락이 이어지고 있나요?",
+  transferredMoney: "혹시 상대에게 돈을 보내셨나요?",
+  sharedInformation: "비밀번호·인증번호·신분증 사진 같은 정보를 알려 주셨나요?",
+  installedApp: "상대가 알려 준 앱을 설치하셨나요?",
+  contactContinues: "지금도 상대와 연락하고 계신가요?",
 }
 const FACT_KEY: Partial<Record<EmergencyKey, FactKey>> = { transfer: "transferredMoney", privacy: "sharedInformation", app: "installedApp" }
 const OPTIONS: YesNoUnknown[] = ["YES", "NO", "UNKNOWN"]
@@ -144,6 +149,19 @@ function assistAnswer(s: MockSolution, questionId: string, text: string): Assist
 }
 /** 화면에 보이는 대응 카드로 사기 유형을 짐작해 AI 서버에 넘겨요 (중고거래면 환급 안내를 막으려고) */
 function fraudTypeOf(s: MockSolution): string | null {
+  // 유형 카드의 시작 문장이나 사용자가 쓴 말에서 사기 유형을 먼저 찾아요 (첫 설명이 가장 확실해서 앞에서부터)
+  const RULES: [RegExp, string][] = [
+    [/중고\s?거래|당근|번개장터|중고나라|직거래/, "SECONDHAND_TRADE"],
+    [/리딩방|투자|코인|주식|가상자산/, "INVESTMENT_FRAUD"],
+    [/대출|대환|저금리/, "LOAN_FRAUD"],
+    [/가족|지인|엄마|아빠|딸|아들|메신저|카톡/, "MESSENGER_PHISHING"],
+    [/검찰|경찰|금감원|금융감독원|수사관|기관.{0,4}사칭|카드\s?배송/, "INSTITUTION_IMPERSONATION"],
+    [/문자|링크|택배|청첩장|부고/, "SMISHING"],
+  ]
+  for (const m of s.messages.filter((m) => m.sender === "USER")) {
+    const hit = RULES.find(([re]) => re.test(m.content))
+    if (hit) return hit[1]
+  }
   if (s.extra.includes("trade")) return "SECONDHAND_TRADE"
   if (s.extra.includes("call")) return "INSTITUTION_IMPERSONATION"
   if (s.extra.includes("link")) return "SMISHING"
@@ -194,7 +212,8 @@ const questionOf = (s: MockSolution): NextQuestion | null => s.pending ? { factK
 export const solutionsMock = withSave({
   async start(body: StartSolutionRequest): Promise<StartSolutionResponse> {
     await delay(750)
-    const s: MockSolution = { id: nextId(), status: "ACTIVE", stateVersion: 0, facts: { transferredMoney: "UNKNOWN", sharedInformation: "UNKNOWN", installedApp: "UNKNOWN", contactContinues: "UNKNOWN" }, extra: [], messages: [] }
+    const s: MockSolution = { id: nextId(), status: "ACTIVE", stateVersion: 0, facts: { transferredMoney: "UNKNOWN", sharedInformation: "UNKNOWN", installedApp: "UNKNOWN", contactContinues: "UNKNOWN" }, extra: [], messages: [],
+      ownerId: mockCurrentUser()?.id ?? null, createdAt: new Date().toISOString(), completedAt: null }
     const masked = maskSensitive(body.description.trim()) // 원문은 저장하지 않고 가린 글만
     if (masked) {
       applyText(s, masked)
@@ -228,7 +247,8 @@ export const solutionsMock = withSave({
       const local = assistAnswer(s, body.questionId, masked) // 답으로 사실을 채우고 규칙 답변도 만들어 둠
       assistant = (original ? await devAiAnswer(s, original) : null) ?? local
     } else if (body.purpose === "QUESTION") {
-      const unableLocally = /주식|코인|투자|대출.{0,4}추천/.test(masked)
+      // 투자 종목·대출 상품 추천처럼 대응 범위 밖인 질문만 바로 '답변 불가' (투자 사기 상담 질문은 AI로 보내요)
+      const unableLocally = /(주식|코인|종목|투자|대출).{0,6}(추천|사도 ?돼|살까|오를까)/.test(masked)
       assistant = (unableLocally ? null : await devAiAnswer(s, masked)) ?? assistQuestion(s, masked)
     }
     else applyText(s, masked) // FACT_UPDATE(또는 purpose 없음): 지금 방식
@@ -257,6 +277,24 @@ export const solutionsMock = withSave({
     await delay(150)
     const s = get(id)
     s.status = "COMPLETED"
+    s.completedAt = new Date().toISOString()
     return { solutionId: s.id, status: s.status }
+  },
+  /** SOL-06(가안) 내가 마친 상담 목록 */
+  async list(params: { size?: number; cursor?: string | null } = {}): Promise<SolutionListResponse> {
+    await delay(200)
+    const user = requireMockUser()
+    const size = params.size ?? 10
+    const mine = [...sessions.values()]
+      .filter((s) => s.ownerId === user.id && s.status === "COMPLETED")
+      .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""))
+    const start = params.cursor ? Number(params.cursor) : 0
+    const page = mine.slice(start, start + size)
+    const first = (s: MockSolution) => s.messages.find((m) => m.sender === "USER")?.content ?? "피해 대응 상담"
+    return {
+      items: page.map((s) => ({ solutionId: s.id, status: s.status, title: first(s).slice(0, 40), createdAt: s.createdAt ?? "", completedAt: s.completedAt ?? null })),
+      hasNext: start + size < mine.length,
+      nextCursor: start + size < mine.length ? String(start + size) : null,
+    }
   },
 }, store.save)

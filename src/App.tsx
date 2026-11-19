@@ -11,6 +11,7 @@ import { useEmergency } from "@/features/emergency/hooks/useEmergency"
 import { HomePage } from "@/features/home/HomePage"
 import { MyPage } from "@/features/mypage/components/MyPage"
 import { useSavedReports } from "@/features/mypage/hooks/useSavedReports"
+import { useSolutionHistory } from "@/features/mypage/hooks/useSolutionHistory"
 import { ReportPage } from "@/features/report/components/ReportPage"
 import { SimulationPage } from "@/features/simulation/components/SimulationPage"
 import { useSimulation } from "@/features/simulation/hooks/useSimulation"
@@ -23,6 +24,7 @@ export default function App() {
   const { account } = auth
   const sim = useSimulation(account, page, go, auth.handleUnauthorized)
   const reports = useSavedReports(account, page, auth.handleUnauthorized)
+  const history = useSolutionHistory(account, page, auth.handleUnauthorized)
   const em = useEmergency(go)
   const [loginPopup, setLoginPopup] = useState(false)
 
@@ -62,17 +64,17 @@ export default function App() {
         {page === "simulation" && (auth.ready && !account
           ? <AuthGate message="금융사기 시뮬레이션은 로그인 이후 사용할 수 있습니다." onLogin={() => { auth.setReturnAfterLogin("simulation"); go("login") }} />
           : <SimulationPage sim={sim} />)}
-        {page === "emergency" && <EmergencyPage text={em.text} setText={em.setText} attachments={em.images} setAttachments={em.setImages} analyzing={em.analyzing} error={em.error} onSelect={em.selectSituation} onAnalyze={em.analyze} />}
+        {page === "emergency" && <EmergencyPage text={em.text} setText={em.setText} attachments={em.images} setAttachments={em.setImages} analyzing={em.analyzing} error={em.error} onSelect={em.selectSituation} onAnalyze={em.analyze} loggedIn={Boolean(account)} onLogin={() => { auth.setReturnAfterLogin("emergency"); go("login") }} />}
         {page === "emergencyChat" && (em.solutionId !== null
-          ? <EmergencyChat em={em} />
-          : <EmergencyPage text={em.text} setText={em.setText} attachments={em.images} setAttachments={em.setImages} analyzing={em.analyzing} error={em.error} onSelect={em.selectSituation} onAnalyze={em.analyze} />)}
+          ? <EmergencyChat em={em} loggedIn={Boolean(account)} onMyPage={() => go("mypage")} />
+          : <EmergencyPage text={em.text} setText={em.setText} attachments={em.images} setAttachments={em.setImages} analyzing={em.analyzing} error={em.error} onSelect={em.selectSituation} onAnalyze={em.analyze} loggedIn={Boolean(account)} onLogin={() => { auth.setReturnAfterLogin("emergency"); go("login") }} />)}
         {page === "report" && (auth.ready && !account
           ? <AuthGate message="결과 리포트는 로그인 이후 볼 수 있습니다." onLogin={() => { auth.setReturnAfterLogin("report"); go("login") }} />
           : <ReportPage sim={sim} onEmergency={() => go("emergency")} />)}
         {page === "login" && <AuthPage mode="login" onSwitch={() => go("signup")} onLogin={auth.login} />}
         {page === "signup" && <AuthPage mode="signup" onSwitch={() => go("login")} onLogin={auth.login} />}
         {page === "mypage" && (account
-          ? <MyPage account={account} reports={reports} onLogout={() => void logout()} />
+          ? <MyPage account={account} reports={reports} history={history} onLogout={() => void logout()} />
           : auth.ready ? <AuthGate onLogin={() => { auth.setReturnAfterLogin("mypage"); go("login") }} /> : null)}
       </main>
       {page !== "home" && <Footer onHome={() => go("home")} />}

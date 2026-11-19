@@ -202,3 +202,6 @@ export type UpdateFactsRequest = Versioned & { changes: Partial<SolutionFacts> }
  */
 export type UpdateFactsResponse = { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion?: NextQuestion | null; stateVersion: number; explanation?: string | null }
 export type CompleteSolutionResponse = { solutionId: number; status: SolutionStatus }
+/** SOL-06(가안, 노션에 아직 없음) 내 피해 대응 상담 목록 항목. title은 첫 상황 설명(가린 글) 앞부분 */
+export type SolutionListItem = { solutionId: number; status: SolutionStatus; title: string; createdAt: string; completedAt: string | null }
+export type SolutionListResponse = { items: SolutionListItem[]; nextCursor: string | null; hasNext: boolean }
