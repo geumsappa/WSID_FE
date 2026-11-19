@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { USE_MOCK } from "@/api"
+import { AI_DEV_URL } from "@/api/config"
 import type { FactKey, YesNoUnknown } from "@/api"
 import type { UploadedImage } from "@/types/common"
 import { Icon } from "@/components/Icon"
@@ -28,9 +29,34 @@ const PLACEHOLDER: Record<InputMode, string> = {
 }
 
 // 피해 대응 상담 화면(SOL-02~05 + GUIDE-03·04). 피해 사실, 대응 카드, 기관 안내, 후속 대화를 보여 줘요.
+/**
+ * (개발용, mock 모드만) 로컬 AI 서버가 켜져 있는지 15초마다 /health로 확인해요.
+ * null: 확인 중, true: 켜짐, false: 꺼짐 또는 VITE_AI_DEV_URL 미설정
+ */
+function useAiDevStatus(): boolean | null {
+  const [up, setUp] = useState<boolean | null>(USE_MOCK && AI_DEV_URL ? null : false)
+  useEffect(() => {
+    if (!USE_MOCK || !AI_DEV_URL) return
+    let alive = true
+    const check = async () => {
+      try {
+        const r = await fetch(`${AI_DEV_URL}/health`, { signal: AbortSignal.timeout(2000) })
+        if (alive) setUp(r.ok)
+      } catch {
+        if (alive) setUp(false)
+      }
+    }
+    void check()
+    const id = window.setInterval(check, 15000)
+    return () => { alive = false; window.clearInterval(id) }
+  }, [])
+  return up
+}
+
 export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergency; loggedIn?: boolean; onMyPage?: () => void }) {
   const [input, setInput] = useState("")
   const [confirmEnd, setConfirmEnd] = useState(false)
+  const aiUp = useAiDevStatus()
   const [uploadError, setUploadError] = useState("")
   const [dragging, setDragging] = useState(false)
   const [pendingImages, setPendingImages] = useState<UploadedImage[]>([])
@@ -93,7 +119,7 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
       </div>
       <div className="container emergency-chat-layout">
         <div className="emergency-conversation">
-          <div className="assistant-header"><span><Icon name="shield" size={23} /></span><div><h2>어떡하지 대응 도우미</h2><p><i /> {USE_MOCK ? "mock 모드 (서버 없음)" : "AI 분석 연결됨"}</p></div></div>
+          <div className="assistant-header"><span><Icon name="shield" size={23} /></span><div><h2>어떡하지 대응 도우미</h2><p><i /> {USE_MOCK ? (aiUp ? "mock 모드 (백엔드 없음 · AI 서버 연결됨)" : aiUp === null ? "mock 모드 (AI 서버 확인 중)" : "mock 모드 (백엔드·AI 서버 없음 → 프론트 예비 답변)") : "AI 분석 연결됨"}</p></div></div>
           <div className="emergency-messages" ref={scrollRef} aria-live="polite">
             {first.slice(0, 1).map(renderMessage)}
             {/* 대응 카드를 먼저(화면 폭 가득), 그 아래에 도우미 첫 안내 */}
