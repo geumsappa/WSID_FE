@@ -3,10 +3,12 @@ import { errorMessage, trainingApi } from "@/api"
 import type { MockPage } from "@/api"
 import { TrainingCheckView } from "./TrainingCheckView"
 import { recordPageAction } from "../lib/mockPageSession"
+import { resolveMockTemplate } from "../data/mockPageTemplates"
 
 /** Standalone, authenticated local page. It never accepts or transmits credentials or files. */
 export function TrainingCheckPage() {
   const [page, setPage] = useState<MockPage | null>(null)
+  const [scenarioTitle, setScenarioTitle] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
@@ -17,7 +19,9 @@ export function TrainingCheckPage() {
   const closeRequest = useRef(crypto.randomUUID())
   const trainingId = Number(new URLSearchParams(window.location.search).get("trainingId"))
   const validId = Number.isSafeInteger(trainingId) && trainingId > 0
-  const title = "지원자 확인"
+  // templateCode(없으면 기관 이름·시나리오 제목)로 화면 종류를 골라요
+  const template = resolveMockTemplate(page, scenarioTitle)
+  const title = template.title
 
   useEffect(() => {
     let cancelled = false
@@ -30,6 +34,7 @@ export function TrainingCheckPage() {
         const detail = await trainingApi.detail(trainingId)
         if (!cancelled) {
           setPage(info)
+          setScenarioTitle(detail.scenario?.title ?? null)
           if (detail.mockPageSubmitted) setResult("submitted")
         }
       } catch (cause) { if (!cancelled) setError(errorMessage(cause)) }
@@ -59,6 +64,6 @@ export function TrainingCheckPage() {
     finally { setBusy(false) }
   }
 
-  return <TrainingCheckView page={page} loading={loading} busy={busy} error={error} result={result}
+  return <TrainingCheckView page={page} template={template} loading={loading} busy={busy} error={error} result={result}
     onAction={(kind) => void act(kind)} />
 }

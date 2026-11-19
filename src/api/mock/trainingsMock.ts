@@ -37,7 +37,14 @@ const MAX_DISCOVERY_TURNS = 3
 const MAX_TRAINING_TURNS = 5
 const MAX_IMAGES = 3
 const FRAUD_TYPE: Record<SituationKey, string> = { trade: "SECONDHAND_TRADE", delivery: "SMISHING", loan: "LOAN_FRAUD", job: "JOB_SCAM", institution: "INSTITUTION_IMPERSONATION" }
-const MOCK_PAGE: MockPage = { templateCode: "BANK_NOTICE", title: "가상 금융 안내", institutionName: "가상금융센터", screenCode: "LOGIN_CHECK", isSimulation: true }
+/** 시나리오별 모의 페이지 (실제 서버도 사기 유형마다 다른 templateCode를 보내야 화면이 바뀌어요) */
+const MOCK_PAGES: Record<SituationKey, MockPage> = {
+  trade: { templateCode: "SECONDHAND_SAFE_PAY", title: "안전결제 안내", institutionName: "가상마켓 안전결제", screenCode: "PAY_CHECK", isSimulation: true },
+  delivery: { templateCode: "DELIVERY_ADDRESS", title: "배송지 재확인", institutionName: "가상택배", screenCode: "ADDRESS_CHECK", isSimulation: true },
+  loan: { templateCode: "LOAN_APPLY", title: "대출 한도 조회", institutionName: "가상캐피탈", screenCode: "LIMIT_CHECK", isSimulation: true },
+  job: { templateCode: "RECRUIT_APPLICANT", title: "지원자 확인", institutionName: "가상채용센터", screenCode: "APPLICANT_CHECK", isSimulation: true },
+  institution: { templateCode: "CASE_LOOKUP", title: "사건 조회", institutionName: "가상수사센터", screenCode: "CASE_CHECK", isSimulation: true },
+}
 const ASKS = /인증|비밀번호|코드|본인 확인|번호|계좌/
 
 function get(id: number) {
@@ -120,7 +127,7 @@ export const trainingsMock = withSave({
       phase: t.phase,
       fraudTypeCode: FRAUD_TYPE[t.scenario.key],
       scenario: { title: t.scenario.title, description: t.scenario.description },
-      mockPageTemplateCode: MOCK_PAGE.templateCode,
+      mockPageTemplateCode: MOCK_PAGES[t.scenario.key].templateCode,
       stateVersion: bump(t),
     }
   },
@@ -165,14 +172,15 @@ export const trainingsMock = withSave({
       recognizedActions,
       turnCount,
       shouldFinish: hasSafeEnding(text) || turnCount >= MAX_TRAINING_TURNS,
-      mockPage: turnCount === 2 ? MOCK_PAGE : null, // 두 번째 턴에 모의 페이지 링크를 보내는 흉내
+      mockPage: turnCount === 2 && t.scenario ? MOCK_PAGES[t.scenario.key] : null, // 두 번째 턴에 모의 페이지 링크를 보내는 흉내
       stateVersion: bump(t),
     }
   },
   async mockPage(id: number): Promise<MockPage> {
     await delay(200)
-    get(id)
-    return MOCK_PAGE
+    const t = get(id)
+    if (!t.scenario) throw errorFromCode(404, "MOCK_PAGE_NOT_FOUND")
+    return MOCK_PAGES[t.scenario.key]
   },
   async action(id: number, body: MockActionRequest): Promise<MockActionResponse> {
     await delay(100)
