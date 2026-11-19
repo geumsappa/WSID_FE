@@ -413,7 +413,11 @@ textarea:focus { border-color: #78aaed; background: #fff; outline: 3px solid rgb
 .setup-divider { display: flex; align-items: center; gap: 13px; margin: 4px 0 25px; color: #9aa5b4; font-size: 11px; }
 .setup-divider::before, .setup-divider::after { content: ''; flex: 1; height: 1px; background: #e7ebf1; }
 .simulation-setup .primary-button { margin-top: 20px; }
-.demo-disclosure { margin-top: 22px; padding: 13px 15px; color: #68768a; border-radius: 11px; background: #f6f8fc; font-size: 11px; line-height: 1.65; }
+.demo-disclosure { margin-top: 22px; padding: 16px 18px; display: flex; gap: 12px; align-items: flex-start; color: #5c4210; border: 1px solid #f2d38c; border-radius: 14px; background: #fff8e8; font-size: 13px; line-height: 1.65; }
+.demo-disclosure-icon { flex: none; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 11px; background: #ffe9b8; color: #a15c00; }
+.demo-disclosure strong { display: block; margin: 7px 0 6px; color: #7a4a00; font-size: 14px; font-weight: 800; }
+.demo-disclosure ul { margin: 0; padding-left: 17px; display: flex; flex-direction: column; gap: 3px; }
+.demo-disclosure b { color: #8f3d00; font-weight: 800; }
 .simulation-chat-input { padding: 12px 20px 19px; border-top: 1px solid #e7ecf2; background: #fff; }
 .simulation-chat-input .privacy { margin: 0 0 9px; padding: 0; background: transparent; font-size: 10px; }
 .simulation-chat-input > div:last-child { display: flex; gap: 9px; align-items: flex-end; }

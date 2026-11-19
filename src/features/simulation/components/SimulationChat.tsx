@@ -96,7 +96,6 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
           {sim.stage === "chat" && (
             <div className="simulation-chat-input">
               {/* 서버가 주는 빠른 답변 버튼(availableOptions)은 보여 주지 않아요: 사용자가 직접 판단해 입력하게 */}
-              <div className="privacy"><Icon name="lock" size={15} /><span>사진은 준비된 가상 자료만 보낼 수 있어요. 실제 신분증을 촬영하거나 첨부하지 마세요.</span></div>
               {sim.error && <p className="upload-error" role="alert">{sim.error}</p>}
               <div className="chat-input-row">
                 <textarea rows={1} maxLength={500} value={input} disabled={sim.typing}

@@ -23,7 +23,17 @@ export function SimulationPage({ sim }: { sim: Simulation }) {
       <div className="step-label"><span>2</span> 훈련 시나리오</div>
       <h2>{sim.scenario.title}</h2>
       <p>{sim.scenario.description}</p>
-      <div className="demo-disclosure">이 시나리오는 교육용 가상 상황입니다. 실제 금융기관이나 업체에서 보낸 연락이 아니며, 대화 중 상대가 개인정보를 요구할 수 있어요. 실제 값을 입력할 필요는 없습니다.</div>
+      <div className="demo-disclosure" role="note">
+        <span className="demo-disclosure-icon"><Icon name="alert" size={20}/></span>
+        <div>
+          <strong>훈련 시작 전에 꼭 확인하세요</strong>
+          <ul>
+            <li>이 시나리오는 <b>교육용 가상 상황</b>이에요. 실제 금융기관이나 업체에서 보낸 연락이 아니에요.</li>
+            <li>대화 중 상대가 <b>개인정보를 요구할 수 있어요.</b></li>
+            <li><b>실제 값은 입력하지 마세요.</b> 지어낸 값이나 "모르겠어요"로 답해도 충분해요.</li>
+          </ul>
+        </div>
+      </div>
       {sim.error && <p className="upload-error" role="alert">{sim.error}</p>}
       <button className="primary-button full" disabled={sim.typing} onClick={() => void sim.startTraining()}>{sim.typing ? "훈련을 시작하는 중..." : "대화 훈련 시작"} <Icon name="arrow" size={18}/></button>
       <button className="outline-button sim-later-button" onClick={sim.leave}>나중에 이어서 하기</button>
