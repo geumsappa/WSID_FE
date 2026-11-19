@@ -3,7 +3,7 @@ import { Icon } from "@/components/Icon"
 
 const FRAUD_LABEL: Record<string, string> = {
   SECONDHAND_TRADE: "중고거래",
-  SMISHING: "스미싱",
+  SMISHING: "택배·문자 스미싱",
   LOAN_FRAUD: "대출 사기",
   JOB_SCAM: "취업 사기",
   INSTITUTION_IMPERSONATION: "기관 사칭",
