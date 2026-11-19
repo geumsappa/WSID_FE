@@ -7,6 +7,13 @@ export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\
 /** true면 서버를 부르지 않고 api/mock 의 데모 응답을 돌려줍니다. 주소가 없으면 자동으로 true. */
 export const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true" || !API_BASE_URL
 
+/**
+ * (개발용) mock 모드에서 긴급대응 '질문'을 로컬 AI 서버(FastAPI)에 직접 보내 Gemini 답변을 확인할 때만 써요.
+ * 예: http://localhost:8000 . 비어 있으면 지금처럼 프론트 규칙 답변을 써요.
+ * 실제 서비스에서는 프론트가 AI 서버를 부르지 않고 Spring 이 불러요. 운영 설정에는 넣지 마세요.
+ */
+export const AI_DEV_URL = USE_MOCK ? (import.meta.env.VITE_AI_DEV_URL ?? "").replace(/\/$/, "") : ""
+
 /** 요청별 제한 시간(ms). 구조 문서 7장: AI 대화 25초, 시나리오 생성 60초 */
 export const TIMEOUT = {
   default: 15_000,

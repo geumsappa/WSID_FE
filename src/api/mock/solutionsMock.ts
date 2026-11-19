@@ -3,20 +3,22 @@ import { maskSensitive } from "@/lib/privacy"
 import { detectEmergencyKeys } from "@/features/emergency/lib/detectEmergency"
 import type { EmergencyKey } from "@/features/emergency/types"
 import { errorFromCode } from "../client"
+import { AI_DEV_URL, TIMEOUT } from "../config"
 import type {
   AssistantReply, ChatMessage, CompleteSolutionResponse, FactKey, NextQuestion, SolutionCard, SolutionDetail, SolutionFacts,
   SolutionMessageRequest, SolutionMessageResponse, StartSolutionRequest, StartSolutionResponse,
   UpdateFactsRequest, UpdateFactsResponse, YesNoUnknown,
 } from "../types"
 import { checkVersion, delay, nextId, persistedMap, withSave } from "./delay"
-import { toCard } from "./guidesMock"
+import { CARD_CODE, institutionList, toCard } from "./guidesMock"
+import { answerQuestion } from "@/features/emergency/lib/composeReply"
 
 type MockSolution = {
   id: number; status: "ACTIVE" | "COMPLETED"; stateVersion: number; facts: SolutionFacts; extra: EmergencyKey[]; messages: ChatMessage[]
   /** 사용자가 직접 답하거나 고친 항목. "모름"으로 답한 항목도 여기 들어가서 다시 묻지 않아요 (백엔드 공유 11/17) */
   settled?: FactKey[]
   /** 답을 기다리는 AI 추가 질문 */
-  pending?: { questionId: string; content: string; factKey: FactKey } | null
+  pending?: { questionId: string; content: string; factKey: FactKey; question: string } | null
   qSeq?: number
   /** 마지막 AI 처리 결과 (SOL-02 복원용) */
   lastAssistant?: AssistantReply | null
@@ -57,15 +59,20 @@ function applyText(s: MockSolution, raw: string) {
 }
 /** 사실 조합으로 카드 계산 (긴급 카드가 먼저) */
 function cards(s: MockSolution): SolutionCard[] {
+  // 중고거래(재화·용역 사기)는 통신사기피해환급법의 지급정지·환급 대상이 아니라서 '돈을 송금했어요'(지급정지 안내) 카드를 빼고,
+  // 송금했다면 중고거래 카드를 긴급으로 올려요. (실제 서비스에서는 Spring 대응 규칙에서 같은 처리가 필요해요)
+  const secondhand = s.extra.includes("trade")
   const keys: EmergencyKey[] = [
-    ...(s.facts.transferredMoney === "YES" ? ["transfer" as const] : []),
+    ...(secondhand ? ["trade" as const] : []),
+    ...(s.facts.transferredMoney === "YES" && !secondhand ? ["transfer" as const] : []),
     ...(s.facts.sharedInformation === "YES" ? ["privacy" as const] : []),
     ...(s.facts.installedApp === "YES" ? ["app" as const] : []),
-    ...s.extra,
+    ...s.extra.filter((k) => k !== "trade"),
   ]
   return (keys.length ? keys : ["custom" as const]).map((k) => {
     const c = toCard(k)
-    return { code: c.code, priority: c.priority, title: c.title, institutionCodes: c.institutionCodes }
+    const priority = k === "trade" && s.facts.transferredMoney === "YES" ? "URGENT" : c.priority
+    return { code: c.code, priority, title: c.title, institutionCodes: c.institutionCodes }
   })
 }
 function settle(s: MockSolution, key: FactKey) {
@@ -85,19 +92,6 @@ const CLARIFY: Record<FactKey, string> = {
   installedApp: "혹시 상대가 알려 준 앱을 이미 설치하셨나요?",
   contactContinues: "지금도 상대에게서 연락이 오고 있나요?",
 }
-const ANSWER_YES: Record<FactKey, string> = {
-  transferredMoney: "지금 바로 송금한 은행 고객센터(또는 112)에 전화해 지급정지를 요청하세요. 시간이 지날수록 돌려받기 어려워져요. 이체 내역 화면을 캡처해 두면 신고할 때 도움이 돼요.",
-  sharedInformation: "알려 준 정보와 연결된 계정의 비밀번호를 먼저 바꾸고, 금융감독원 '개인정보 노출자 사고예방 시스템'에 등록하세요. 신분증 정보를 줬다면 명의도용 방지 서비스도 신청해 두세요.",
-  installedApp: "휴대폰을 비행기 모드로 바꾸고, 설치한 앱을 삭제하세요. 원격 제어 앱일 수 있으니 그 휴대폰으로는 금융 앱을 쓰지 말고, 다른 기기로 은행에 연락해 계좌 거래를 확인하세요.",
-  contactContinues: "더 이상 답하지 말고 번호를 차단하세요. 대화 내용은 지우지 말고 캡처해 두면 신고할 때 증거가 돼요.",
-}
-const ANSWER_NO: Record<FactKey, string> = {
-  transferredMoney: "아직 돈을 보내지 않았다면 다행이에요. 어떤 이유로든 송금 요구에는 응하지 말고, 상대가 말한 기관에 공식 번호로 직접 확인하세요.",
-  sharedInformation: "정보를 알려 주지 않았다면 큰 피해는 막았어요. 앞으로도 인증번호·비밀번호는 누구에게도 알려 주지 마세요.",
-  installedApp: "앱을 설치하지 않았다면 그대로 두세요. 받은 링크나 파일은 열지 말고 삭제하는 게 안전해요.",
-  contactContinues: "연락이 끊겼다면 다시 연락이 와도 응하지 마세요. 받은 문자·통화 기록은 신고에 쓸 수 있게 남겨 두세요.",
-}
-const GENERAL_ANSWER = "지금 상황에서는 위 대응 카드의 '긴급' 항목부터 진행하는 게 가장 안전해요. 판단이 어렵다면 112나 금융감독원(1332)에 전화해 상담받으세요."
 /** 질문이 어떤 사실과 관련 있는지 대충 고르는 규칙 (mock 전용) */
 const TOPIC: [FactKey, RegExp][] = [
   ["transferredMoney", /돈|송금|이체|입금|계좌/],
@@ -110,30 +104,89 @@ const CARD_OF: Record<FactKey, EmergencyKey> = { transferredMoney: "transfer", s
 const reply = (status: AssistantReply["status"], answer: string | null = null, refs: FactKey[] = [], questionId: string | null = null): AssistantReply =>
   ({ status, questionId, answer, referenceCodes: refs.map((f) => toCard(CARD_OF[f]).code) })
 
-/** 질문(QUESTION) 처리: 관련 사실을 아직 모르면 되묻고, 알면 바로 답해요 */
+/**
+ * 지금 상황(사실·카드)에 맞춰 질문에 답해요. 화면 규칙 답변(composeReply)과 같은 의도별 답을 써서
+ * "뭘 해야 돼요?", "신고했어요", "돌려받을 수 있어요?", "증거는?" 등 어떤 질문에도 상황에 맞는 답이 나와요.
+ * 실제로는 Python AI(RAG)가 공식 자료로 답을 만들고 Spring이 검증해요.
+ */
+function situationAnswer(s: MockSolution, text: string): AssistantReply {
+  const list = cards(s)
+  const keyOf = Object.fromEntries(Object.entries(CARD_CODE).map(([k, code]) => [code, k as EmergencyKey]))
+  const details = Object.fromEntries(list.map((c) => [c.code, toCard(keyOf[c.code])]))
+  const answer = answerQuestion(text, { facts: { ...s.facts }, cards: list, nextQuestion: null }, details, institutionList())
+  return { status: "ANSWERED", questionId: null, answer, referenceCodes: list.slice(0, 2).map((c) => c.code) }
+}
+/** 질문(QUESTION) 처리: 답에 꼭 필요한 사실을 아직 모르면 되묻고, 알면 상황에 맞게 답해요 */
 function assistQuestion(s: MockSolution, text: string): AssistantReply {
   if (/주식|코인|투자|대출.{0,4}추천/.test(text)) return reply("UNABLE_TO_ANSWER")
   const topics = TOPIC.filter(([, re]) => re.test(text)).map(([f]) => f)
-  const unknown = topics.find((f) => s.facts[f] === "UNKNOWN")
+  const unknown = topics.find((f) => s.facts[f] === "UNKNOWN" && !(s.settled ?? []).includes(f))
   if (unknown) {
     s.qSeq = (s.qSeq ?? 0) + 1
-    s.pending = { questionId: `q-${s.id}-${s.qSeq}`, content: CLARIFY[unknown], factKey: unknown }
+    s.pending = { questionId: `q-${s.id}-${s.qSeq}`, content: CLARIFY[unknown], factKey: unknown, question: text }
     return reply("NEED_USER_INPUT", null, [], s.pending.questionId)
   }
-  const known = topics.find((f) => s.facts[f] !== "UNKNOWN")
-  return known ? reply("ANSWERED", (s.facts[known] === "YES" ? ANSWER_YES : ANSWER_NO)[known], [known]) : reply("ANSWERED", GENERAL_ANSWER)
+  return situationAnswer(s, text)
 }
-/** 추가 질문에 대한 답(CLARIFICATION_ANSWER) 처리: 답으로 사실을 채우고 그에 맞게 답해요 */
+/** 추가 질문에 대한 답(CLARIFICATION_ANSWER) 처리: 답으로 사실을 채운 뒤, 원래 질문에 상황에 맞게 답해요 */
 function assistAnswer(s: MockSolution, questionId: string, text: string): AssistantReply {
   const p = s.pending
   if (!p || p.questionId !== questionId) throw errorFromCode(409, "QUESTION_NOT_FOUND")
   s.pending = null
   const no = /아니|안 ?했|않았|없어|안 ?보냈|안 ?깔/.test(text)
   const yes = !no && /네|예|응|맞|했|보냈|깔았|설치/.test(text)
-  if (!yes && !no) return reply("ANSWERED", `정확히 기억나지 않아도 괜찮아요. ${GENERAL_ANSWER}`)
-  s.facts[p.factKey] = yes ? "YES" : "NO"
-  settle(s, p.factKey)
-  return reply("ANSWERED", (yes ? ANSWER_YES : ANSWER_NO)[p.factKey], [p.factKey])
+  if (yes || no) {
+    s.facts[p.factKey] = yes ? "YES" : "NO"
+    settle(s, p.factKey)
+  }
+  const ans = situationAnswer(s, p.question)
+  return !yes && !no ? { ...ans, answer: `정확히 기억나지 않아도 괜찮아요. ${ans.answer}` } : ans
+}
+/** 화면에 보이는 대응 카드로 사기 유형을 짐작해 AI 서버에 넘겨요 (중고거래면 환급 안내를 막으려고) */
+function fraudTypeOf(s: MockSolution): string | null {
+  if (s.extra.includes("trade")) return "SECONDHAND_TRADE"
+  if (s.extra.includes("call")) return "INSTITUTION_IMPERSONATION"
+  if (s.extra.includes("link")) return "SMISHING"
+  return null
+}
+/**
+ * (개발용) VITE_AI_DEV_URL 이 있으면 질문을 로컬 AI 서버(/internal/ai/solutions/answer)로 보내 Gemini 답을 받아요.
+ * 실패하거나 설정이 없으면 null → 프론트 규칙 답변으로 대신해요.
+ */
+async function devAiAnswer(s: MockSolution, question: string): Promise<AssistantReply | null> {
+  if (!AI_DEV_URL) return null
+  try {
+    const res = await fetch(`${AI_DEV_URL}/internal/ai/solutions/answer`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // 최근 대화 6개를 같이 보내서 "둘 다 알려줘" 같은 질문도 앞 대화를 보고 이해하게 해요
+      body: JSON.stringify({
+        facts: { ...s.facts }, question, fraudType: fraudTypeOf(s),
+        history: s.messages.slice(-6).map((m) => ({ role: m.sender === "USER" ? "USER" : "AI", content: m.content })).filter((m) => m.content),
+      }),
+      signal: AbortSignal.timeout(TIMEOUT.aiTurn),
+    })
+    if (!res.ok) {
+      console.warn(`[AI 서버] ${res.status} → 프론트 규칙 답변으로 대신해요`)
+      return null
+    }
+    const r = (await res.json()) as { status: AssistantReply["status"]; answer: string | null; clarifyFactKey: FactKey | null; clarifyQuestion: string | null }
+    console.info("[AI 서버] Gemini 답변", r)
+    if (r.status === "NEED_USER_INPUT" && r.clarifyFactKey && r.clarifyQuestion) {
+      s.qSeq = (s.qSeq ?? 0) + 1
+      s.pending = { questionId: `q-${s.id}-${s.qSeq}`, content: r.clarifyQuestion, factKey: r.clarifyFactKey, question }
+      return reply("NEED_USER_INPUT", null, [], s.pending.questionId)
+    }
+    if (r.status === "UNABLE_TO_ANSWER") return reply("UNABLE_TO_ANSWER")
+    if (r.status === "ANSWERED" && r.answer) {
+      // AI 근거 코드(REF_...)는 화면 카드 코드가 아니라서, 지금 보이는 대응 카드를 근거로 표시해요
+      return { status: "ANSWERED", questionId: null, answer: r.answer, referenceCodes: cards(s).slice(0, 2).map((c) => c.code) }
+    }
+    return null
+  } catch (e) {
+    console.warn("[AI 서버] 연결 실패 → 프론트 규칙 답변으로 대신해요", e)
+    return null
+  }
 }
 /** AI 추가 질문이 있으면 그게 nextQuestion이에요(질문은 항상 하나). 없으면 사실 확인 질문 */
 const questionOf = (s: MockSolution): NextQuestion | null => s.pending ? { factKey: null, content: s.pending.content, options: [] } : nextQuestion(s)
@@ -170,8 +223,14 @@ export const solutionsMock = withSave({
     const masked = maskSensitive(body.content.trim())
     if (/실패 ?테스트/.test(masked)) throw errorFromCode(503, "AI_SERVICE_UNAVAILABLE") // 재시도 흐름 확인용
     let assistant: AssistantReply | null = null
-    if (body.purpose === "CLARIFICATION_ANSWER") assistant = assistAnswer(s, body.questionId, masked)
-    else if (body.purpose === "QUESTION") assistant = assistQuestion(s, masked)
+    if (body.purpose === "CLARIFICATION_ANSWER") {
+      const original = s.pending?.question
+      const local = assistAnswer(s, body.questionId, masked) // 답으로 사실을 채우고 규칙 답변도 만들어 둠
+      assistant = (original ? await devAiAnswer(s, original) : null) ?? local
+    } else if (body.purpose === "QUESTION") {
+      const unableLocally = /주식|코인|투자|대출.{0,4}추천/.test(masked)
+      assistant = (unableLocally ? null : await devAiAnswer(s, masked)) ?? assistQuestion(s, masked)
+    }
     else applyText(s, masked) // FACT_UPDATE(또는 purpose 없음): 지금 방식
     s.messages.push({ sender: "USER", inputKind: "TEXT", content: masked })
     const aiText = assistant?.status === "NEED_USER_INPUT" ? s.pending?.content : assistant?.answer

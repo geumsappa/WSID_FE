@@ -11,8 +11,14 @@ import type { Emergency, InputMode } from "../hooks/useEmergency"
 
 const FACT_LABEL: Record<FactKey, string> = { transferredMoney: "돈을 보냈나요?", sharedInformation: "정보를 알려 줬나요?", installedApp: "앱을 설치했나요?", contactContinues: "연락이 계속되나요?" }
 const ANSWER_LABEL: Record<YesNoUnknown, string> = { YES: "예", NO: "아니오", UNKNOWN: "모름" }
+/**
+ * '파악한 피해 사실' 패널(드롭다운 4개)을 보여 줄지. 기능(SOL-04 정정, AI가 파악한 사실)은 그대로 두고 화면에서만 숨겨요.
+ * 다시 보이게 하려면 true 로 바꾸면 돼요. 사실 확인은 채팅의 [예][아니오][모름] 말풍선으로 받아요.
+ */
+const SHOW_FACT_PANEL = false
 const KIND_LABEL = { clarification: "어떡하지 도우미 · 추가 질문", answer: "어떡하지 도우미 · AI 답변", unable: "어떡하지 도우미" } as const
 const PLACEHOLDER: Record<InputMode, string> = {
+  auto: "궁금한 점을 묻거나 새로 생긴 상황을 알려 주세요. 예) 앱도 깔았는데 어떻게 해요?",
   question: "궁금한 점을 물어보세요. 예) 앱을 깔았는데 어떻게 해야 하나요?",
   fact: "새로 생긴 상황을 설명해 주세요. 대응 카드가 갱신돼요.",
   answer: "도우미의 질문에 답해 주세요.",
@@ -24,12 +30,8 @@ export function EmergencyChat({ em }: { em: Emergency }) {
   const [uploadError, setUploadError] = useState("")
   const [dragging, setDragging] = useState(false)
   const [pendingImages, setPendingImages] = useState<UploadedImage[]>([])
-  const [mode, setMode] = useState<InputMode>("question")
-  // AI가 추가 질문을 하면 입력창을 "답하기"로, 질문이 끝나면 다시 "질문하기"로 돌려요.
-  const clarificationId = em.clarification?.questionId
-  useEffect(() => {
-    setMode((m) => clarificationId ? "answer" : m === "answer" ? "question" : m)
-  }, [clarificationId])
+  // 질문인지 상황 설명인지는 보낸 글을 보고 자동으로 정해요(useEmergency.decideModes). 도우미가 되물으면 답하기 안내만 보여요.
+  const mode: InputMode = em.clarification ? "answer" : "auto"
   const fileRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
   const count = useRef(em.messages.length)
@@ -47,7 +49,7 @@ export function EmergencyChat({ em }: { em: Emergency }) {
   }, [em.messages, em.typing])
   const submit = () => {
     if ((!input.trim() && !pendingImages.length) || em.typing) return
-    void em.send(input, pendingImages, mode)
+    void em.send(input, pendingImages, "auto")
     setInput(""); setPendingImages([]); setUploadError("")
   }
   const institutionOf = (code: string) => em.institutions.find((i) => i.code === code)
@@ -75,9 +77,10 @@ export function EmergencyChat({ em }: { em: Emergency }) {
         <div className="emergency-conversation">
           <div className="assistant-header"><span><Icon name="shield" size={23} /></span><div><h2>어떡하지 대응 도우미</h2><p><i /> {USE_MOCK ? "mock 모드 (서버 없음)" : "AI 분석 연결됨"}</p></div></div>
           <div className="emergency-messages" ref={scrollRef} aria-live="polite">
-            {first.map(renderMessage)}
+            {first.slice(0, 1).map(renderMessage)}
+            {/* 대응 카드를 먼저(화면 폭 가득), 그 아래에 도우미 첫 안내 */}
             <div className="analysis-result-stack">
-              {em.facts && (
+              {SHOW_FACT_PANEL && em.facts && (
                 <section className="result-card summary-result">
                   <div className="result-card-heading"><span><Icon name="search" size={21} /></span><div><small>입력 내용 확인</small><h3>파악한 피해 사실</h3></div></div>
                   <p>잘못 파악된 항목이 있으면 눌러서 바꿔 주세요. 대응 카드가 바로 갱신돼요.</p>
@@ -93,12 +96,6 @@ export function EmergencyChat({ em }: { em: Emergency }) {
                   <div className="uncertainty-note">입력 정보만으로 실제 사기 여부를 확정할 수 없어요.</div>
                 </section>
               )}
-              {em.nextQuestion && !em.typing && (
-                <section className="result-card">
-                  <div className="result-card-heading"><span><Icon name="chat" size={21} /></span><div><small>추가 확인</small><h3>{em.nextQuestion.content}</h3></div></div>
-                  <div className="interview-choices" style={{ marginTop: 4 }}>{(em.nextQuestion.options ?? ["YES", "NO", "UNKNOWN"]).map((v) => <button key={v} type="button" onClick={() => void em.answer(em.nextQuestion!, v)}>{ANSWER_LABEL[v]}</button>)}</div>
-                </section>
-              )}
               <section className="result-card action-result">
                 <div className="result-card-heading"><span><Icon name="check" size={21} /></span><div><small>안전 행동 안내</small><h3>지금 필요한 대응 방법</h3></div></div>
                 {em.cards.length === 0 && <p>대응 카드를 준비하고 있어요.</p>}
@@ -107,7 +104,7 @@ export function EmergencyChat({ em }: { em: Emergency }) {
                   const actions = toTextItems(d?.actions)
                   const materials = toTextItems(d?.requiredMaterials)
                   const sources = toLinkItems(d?.sourceReferences)
-                  const urgent = (d?.priority ?? c.priority) === "URGENT"
+                  const urgent = (c.priority ?? d?.priority) === "URGENT" // 상담 응답의 우선순위가 먼저 (중고거래+송금이면 긴급)
                   return (
                     <div key={c.code} style={{ marginTop: gi ? 22 : 4 }}>
                       <h4 style={{ margin: "0 0 10px", display: "flex", alignItems: "center", gap: 8 }}>
@@ -146,7 +143,21 @@ export function EmergencyChat({ em }: { em: Emergency }) {
                 </div>
               </div>
             )}
+            {first.slice(1).map(renderMessage)}
             {rest.map(renderMessage)}
+            {em.nextQuestion && !em.typing && !em.clarification && !em.completed && (
+              // 사실 확인 질문(송금·정보·앱·연락)은 카드 대신 채팅 말풍선 + 빠른 답 버튼으로 물어봐요
+              <div className="prep-message assistant">
+                <span><Icon name="shield" size={18} /></span>
+                <div>
+                  <small>어떡하지 도우미 · 확인 질문</small>
+                  <p className="assist-clarification">{em.nextQuestion.content}</p>
+                  <div className="interview-choices" style={{ marginTop: 10 }}>
+                    {(em.nextQuestion.options ?? ["YES", "NO", "UNKNOWN"]).map((v) => <button key={v} type="button" onClick={() => void em.answer(em.nextQuestion!, v)}>{ANSWER_LABEL[v]}</button>)}
+                  </div>
+                </div>
+              </div>
+            )}
             {em.typing && <Typing />}
             {em.completed && <div className="complete-card"><span><Icon name="check" size={26} /></span><h3>상담을 마쳤어요.</h3><p>안내한 조치를 진행해 주세요. 새 상황이 생기면 다시 시작할 수 있어요.</p></div>}
           </div>
@@ -159,14 +170,9 @@ export function EmergencyChat({ em }: { em: Emergency }) {
             {pendingImages.length > 0 && <div className="chat-attachments pending-photos"><span>전송할 사진: {pendingImages.length}장</span><EvidenceGallery images={pendingImages} onRemove={(id) => setPendingImages((items) => items.filter((i) => i.id !== id))} /></div>}
             {uploadError && <p className="upload-error" role="alert">{uploadError}</p>}
             {em.error && <p className="upload-error" role="alert">{em.error}{em.failed && <> <button type="button" className="assist-retry" disabled={em.typing} onClick={em.retry}>다시 보내기</button></>}</p>}
-            {em.clarification && mode === "answer"
-              ? <div className="assist-mode answering"><span><Icon name="chat" size={14} /> 도우미 질문에 답하는 중: <strong>{em.clarification.content}</strong></span><button type="button" onClick={() => setMode("question")}>새 질문으로 보내기</button>
-                  {em.clarification.options.length > 0 && <div className="assist-quick">{em.clarification.options.map((v) => <button key={v} type="button" disabled={em.typing} onClick={() => void em.send(ANSWER_LABEL[v], [], "answer")}>{ANSWER_LABEL[v]}</button>)}</div>}</div>
-              : <div className="assist-mode" role="radiogroup" aria-label="입력 종류">
-                  <button type="button" role="radio" aria-checked={mode === "question"} className={mode === "question" ? "active" : ""} onClick={() => setMode("question")}>질문하기</button>
-                  <button type="button" role="radio" aria-checked={mode === "fact"} className={mode === "fact" ? "active" : ""} onClick={() => setMode("fact")}>상황 추가 설명</button>
-                  {em.clarification && <button type="button" className="assist-back" onClick={() => setMode("answer")}>↩ 도우미 질문에 답하기</button>}
-                </div>}
+            {em.clarification &&
+              <div className="assist-mode answering"><span><Icon name="chat" size={14} /> 도우미 질문에 답하는 중: <strong>{em.clarification.content}</strong></span>
+                {em.clarification.options.length > 0 && <div className="assist-quick">{em.clarification.options.map((v) => <button key={v} type="button" disabled={em.typing} onClick={() => void em.send(ANSWER_LABEL[v], [], "answer")}>{ANSWER_LABEL[v]}</button>)}</div>}</div>}
             <div className="privacy"><Icon name="lock" size={15} /><span>민감한 개인정보는 입력하지 마세요. 입력해도 가려서 전송돼요.</span></div>
             <div className="chat-input-row">
               <button type="button" className="chat-attach-button" title="사진 첨부" aria-label="사진 첨부" onClick={() => fileRef.current?.click()}><Icon name="image" size={20} /></button>
