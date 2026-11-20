@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { USE_MOCK } from "@/api"
 import { Icon } from "@/components/Icon"
-import { Typing } from "@/components/Typing"
 import type { Simulation } from "../hooks/useSimulation"
 import { MockPhotoPreview } from "./MockPhotoPreview"
 import { containsMockLink, TrainingMessageContent } from "./TrainingMessageContent"
@@ -82,7 +81,16 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
                 </div>
               </div>
             ))}
-            {sim.typing && <Typing />}
+            {/* 답장 기다리는 중: 상대방 말풍선과 같은 자리·모양(아바타, 이름, 말풍선)으로 점 세 개를 보여 줘요 */}
+            {sim.typing && (
+              <div className="message-row contact" role="status" aria-label={`${senderName}이(가) 답장을 쓰고 있어요`}>
+                <span className="avatar"><Icon name="chat" size={18} /></span>
+                <div>
+                  <span className="sender">{senderName}</span>
+                  <div className="typing-dots"><i /><i /><i /></div>
+                </div>
+              </div>
+            )}
             {sim.stage === "finishing" && (
               <div className="complete-card"><span><Icon name="refresh" size={26} /></span><h3>결과를 분석하고 있어요.</h3><p>대화 내용을 바탕으로 리포트를 만드는 중이에요. 잠시만 기다려 주세요.</p></div>
             )}

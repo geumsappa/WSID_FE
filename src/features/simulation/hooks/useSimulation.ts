@@ -331,7 +331,14 @@ export function useSimulation(
     try {
       const res = await inOrder(() => trainingApi.message(id, { stateVersion: versionRef.current, ...body }))
       versionRef.current = res.stateVersion
-      setChatLines((lines) => [...lines, { ...toLine(res.reply), mockPage: res.mockPage ?? undefined }])
+      // 서버(AI)가 이름·주소 등을 찾아 가린 문장을 주면, 내 말풍선을 그 문장으로 바꿔요 (원문은 화면에 남기지 않음)
+      const masked = res.maskedInput?.trim()
+      setChatLines((lines) => [
+        ...lines.map((l) => l.key === mine.key && masked
+          ? { ...l, text: masked, note: "입력한 개인정보는 화면에 남기지 않고 가렸어요." }
+          : l),
+        { ...toLine(res.reply), mockPage: res.mockPage ?? undefined },
+      ])
       setTurnCount(res.turnCount)
       setShouldFinish(res.shouldFinish)
       return true
