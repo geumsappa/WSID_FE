@@ -168,7 +168,9 @@ function fraudTypeOf(s: MockSolution): string | null {
   return null
 }
 /**
- * (개발용) VITE_AI_DEV_URL 이 있으면 질문을 로컬 AI 서버(/internal/ai/solutions/answer)로 보내 Gemini 답을 받아요.
+ * (개발용) VITE_AI_DEV_URL 이 있으면 질문을 로컬 AI 쪽(/internal/ai/solutions/answer)으로 보내 AI 답을 받아요.
+ * AI 레포의 `python scripts/try_assist.py --serve`(Spring 대역, 기본 http://127.0.0.1:8001)를 가리키면
+ * 실제 서비스와 같은 /assist 흐름(근거 승인 → 답변)으로 답해요.
  * 실패하거나 설정이 없으면 null → 프론트 규칙 답변으로 대신해요.
  */
 async function devAiAnswer(s: MockSolution, question: string): Promise<AssistantReply | null> {
@@ -182,14 +184,15 @@ async function devAiAnswer(s: MockSolution, question: string): Promise<Assistant
         facts: { ...s.facts }, question, fraudType: fraudTypeOf(s),
         history: s.messages.slice(-6).map((m) => ({ role: m.sender === "USER" ? "USER" : "AI", content: m.content })).filter((m) => m.content),
       }),
-      signal: AbortSignal.timeout(TIMEOUT.aiTurn),
+      // 개발 대역(try_assist --serve)은 Spring처럼 PLAN·ANSWER 두 번을 불러서, 실제 서비스보다 오래 기다려요
+      signal: AbortSignal.timeout(Math.max(TIMEOUT.aiTurn, 45_000)),
     })
     if (!res.ok) {
       console.warn(`[AI 서버] ${res.status} → 프론트 규칙 답변으로 대신해요`)
       return null
     }
     const r = (await res.json()) as { status: AssistantReply["status"]; answer: string | null; clarifyFactKey: FactKey | null; clarifyQuestion: string | null }
-    console.info("[AI 서버] Gemini 답변", r)
+    console.info("[AI 서버] AI 답변", r)
     if (r.status === "NEED_USER_INPUT" && r.clarifyFactKey && r.clarifyQuestion) {
       s.qSeq = (s.qSeq ?? 0) + 1
       s.pending = { questionId: `q-${s.id}-${s.qSeq}`, content: r.clarifyQuestion, factKey: r.clarifyFactKey, question }

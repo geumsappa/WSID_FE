@@ -22,6 +22,9 @@ const CHOICE_TEXT: Record<FactKey, Record<YesNoUnknown, string>> = {
 }
 const SESSION_KEY = "wsid-solution-id" // 새로고침 후 상담을 이어 가려고 상담 번호만 보관(탭을 닫으면 사라짐)
 const UNABLE_TEXT = "이 질문에는 정확히 답변드리기 어려워요. 위 대응 카드를 먼저 진행하시고, 아래 공식 기관에 직접 상담하시는 것이 가장 안전해요."
+/** "둘 다", "그거"처럼 앞 답을 가리키는 짧은 질문. AI가 가리키는 대상을 못 정해 답을 못 하면, 다시 물어 달라고 안내해요 */
+const REFERENTIAL_ASK = /^.{0,15}(둘 ?다|셋 ?다|두 ?(개|가지)|그거|그것|그중|그 중|각각|전부|다 알려)/
+const AMBIGUOUS_TEXT = "어떤 걸 말씀하시는지 정확히 알아듣지 못했어요. '배상명령이랑 민사소송 알려줘'처럼 궁금한 걸 이름으로 물어봐 주시면 바로 답할게요."
 
 /** 입력창 모드. question: 새 질문 / fact: 상황 추가 설명 / answer: AI 추가 질문에 답하기 */
 export type InputMode = "auto" | "question" | "fact" | "answer"
@@ -267,7 +270,10 @@ export function useEmergency(go: (next: Page) => void) {
     if (q) { say(q.content, "clarification"); return }
     if (a.referenceCodes?.length) void fetchCards(a.referenceCodes) // 근거 카드 제목을 보여 주려고
     if (a.status === "ANSWERED" && a.answer) say(a.answer, "answer", a.referenceCodes)
-    else say(UNABLE_TEXT, "unable")
+    else setMessages((m) => {
+      const last = [...m].reverse().find((x) => x.from === "user")?.text ?? ""
+      return [...m, { key: key(), from: "assistant", text: REFERENTIAL_ASK.test(last.trim()) ? AMBIGUOUS_TEXT : UNABLE_TEXT, kind: "unable" }]
+    })
   }
   /** SOL-03 글 메시지 전송(공통). 실패하면 본문·requestId를 보관해 "다시 보내기"를 띄워요 */
   const postText = async (body: TextBody, requestId: RequestId, silent = false): Promise<boolean> => {
