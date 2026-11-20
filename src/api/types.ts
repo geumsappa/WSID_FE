@@ -108,6 +108,8 @@ export type TrainingMessageResponse = {
   shouldFinish: boolean
   mockPage: MockPage | null
   stateVersion: number
+  /** 이름·주소처럼 규칙으로 못 가리는 개인정보를 AI가 가린 내 메시지 (예: "[이름, 주소 입력함]"). 가릴 게 없으면 null/없음 */
+  maskedInput?: string | null
 }
 
 export type MockPage = { templateCode: string; title: string; institutionName: string; screenCode: string; isSimulation: boolean }
