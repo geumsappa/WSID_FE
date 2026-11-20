@@ -88,15 +88,15 @@ export const MOCK_TEMPLATES: Record<string, MockTemplate> = {
   },
   SECONDHAND_SAFE_PAY: {
     service: "SAFE PAYMENT", nav: "안전결제", kicker: "SAFE PAYMENT",
-    title: "안전결제 확인", lead: "판매자가 요청한 안전결제를 진행하려면 구매자 정보를 확인해 주세요.",
-    section: "구매자 정보 확인", sectionDesc: "결제 진행을 위해 아래 정보를 입력해 주세요.",
+    title: "안전결제 확인", lead: "안전결제로 거래를 진행하려면 거래자 정보와 정산 계좌를 확인해 주세요.",
+    section: "거래자 정보 확인", sectionDesc: "결제·정산 진행을 위해 아래 정보를 입력해 주세요.",
     fields: [
-      { label: "구매자 이름", placeholder: "이름을 입력해 주세요" },
+      { label: "이름", placeholder: "이름을 입력해 주세요" },
       { label: "휴대폰 번호", placeholder: "휴대폰 번호를 입력해 주세요", type: "tel" },
-      { label: "입금 확인 번호", placeholder: "안내받은 확인 번호를 입력해 주세요", maxLength: 30 },
+      { label: "정산 받을 계좌번호", placeholder: "은행명과 계좌번호를 입력해 주세요", maxLength: 40 },
     ],
     submit: "안전결제 진행",
-    steps: [{ title: "구매자 확인", desc: "결제 정보 확인" }, NEXT_STEP],
+    steps: [{ title: "거래자 확인", desc: "결제·정산 정보 확인" }, NEXT_STEP],
     submitted: "안전결제 요청이 접수되었습니다.",
   },
   CASE_LOOKUP: {
