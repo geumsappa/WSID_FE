@@ -14,6 +14,43 @@ import { situationGuides } from "../data/situationGuides"
 import { CHECK_LABEL, CHECK_ORDER } from "../lib/composeReply"
 import type { SolutionFacts } from "@/api"
 
+/**
+ * 도우미의 긴 글을 읽기 쉽게: 첫 문장(답)은 위에, 나머지 할 일은 번호 목록으로.
+ * - AI가 줄바꿈 + "1. " 목록으로 주면 그대로 목록으로
+ * - "1) ... 2) ..."처럼 한 줄에 이어 쓴 목록도 나눠요
+ * - 그 밖에 세 문장 이상이면 첫 문장 뒤를 문장별 목록으로
+ */
+function splitAnswer(text: string): { lead: string; items: string[] } {
+  const lines = text.split(/\n+/).map((l) => l.trim()).filter(Boolean)
+  const numbered = /^\d+[.)]\s*/
+  if (lines.length > 1 && lines.slice(1).some((l) => numbered.test(l))) {
+    return { lead: lines[0], items: lines.slice(1).map((l) => l.replace(numbered, "")) }
+  }
+  const flat = lines.join(" ")
+  const inline = flat.split(/\s(?=\d\)\s)/)
+  if (inline.length >= 3) return { lead: inline[0], items: inline.slice(1).map((l) => l.replace(numbered, "")) }
+  const sentences = flat.split(/(?<=[.!?])\s+/).filter(Boolean)
+  if (sentences.length >= 3) return { lead: sentences[0], items: sentences.slice(1) }
+  return { lead: flat, items: [] }
+}
+
+function MessageText({ text, className, structured }: { text: string; className?: string; structured: boolean }) {
+  // 말풍선 모양은 <p>에 걸려 있어서, 목록도 <p> 안에서 줄을 나눠 보여 줘요
+  const { lead, items } = structured ? splitAnswer(text) : { lead: text, items: [] as string[] }
+  if (!items.length) return <p className={className}>{text}</p>
+  return (
+    <p className={className}>
+      <span style={{ display: "block", fontWeight: 600 }}>{lead}</span>
+      {items.map((item, i) => (
+        <span key={i} style={{ display: "flex", gap: 8, marginTop: 6, lineHeight: 1.6 }}>
+          <span style={{ flex: "none", minWidth: 18, color: "#1769e0", fontWeight: 700 }}>{i + 1}.</span>
+          <span>{item}</span>
+        </span>
+      ))}
+    </p>
+  )
+}
+
 /** 사실 확인을 [예/아니오/모름] 네 번 대신 '있었던 일 모두 고르기' 한 번으로 물어요. false면 예전 방식 */
 const USE_CHECKLIST = true
 
@@ -133,7 +170,9 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
       {m.from === "assistant" && <span><Icon name="shield" size={18} /></span>}
       <div>
         <small>{m.from === "assistant" ? (m.kind ? KIND_LABEL[m.kind] : "어떡하지 도우미") : "나"}</small>
-        {m.text && <p className={m.kind ? `assist-${m.kind}` : undefined}>{m.text}</p>}
+        {m.text && (m.from === "assistant"
+          ? <MessageText text={m.text} className={m.kind ? `assist-${m.kind}` : undefined} structured={m.kind === "answer" || /\n1\. /.test(m.text)} />
+          : <p className={m.kind ? `assist-${m.kind}` : undefined}>{m.text}</p>)}
         {m.references && <div className="assist-refs">근거: {m.references.map((code) => em.cardDetails[code]?.title ?? em.cards.find((c) => c.code === code)?.title ?? code).join(" · ")}</div>}
         {m.images && m.images.length > 0 && <div className="sent-photo-gallery"><EvidenceGallery images={m.images} /></div>}
       </div>

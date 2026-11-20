@@ -231,9 +231,15 @@ export function composeReply({ kind, prev, next, details, institutions, userText
   const change = describeChange(prev, next, details, fixedGuide)
   const parts: string[] = []
   if (kind === "start") {
-    parts.push("말씀해 주신 내용으로 지금 상황을 정리했어요.")
-    parts.push(...change.filter((l) => !l.startsWith("이어서")).map((l) => l.replace("대응을 추가했어요.", "대응 방법을 준비했어요.")))
-    if (!change.length) parts.push("아직 피해 사실이 분명하지 않아 기본 대응 원칙부터 안내할게요.")
+    // 짧게: 무엇을 준비했는지 + 가장 먼저 할 일 하나. ("돈을 보내셨군요" 같은 사실 되풀이는 아래 체크리스트가 대신해요)
+    const titles = next.cards.map((c) => `'${titleOf(c, details)}'`)
+    if (!titles.length) parts.push("상황을 정리했어요. 아직 피해 사실이 분명하지 않아 기본 대응 원칙부터 안내할게요.")
+    else {
+      parts.push(`상황을 정리했어요. 위 ${joinKo(titles)} 대응 방법을 확인해 주세요.`)
+      const first = next.cards.find((c) => isUrgent(c, details)) ?? next.cards[0]
+      const step = toTextItems(details[first.code]?.actions)[0]
+      if (step?.title) parts.push(`가장 먼저 '${step.title}'부터 해 주세요.`)
+    }
   } else if (kind === "text") {
     if (change.length) parts.push("알겠어요.", ...change)
     // 질문이 섞여 있거나 바뀐 게 없으면 질문에 답해요
@@ -253,7 +259,8 @@ export function composeReply({ kind, prev, next, details, institutions, userText
   const secondhandPaid = (v: SolutionView) => has(v.cards, SECONDHAND) && v.facts?.transferredMoney === "YES"
   if (!fixedGuide && secondhandPaid(next) && !secondhandPaid(prev) && !parts.some((p) => p.includes("환급"))) {
     const i = parts.findIndex((p) => p.startsWith("이어서") || p.startsWith("여쭤볼 건"))
-    if (i >= 0) parts.splice(i, 0, SECONDHAND_NOTE); else parts.push(SECONDHAND_NOTE)
+    const note = kind === "start" ? "중고거래는 지급정지 대상이 아니라 경찰 신고가 먼저예요." : SECONDHAND_NOTE
+    if (i >= 0) parts.splice(i, 0, note); else parts.push(note)
   }
   if (explanation?.trim()) parts.push(explanation.trim())
   return parts.join(" ")
@@ -274,18 +281,20 @@ export const CHECK_ORDER = FACT_ORDER
  */
 export function checklistReply(prev: SolutionView, next: SolutionView, d: Details): string {
   const yes = (k: FactKey) => next.facts?.[k] === "YES"
-  const lines: string[] = []
+  const steps: string[] = []
   if (yes("transferredMoney")) {
-    lines.push(has(next.cards, SECONDHAND)
-      ? "돈을 보내셨으니 판매 글·대화·송금 내역을 저장하고 경찰 사이버범죄 신고시스템에 먼저 신고해 주세요. 중고거래는 지급정지 대상이 아니라 신고가 중심이에요."
-      : "돈을 보내셨으니 지금 바로 112나 돈을 보낸 금융회사에 지급정지를 요청해 주세요.")
+    steps.push(has(next.cards, SECONDHAND)
+      ? "대화·송금 내역을 저장하고 경찰 사이버범죄 신고시스템에 신고하기 (중고거래는 지급정지 대상이 아니에요)"
+      : "112나 돈을 보낸 금융회사에 바로 지급정지 요청하기")
   }
-  if (yes("sharedInformation")) lines.push("알려 준 정보로 명의도용이 생기지 않게 개인정보노출자 사고예방시스템에 등록하고, 금융 비밀번호를 바꿔 주세요.")
-  if (yes("installedApp")) lines.push("설치한 앱은 휴대폰을 원격으로 조종하는 데 쓰일 수 있어요. 다른 전화로 신고하고, 앱을 지우거나 휴대폰을 초기화해 주세요.")
-  if (yes("contactContinues")) lines.push("상대가 무엇을 더 요구해도 응하지 말고 연락을 끊어 주세요.")
-  if (!lines.length) lines.push("다행이에요. 지금은 상대와 더 연락하지 말고, 대화 화면을 저장해 두세요.")
-  const added = next.cards.filter((c) => !has(prev.cards, c.code))
-  if (added.length) lines.push(`위 대응 방법에 ${joinKo(added.map((c) => `'${titleOf(c, d)}'`))}도 추가했어요.`)
-  lines.push("더 궁금한 건 채팅으로 물어봐 주세요.")
-  return lines.join(" ")
+  if (yes("sharedInformation")) steps.push("개인정보노출자 사고예방시스템에 등록하고 금융 비밀번호 바꾸기")
+  if (yes("installedApp")) steps.push("다른 전화로 신고하고, 설치한 앱 지우기 또는 휴대폰 초기화하기")
+  if (yes("contactContinues")) steps.push("상대가 무엇을 더 요구해도 응하지 말고 연락 끊기")
+  const added = next.cards.some((c) => !has(prev.cards, c.code))
+  const lead = steps.length
+    ? `지금 할 일을 순서대로 정리했어요.${added ? " 위 대응 방법도 맞춰 바꿨어요." : ""}`
+    : "다행이에요. 지금은 이렇게만 해 두세요."
+  if (!steps.length) steps.push("상대와 더 연락하지 않기", "대화 화면 저장해 두기")
+  // 화면에서 번호 목록으로 보이게 줄바꿈 + "1. " 형식으로 돌려줘요
+  return [lead, ...steps.map((t, i) => `${i + 1}. ${t}`)].join("\n")
 }
