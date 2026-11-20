@@ -11,6 +11,46 @@ import { loadEvidence } from "@/lib/image"
 import { toLinkItems, toTextItems } from "@/lib/normalize"
 import type { Emergency, InputMode } from "../hooks/useEmergency"
 import { situationGuides } from "../data/situationGuides"
+import { CHECK_LABEL, CHECK_ORDER } from "../lib/composeReply"
+import type { SolutionFacts } from "@/api"
+
+/** 사실 확인을 [예/아니오/모름] 네 번 대신 '있었던 일 모두 고르기' 한 번으로 물어요. false면 예전 방식 */
+const USE_CHECKLIST = true
+
+/** 있었던 일 모두 고르기. 설명·사진에서 이미 '예'로 파악된 항목은 미리 골라 둬요 */
+function FactChecklist({ facts, onSubmit }: { facts: SolutionFacts | null; onSubmit: (selected: FactKey[]) => void }) {
+  const [picked, setPicked] = useState<FactKey[]>(() => CHECK_ORDER.filter((k) => facts?.[k] === "YES"))
+  const [none, setNone] = useState(false)
+  const [error, setError] = useState("")
+  const toggle = (k: FactKey) => {
+    setError("")
+    setNone(false)
+    setPicked((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]))
+  }
+  const pill = (on: boolean) => ({
+    display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 999, cursor: "pointer", fontSize: 14,
+    border: `1px solid ${on ? "#1769e0" : "#cfd8e3"}`, background: on ? "#eaf2ff" : "#fff", color: on ? "#1769e0" : "#33415c", fontWeight: on ? 700 : 500,
+  } as const)
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+        {CHECK_ORDER.map((k) => (
+          <button key={k} type="button" aria-pressed={picked.includes(k)} style={pill(picked.includes(k))} onClick={() => toggle(k)}>
+            {picked.includes(k) ? "✓ " : ""}{CHECK_LABEL[k]}
+          </button>
+        ))}
+        <button type="button" aria-pressed={none} style={pill(none)} onClick={() => { setError(""); setPicked([]); setNone((v) => !v) }}>
+          {none ? "✓ " : ""}해당 없어요
+        </button>
+      </div>
+      {error && <p role="alert" style={{ margin: "8px 0 0", fontSize: 13, color: "#c0392b" }}>{error}</p>}
+      <button type="button" className="primary-button" style={{ marginTop: 12, padding: "10px 18px", fontSize: 14 }}
+        onClick={() => (picked.length || none ? onSubmit(picked) : setError("해당하는 것을 고르거나 '해당 없어요'를 눌러 주세요."))}>
+        이대로 알려 주기
+      </button>
+    </div>
+  )
+}
 import { organizationData } from "../data/organizations"
 
 const FACT_LABEL: Record<FactKey, string> = { transferredMoney: "돈을 보냈나요?", sharedInformation: "정보를 알려 줬나요?", installedApp: "앱을 설치했나요?", contactContinues: "연락이 계속되나요?" }
@@ -221,11 +261,16 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
                 <span><Icon name="shield" size={18} /></span>
                 <div>
                   <small>어떡하지 도우미 · 확인 질문</small>
-                  {em.firstQuestion && <p style={{ margin: "0 0 6px" }}>지금 상황에 맞는 방법을 골라 드리려고 몇 가지만 여쭤볼게요.</p>}
-                  <p className="assist-clarification">{em.nextQuestion.content}</p>
-                  <div className="interview-choices" style={{ marginTop: 10 }}>
-                    {(em.nextQuestion.options ?? ["YES", "NO", "UNKNOWN"]).map((v) => <button key={v} type="button" onClick={() => void em.answer(em.nextQuestion!, v)}>{ANSWER_LABEL[v]}</button>)}
-                  </div>
+                  {USE_CHECKLIST && em.firstQuestion ? <>
+                    <p className="assist-clarification" style={{ margin: 0 }}>지금까지 있었던 일을 모두 골라 주세요.<br /><small style={{ fontSize: 13, color: "#697586", fontWeight: 400 }}>고르신 것에 따라 지금 할 일이 달라져요.</small></p>
+                    <FactChecklist facts={em.facts} onSubmit={(s) => void em.submitChecklist(s)} />
+                  </> : <>
+                    {em.firstQuestion && <p style={{ margin: "0 0 6px" }}>지금 상황에 맞는 방법을 골라 드리려고 몇 가지만 여쭤볼게요.</p>}
+                    <p className="assist-clarification">{em.nextQuestion.content}</p>
+                    <div className="interview-choices" style={{ marginTop: 10 }}>
+                      {(em.nextQuestion.options ?? ["YES", "NO", "UNKNOWN"]).map((v) => <button key={v} type="button" onClick={() => void em.answer(em.nextQuestion!, v)}>{ANSWER_LABEL[v]}</button>)}
+                    </div>
+                  </>}
                 </div>
               </div>
             )}

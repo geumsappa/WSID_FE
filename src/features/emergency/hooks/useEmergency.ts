@@ -3,10 +3,11 @@ import { errorMessage, guidesApi, isStateConflict, newRequestId, solutionApi } f
 import type { AssistantReply, FactKey, Institution, NextQuestion, ResponseCard, SolutionCard, SolutionDetail, SolutionFacts, SolutionMessageRequest, YesNoUnknown } from "@/api"
 import type { Page, UploadedImage } from "@/types/common"
 import { maskSensitive } from "@/lib/privacy"
+import { devOcr } from "@/api/mock/devOcr"
 import type { AssistantMessage, SituationKey } from "../types"
 import { situationGuides } from "../data/situationGuides"
 import { dedupeMessages, situationOfText } from "../lib/historyView"
-import { composeReply, parseShortAnswer } from "../lib/composeReply"
+import { CHECK_LABEL, CHECK_ORDER, checklistReply, composeReply, parseShortAnswer } from "../lib/composeReply"
 import type { SolutionView } from "../lib/composeReply"
 
 let seq = 0
@@ -20,6 +21,29 @@ const CHOICE_TEXT: Record<FactKey, Record<YesNoUnknown, string>> = {
   installedApp: { YES: "네, 설치했어요.", NO: "아니요, 설치 안 했어요.", UNKNOWN: "잘 모르겠어요." },
   contactContinues: { YES: "네, 아직 연락하고 있어요.", NO: "아니요, 연락이 끊겼어요.", UNKNOWN: "잘 모르겠어요." },
 }
+const PHOTO_TYPE_LABEL: Record<string, string> = {
+  SMS: "문자", MESSENGER_CHAT: "메신저 대화", TRANSFER_RECEIPT: "이체 확인증", WEB_PAGE: "웹 화면", OTHER: "사진",
+}
+/**
+ * 첨부 사진 → 상황 설명에 붙일 글. 개발(mock + AI 대역)에서는 OCR로 글자를 읽어 가린 뒤 붙이고,
+ * 그 밖에는 지금처럼 장수만 붙여요 (실제 서비스에서는 Spring이 사진을 받아 OCR을 부르는 API가 필요해요).
+ * note: 사용자에게 "사진에서 이렇게 읽었어요"로 보여 줄 말 (OCR을 못 하면 null)
+ */
+async function readPhotos(attachments: UploadedImage[]): Promise<{ text: string; note: string | null }> {
+  const count = `(사진 ${attachments.length}장 첨부함)`
+  const ocr = await devOcr(attachments)
+  if (!ocr) return { text: count, note: null }
+  const read = maskSensitive(ocr.recognizedText.replace(/\s+/g, " ").trim()).slice(0, 600)
+  const label = PHOTO_TYPE_LABEL[ocr.imageType] ?? "사진"
+  if (!ocr.usable || !read) {
+    return { text: count, note: "사진의 글자를 잘 읽지 못했어요. 사진에 어떤 내용이 있는지 글로 짧게 알려 주세요." }
+  }
+  return {
+    text: `[사진에서 읽은 내용(${label})] ${read}`,
+    note: `사진을 확인했어요 (${label}). ${ocr.summary ?? ""}`.trim() + " 읽은 내용으로 상황을 정리했어요. 잘못 읽은 부분이 있으면 알려 주세요.",
+  }
+}
+
 const SESSION_KEY = "wsid-solution-id" // 새로고침 후 상담을 이어 가려고 상담 번호만 보관(탭을 닫으면 사라짐)
 const UNABLE_TEXT = "이 질문에는 정확히 답변드리기 어려워요. 위 대응 카드를 먼저 진행하시고, 아래 공식 기관에 직접 상담하시는 것이 가장 안전해요."
 /** "둘 다", "그거"처럼 앞 답을 가리키는 짧은 질문. AI가 가리키는 대상을 못 정해 답을 못 하면, 다시 물어 달라고 안내해요 */
@@ -214,8 +238,9 @@ export function useEmergency(go: (next: Page) => void) {
     resetSession()
     setAnalyzing(true)
     try {
-      // 사진은 서버 API에 보낼 자리가 없어 장수만 설명에 덧붙여요(원본은 보내지 않음).
-      const desc = attachments.length ? `${masked}${masked ? " " : ""}(사진 ${attachments.length}장 첨부함)` : masked
+      // 사진: 개발에서는 OCR로 읽은 글(가림)을, 그 밖에는 장수만 설명에 덧붙여요 (원본은 보내지 않음)
+      const photo = attachments.length ? await readPhotos(attachments) : null
+      const desc = photo ? `${masked}${masked ? "\n" : ""}${photo.text}` : masked
       const r = await solutionApi.start({ description: desc })
       idRef.current = r.solutionId
       setSolutionId(r.solutionId)
@@ -226,6 +251,7 @@ export function useEmergency(go: (next: Page) => void) {
         : await reflect("start", { facts: null, cards: [], nextQuestion: null }, r) // 직접 입력: 파악한 내용에 맞춘 안내
       setMessages([
         { key: key(), from: "user", text: masked, images: attachments.length ? attachments : undefined },
+        ...(photo?.note ? [{ key: key(), from: "assistant" as const, text: photo.note }] : []),
         { key: key(), from: "assistant", text: masked !== description.trim() ? `입력하신 내용 중 민감정보는 가려서 처리했어요. ${reply}` : reply },
       ])
       setText("")
@@ -317,13 +343,23 @@ export function useEmergency(go: (next: Page) => void) {
     // 사실 확인 질문에 "아뇨", "네" 처럼 짧게 글로 답하면 선택지를 누른 것과 똑같이 처리해요 (AI 질문에 답하는 중이면 제외)
     const fixed = situationRef.current !== null
     const factQ = !fixed && !clarification && nextQuestion?.factKey ? nextQuestion : null
-    const modes = requested === "auto" ? decideModes(masked, !!clarification, fixed) : [requested]
+    // 글 없이 사진만 보내면: 고정 안내 상담은 질문으로(사진 내용에 AI가 답), 그 밖에는 상황 추가 설명으로 처리해요
+    const modes = requested === "auto"
+      ? (!masked && attachments.length ? [fixed ? "question" as const : "fact" as const] : decideModes(masked, !!clarification, fixed))
+      : [requested]
     const short = factQ && !modes.includes("answer") && !attachments.length ? parseShortAnswer(masked) : null
     if (factQ && short && (factQ.options ?? ["YES", "NO", "UNKNOWN"]).includes(short)) {
       return answer(factQ, short, masked)
     }
     setMessages((m) => [...m, { key: key(), from: "user", text: masked, images: attachments.length ? attachments : undefined }])
-    const content = attachments.length ? `${masked}${masked ? " " : ""}(사진 ${attachments.length}장 첨부함)` : masked
+    let content = masked
+    if (attachments.length) {
+      setTyping(true)
+      const photo = await readPhotos(attachments)
+      setTyping(false)
+      content = `${masked}${masked ? "\n" : ""}${photo.text}`
+      if (photo.note) setMessages((m) => [...m, { key: key(), from: "assistant", text: photo.note! }])
+    }
     for (const mode of modes) {
       const body: TextBody = mode === "answer" && clarification
         ? { inputKind: "TEXT", content, purpose: "CLARIFICATION_ANSWER", questionId: clarification.questionId }
@@ -357,6 +393,30 @@ export function useEmergency(go: (next: Page) => void) {
       setTyping(false)
     }
   }
+  /**
+   * 체크리스트: 있었던 일을 한 번에 골라 보내요 (SOL-04로 네 사실을 한 번에 갱신).
+   * 고르지 않은 항목은 '아니오'로 봐요. selected가 비어 있으면 "해당 없어요".
+   */
+  const submitChecklist = async (selected: FactKey[]) => {
+    const id = idRef.current
+    if (id === null || typing) return
+    setError("")
+    const text = selected.length ? selected.map((k) => CHECK_LABEL[k]).join(", ") : "해당 없어요"
+    setMessages((m) => [...m, { key: key(), from: "user", text }])
+    setTyping(true)
+    try {
+      const prev = view()
+      const changes = Object.fromEntries(CHECK_ORDER.map((k) => [k, selected.includes(k) ? "YES" : "NO"])) as Partial<SolutionFacts>
+      const r = await solutionApi.updateFacts(id, { stateVersion: versionRef.current, changes })
+      const details = await applyResult({ ...r, nextQuestion: r.nextQuestion ?? null })
+      const reply = checklistReply(prev, { facts: r.facts, cards: r.responseCards, nextQuestion: r.nextQuestion ?? null }, details)
+      setMessages((m) => [...m, { key: key(), from: "assistant", text: reply }])
+    } catch (err) {
+      await recover(err)
+    } finally {
+      setTyping(false)
+    }
+  }
   /** SOL-05 상담 종료 */
   const complete = async () => {
     const id = idRef.current
@@ -367,7 +427,7 @@ export function useEmergency(go: (next: Page) => void) {
 
   return {
     text, setText, images, setImages, analyzing, error,
-    solutionId, facts, cards, cardDetails, institutions, messages, situation,
+    solutionId, facts, cards, cardDetails, institutions, messages, situation, submitChecklist,
     /** 사실 확인 질문(예/아니오/모름 버튼). AI 추가 질문일 땐 null이고 clarification으로 보여 줘요 */
     // 유형 카드(고정 안내) 상담에서는 확인 질문을 묻지 않아요. 안내가 송금 여부와 상관없이 정해져 있고, 필요하면 AI가 되물어요
     nextQuestion: !situation && !clarification && nextQuestion?.factKey ? nextQuestion : null,

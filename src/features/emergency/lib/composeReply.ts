@@ -258,3 +258,34 @@ export function composeReply({ kind, prev, next, details, institutions, userText
   if (explanation?.trim()) parts.push(explanation.trim())
   return parts.join(" ")
 }
+
+/** 체크리스트(있었던 일 모두 고르기)에 쓰는 이름. 화면 버튼과 내 말풍선에 같이 써요 */
+export const CHECK_LABEL: Record<FactKey, string> = {
+  transferredMoney: "돈을 보냈어요",
+  sharedInformation: "개인정보·인증번호를 알려 줬어요",
+  installedApp: "앱을 설치했어요",
+  contactContinues: "아직 연락하고 있어요",
+}
+export const CHECK_ORDER = FACT_ORDER
+
+/**
+ * 체크리스트를 보낸 뒤의 답: 고른 일마다 '지금 바로 할 일' 한 문장 + 대응 카드가 바뀌었으면 한 줄.
+ * ("돈을 보내셨군요"처럼 따라 말하지 않고 다음 행동을 말해요)
+ */
+export function checklistReply(prev: SolutionView, next: SolutionView, d: Details): string {
+  const yes = (k: FactKey) => next.facts?.[k] === "YES"
+  const lines: string[] = []
+  if (yes("transferredMoney")) {
+    lines.push(has(next.cards, SECONDHAND)
+      ? "돈을 보내셨으니 판매 글·대화·송금 내역을 저장하고 경찰 사이버범죄 신고시스템에 먼저 신고해 주세요. 중고거래는 지급정지 대상이 아니라 신고가 중심이에요."
+      : "돈을 보내셨으니 지금 바로 112나 돈을 보낸 금융회사에 지급정지를 요청해 주세요.")
+  }
+  if (yes("sharedInformation")) lines.push("알려 준 정보로 명의도용이 생기지 않게 개인정보노출자 사고예방시스템에 등록하고, 금융 비밀번호를 바꿔 주세요.")
+  if (yes("installedApp")) lines.push("설치한 앱은 휴대폰을 원격으로 조종하는 데 쓰일 수 있어요. 다른 전화로 신고하고, 앱을 지우거나 휴대폰을 초기화해 주세요.")
+  if (yes("contactContinues")) lines.push("상대가 무엇을 더 요구해도 응하지 말고 연락을 끊어 주세요.")
+  if (!lines.length) lines.push("다행이에요. 지금은 상대와 더 연락하지 말고, 대화 화면을 저장해 두세요.")
+  const added = next.cards.filter((c) => !has(prev.cards, c.code))
+  if (added.length) lines.push(`위 대응 방법에 ${joinKo(added.map((c) => `'${titleOf(c, d)}'`))}도 추가했어요.`)
+  lines.push("더 궁금한 건 채팅으로 물어봐 주세요.")
+  return lines.join(" ")
+}
