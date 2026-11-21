@@ -145,16 +145,6 @@ textarea:focus { border-color: #78aaed; background: #fff; outline: 3px solid rgb
 .messenger-header p { display: flex; gap: 6px; align-items: center; margin-top: 4px; color: #7a8798; font-size: 11px; }
 .messenger-header p span { width: 6px; height: 6px; border-radius: 50%; background: #16845b; }
 .messenger-header p span.mock { background: #e08a00; }
-/* 채널별 대화창 모양: 문자·중고거래 채팅·이메일은 조금씩 다르게 (기본은 메신저) */
-.channel-sms .messenger-header { background: #f7f7f9; }
-.channel-sms .message-row.contact p { border: 0; border-radius: 18px 18px 18px 6px; background: #ececf0; color: #1f2733; }
-.channel-sms .message-row.user p { border-radius: 18px 18px 6px 18px; background: #2f9e5b; color: #fff; }
-.channel-sms .message-row .avatar { display: none; }
-.channel-market .message-row.contact p { border-color: #f1e3d6; border-radius: 4px 16px 16px; }
-.channel-market .message-row.user p { border-radius: 16px 4px 16px 16px; background: #ff7a1a; color: #fff; }
-.channel-market .messenger-header { border-bottom-color: #f6dcc6; }
-.channel-email .message-row p { max-width: 560px; border: 1px solid #dfe5ec; border-radius: 8px; background: #fff; color: #2d3a4e; }
-.channel-email .message-row.user p { border-color: #c9dbf5; background: #f4f8fe; color: #1f3d66; }
 .header-shield { color: #1769e0; }
 .messages { min-height: 500px; max-height: 570px; overflow-y: auto; padding: 25px 28px 35px; background: #fbfcfe; }
 .time-divider { margin-bottom: 22px; color: #a0a9b6; text-align: center; font-size: 11px; }
@@ -913,16 +903,16 @@ textarea:focus { border-color: #78aaed; background: #fff; outline: 3px solid rgb
 .rs-facts > div { border: 1px solid #e3e9f2; border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
 .rs-facts span { font-size: 12px; color: #5d6b80; }
 .rs-facts strong { font-size: 15px; font-weight: 800; }
-.rs-timeline h2 { font-size: 15px; font-weight: 800; margin: 0 0 10px; }
-.rs-timeline ol { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid #e3e9f2; display: flex; flex-direction: column; gap: 12px; }
-.rs-timeline li { position: relative; display: flex; gap: 12px; align-items: flex-start; }
-.rs-timeline li::before { content: ""; position: absolute; left: -20px; top: 5px; width: 10px; height: 10px; border-radius: 50%; background: #146c46; }
-.rs-timeline li.risky::before { background: #b3261e; }
-.rs-turn { flex: none; min-width: 72px; font-size: 12px; color: #5d6b80; padding-top: 1px; }
-.rs-timeline strong { display: block; font-size: 14px; font-weight: 700; }
-.rs-timeline em { font-style: normal; font-size: 11px; font-weight: 800; margin-right: 6px; padding: 2px 6px; border-radius: 6px; background: #e7f4ec; color: #146c46; }
-.rs-timeline li.risky em { background: #fbe9e7; color: #b3261e; }
-.rs-timeline p { margin: 4px 0 0; font-size: 13px; color: #3b4859; line-height: 1.5; }
+.turn-review { list-style: none; margin: 18px 0 0; padding: 0 0 0 16px; border-left: 2px solid #e3e9f2; display: flex; flex-direction: column; gap: 16px; }
+.turn-review li { position: relative; display: flex; gap: 14px; align-items: flex-start; }
+.turn-review li::before { content: ""; position: absolute; left: -23px; top: 6px; width: 12px; height: 12px; border-radius: 50%; background: #146c46; box-shadow: 0 0 0 3px #fff; }
+.turn-review li.risky::before { background: #b3261e; }
+.turn-review-no { flex: none; min-width: 78px; font-size: 13px; color: #5d6b80; padding-top: 2px; }
+.turn-review h4 { margin: 0; font-size: 15px; font-weight: 700; color: #1d2a3a; }
+.turn-review em { font-style: normal; font-size: 12px; font-weight: 800; margin-right: 8px; padding: 2px 7px; border-radius: 6px; background: #e7f4ec; color: #146c46; }
+.turn-review li.risky em { background: #fbe9e7; color: #b3261e; }
+.turn-review p { margin: 5px 0 0; font-size: 14px; color: #3b4859; line-height: 1.6; }
+@media (max-width: 600px) { .turn-review li { flex-direction: column; gap: 4px; } }
 .rs-facts .good { color: #146c46; } .rs-facts .warn { color: #9a5b00; } .rs-facts .risk { color: #b3261e; }
 .rs-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
 .rs-box { border: 1px solid #e3e9f2; border-radius: 16px; padding: 18px 20px; display: flex; flex-direction: column; gap: 12px; }
