@@ -27,6 +27,8 @@ export default function App() {
   const history = useSolutionHistory(account, page, auth.handleUnauthorized)
   const em = useEmergency(go)
   const [loginPopup, setLoginPopup] = useState(false)
+  // 진행 중인 훈련이 있는데 새로 시작하려 할 때 묻는 창
+  const [resumePrompt, setResumePrompt] = useState(false)
 
   const logout = async () => {
     await auth.signOut()
@@ -40,7 +42,9 @@ export default function App() {
       setLoginPopup(true)
       return
     }
-    if (fresh) sim.startNew()
+    // 진행 중인 훈련이 있으면 바로 새로 만들지 않고 이어서 할지 먼저 물어요 (실수로 새 훈련이 생기는 것 방지)
+    if (fresh && sim.resumeInfo) setResumePrompt(true)
+    else if (fresh) sim.startNew()
     else go("simulation")
   }
   const needsTraining = sim.stage === "chat" // 훈련 대화 중에만 "종료하면 결과 리포트" 흐름
@@ -50,6 +54,14 @@ export default function App() {
       {loginPopup && (
         <ConfirmModal title="로그인이 필요해요" message="금융사기 시뮬레이션은 로그인 이후 사용할 수 있습니다." confirmLabel="로그인하러 가기" cancelLabel="닫기"
           onConfirm={() => { setLoginPopup(false); go("login") }} onCancel={() => { setLoginPopup(false); auth.setReturnAfterLogin("mypage") }} />
+      )}
+      {resumePrompt && sim.resumeInfo && (
+        <ConfirmModal title="진행 중인 훈련이 있어요"
+          message={`'${sim.resumeInfo.title}' 훈련을 ${sim.resumeInfo.label} 단계에서 멈췄어요. 이어서 할까요? 새로 시작하면 이전 훈련은 이어서 할 수 없어요.`}
+          confirmLabel="이어서 하기" cancelLabel="새로 시작하기"
+          onConfirm={() => { setResumePrompt(false); go("simulation") }}
+          onCancel={() => { setResumePrompt(false); sim.startNew() }}
+          onDismiss={() => setResumePrompt(false)} />
       )}
       {sim.endConfirm && (
         <ConfirmModal

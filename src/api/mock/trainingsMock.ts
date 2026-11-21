@@ -126,7 +126,8 @@ export const trainingsMock = withSave({
       trainingId: t.id,
       phase: t.phase,
       fraudTypeCode: FRAUD_TYPE[t.scenario.key],
-      scenario: { title: t.scenario.title, description: t.scenario.description },
+      scenario: { title: t.scenario.title, description: t.scenario.description,
+        channel: t.scenario.key === "delivery" ? "SMS" : t.scenario.key === "trade" ? "MARKET" : "MESSENGER" },
       mockPageTemplateCode: MOCK_PAGES[t.scenario.key].templateCode,
       stateVersion: bump(t),
     }
@@ -207,7 +208,12 @@ export const trainingsMock = withSave({
         overallFeedback: a.summary,
         strengths: a.safe,
         improvements: [...(a.risky[0]?.includes("발견되지 않았") ? [] : a.risky), ...a.missed],
-        turnFeedback: [],
+        // mock 타임라인: 개인정보를 적은 답변은 위험, 공식 확인·거절은 잘 막음으로 표시해요
+        turnFeedback: t.messages.filter((m) => m.from === "user").flatMap((m, i) => m.leaked?.length
+          ? [{ turn: i + 1, outcome: "risky", userAction: `${m.leaked.join(", ")}을(를) 적음`, feedback: "요구받은 정보를 적기 전에 공식 앱이나 대표번호로 먼저 확인하세요." }]
+          : /공식|고객센터|안 할게|싫어|차단/.test(m.text)
+            ? [{ turn: i + 1, outcome: "safe", userAction: "요구를 거절하거나 공식 채널로 확인함", feedback: "상대가 준 경로 대신 스스로 확인하려 한 좋은 대응이에요." }]
+            : []),
         mockPageEvaluation: {
           openedPage: t.actions.includes("MOCK_PAGE_OPEN"),
           attemptedMockLogin: t.actions.includes("MOCK_LOGIN_ATTEMPT"),

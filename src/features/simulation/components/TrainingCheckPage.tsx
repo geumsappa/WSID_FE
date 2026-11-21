@@ -5,8 +5,12 @@ import { TrainingCheckView } from "./TrainingCheckView"
 import { recordPageAction } from "../lib/mockPageSession"
 import { resolveMockTemplate } from "../data/mockPageTemplates"
 
-/** Standalone, authenticated local page. It never accepts or transmits credentials or files. */
-export function TrainingCheckPage() {
+/**
+ * Standalone, authenticated local page. It never accepts or transmits credentials or files.
+ * 대화 화면 위 창(모달)으로 열 때는 trainingId와 onClose를 넘겨요. 없으면 예전처럼 별도 탭 주소에서 번호를 읽어요.
+ */
+export function TrainingCheckPage({ trainingId: givenId, onClose }: { trainingId?: number; onClose?: () => void } = {}) {
+  const embedded = givenId !== undefined
   const [page, setPage] = useState<MockPage | null>(null)
   const [scenarioTitle, setScenarioTitle] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -17,7 +21,7 @@ export function TrainingCheckPage() {
   const submitRequest = useRef(crypto.randomUUID())
   const officialRequest = useRef(crypto.randomUUID())
   const closeRequest = useRef(crypto.randomUUID())
-  const trainingId = Number(new URLSearchParams(window.location.search).get("trainingId"))
+  const trainingId = givenId ?? Number(new URLSearchParams(window.location.search).get("trainingId"))
   const validId = Number.isSafeInteger(trainingId) && trainingId > 0
   // templateCode(없으면 기관 이름·시나리오 제목)로 화면 종류를 골라요
   const template = resolveMockTemplate(page, scenarioTitle)
@@ -44,12 +48,13 @@ export function TrainingCheckPage() {
   }, [trainingId, validId])
 
   useEffect(() => {
+    if (embedded) return // 창으로 열 때는 대화 화면의 탭 제목을 바꾸지 않아요
     document.title = `${page?.institutionName ? page.institutionName + " | " : ""}${title} · 훈련용`
     const meta = document.createElement("meta")
     meta.name = "robots"; meta.content = "noindex,nofollow"
     document.head.appendChild(meta)
     return () => { meta.remove() }
-  }, [page, title])
+  }, [page, title, embedded])
 
   const act = async (kind: "submitted" | "official" | "closed") => {
     if (!page || busy) return
@@ -59,7 +64,7 @@ export function TrainingCheckPage() {
       const requestId = kind === "submitted" ? submitRequest.current : kind === "official" ? officialRequest.current : closeRequest.current
       await recordPageAction(trainingId, code, page, requestId)
       setResult(kind)
-      if (kind === "closed") window.close()
+      if (kind === "closed") { if (onClose) onClose(); else window.close() }
     } catch (cause) { setError(errorMessage(cause)) }
     finally { setBusy(false) }
   }

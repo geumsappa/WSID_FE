@@ -1,19 +1,25 @@
 import { useEffect } from "react"
 import type React from "react"
 
-export function ConfirmModal({ title, message, confirmLabel, cancelLabel, onConfirm, onCancel }: {
+/**
+ * onDismiss: 바깥을 누르거나 Esc를 눌렀을 때. 없으면 onCancel과 같아요.
+ * (취소 버튼이 "새로 시작"처럼 실제 동작일 때는 onDismiss로 그냥 닫히게 해요)
+ */
+export function ConfirmModal({ title, message, confirmLabel, cancelLabel, onConfirm, onCancel, onDismiss }: {
   title: string
   message: string
   confirmLabel: string
   cancelLabel: string
   onConfirm: () => void
   onCancel: () => void
+  onDismiss?: () => void
 }) {
+  const dismiss = onDismiss ?? onCancel
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onCancel() }
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") dismiss() }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [onCancel])
+  }, [dismiss])
   const buttonBase: React.CSSProperties = {
     flex: 1,
     height: 48,
@@ -33,7 +39,7 @@ export function ConfirmModal({ title, message, confirmLabel, cancelLabel, onConf
       role="dialog"
       aria-modal="true"
       aria-label={title}
-      onClick={onCancel}
+      onClick={dismiss}
       style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", display: "grid", placeItems: "center", zIndex: 1000, padding: 20 }}
     >
       <div

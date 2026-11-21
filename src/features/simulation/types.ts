@@ -24,7 +24,9 @@ export type ChatLine = {
   /** 이 대사의 가상 앱 설치 링크([모의앱])를 눌렀는지 (실제 설치는 없음) */
   appClicked?: boolean
 }
-export type ScenarioInfo = { title: string; description: string; senderName?: string | null; organizationName?: string | null }
+/** channel: 대화 화면 모양 (SMS 문자, MESSENGER 메신저, MARKET 중고거래 채팅, EMAIL, SNS) */
+export type ScenarioChannel = "SMS" | "MESSENGER" | "MARKET" | "EMAIL" | "SNS"
+export type ScenarioInfo = { title: string; description: string; senderName?: string | null; organizationName?: string | null; channel?: ScenarioChannel | null }
 
 // ───────── 아래는 mock(서버 없는 데모) 데이터가 쓰는 타입 ─────────
 
