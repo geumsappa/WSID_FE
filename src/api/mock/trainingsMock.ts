@@ -98,7 +98,7 @@ export const trainingsMock = withSave({
     const { text } = scrubPersonalInfo(body.content.trim()) // 실제 값은 바로 가림
     t.answers.push({ question: interviewQuestion(t.answers).text, answer: text })
     t.log.push({ sender: "USER", inputKind: "TEXT", content: text, phase: "DISCOVERY" })
-    const canGenerateScenario = t.answers.length >= MAX_DISCOVERY_TURNS
+    const canGenerateScenario = t.answers.length >= MAX_DISCOVERY_TURNS || (body.quickStart === true && t.answers.length === 1)
     const next = interviewQuestion(t.answers)
     const reply = canGenerateScenario
       ? ai("충분히 알려 주셨어요. 이 상황에 맞는 훈련을 준비할 수 있어요.", "DISCOVERY")
