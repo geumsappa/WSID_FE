@@ -3,6 +3,16 @@ import { Icon } from "@/components/Icon"
 import { Typing } from "@/components/Typing"
 import type { Simulation } from "../hooks/useSimulation"
 
+// 빠른 시작: 질문에 답하지 않고 흔한 상황을 골라 바로 훈련을 만들어요. 고른 문장이 첫 답변으로 보내져요.
+const QUICK_STARTS = [
+  { label: "택배 문자", text: "택배를 자주 시키고 배송 문자를 자주 받아요. 주소를 확인하라는 문자를 받은 적이 있어요." },
+  { label: "중고거래", text: "중고거래 앱으로 물건을 팔고 있어요. 구매자가 앱 밖에서 결제하자고 한 적이 있어요." },
+  { label: "가족·지인 사칭", text: "가족과 메신저로 자주 연락해요. 휴대폰이 고장 났다며 모르는 번호로 연락이 온 적이 있어요." },
+  { label: "대출 안내", text: "생활비 때문에 대출을 알아보고 있어요. 저금리 대출 안내 문자를 자주 받아요." },
+  { label: "보상금·환급 문자", text: "최근 개인정보 유출 뉴스를 봤어요. 피해보상금을 신청하라는 문자를 받은 적이 있어요." },
+  { label: "아르바이트 구인", text: "아르바이트를 구하고 있어요. 면접 없이 바로 일할 수 있다는 연락을 받았어요." },
+]
+
 // 상황 대화(TRN-04): AI가 묻고 사용자가 답하며 오늘 겪은 상황을 알려 주는 단계.
 // 팀 결정: 시뮬레이션에서는 사진 첨부·글자 읽기(OCR, TRN-05)를 쓰지 않아요.
 export function DiscoveryChat({ sim }: { sim: Simulation }) {
@@ -32,6 +42,15 @@ export function DiscoveryChat({ sim }: { sim: Simulation }) {
       {sim.typing && <Typing />}
       <div ref={endRef}/>
     </div>
+    {answered === 0 && !sim.typing && (
+      <div className="quick-start">
+        <strong>바로 체험하기</strong>
+        <span>상황을 고르면 질문 없이 바로 훈련을 만들어요.</span>
+        <div className="interview-choices">
+          {QUICK_STARTS.map((q) => <button key={q.label} type="button" onClick={() => void sim.quickStart(q.text)}>{q.label}</button>)}
+        </div>
+      </div>
+    )}
     {options.length > 0 && !sim.typing && <div className="interview-choices">{options.map((o) => <button key={o.code} type="button" onClick={() => void send(o.label)}>{o.label}</button>)}</div>}
     {sim.error && <p className="upload-error" role="alert">{sim.error}</p>}
     <form className="interview-compose" onSubmit={(e) => { e.preventDefault(); void send(draft) }}>

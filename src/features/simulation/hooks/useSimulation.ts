@@ -8,7 +8,7 @@ import type { Account } from "@/features/auth/types"
 import { readLastFinished, readScenarioInfo, saveLastFinished, saveScenarioInfo } from "../lib/progressStorage"
 import type { ChatLine, ScenarioInfo, SimStage } from "../types"
 import { containsMockLink } from "../components/TrainingMessageContent"
-import { openTrainingCheck, trainingChannel } from "../lib/mockPageSession"
+import { trainingChannel } from "../lib/mockPageSession"
 
 let lineSeq = 0
 const lineKey = () => `line-${++lineSeq}`
@@ -68,11 +68,14 @@ export function useSimulation(
   const [saving, setSaving] = useState(false)
   const [active, setActive] = useState<ActiveTrainingResponse>(null)
   const [bootTick, setBootTick] = useState(0)
+  // 모의 페이지를 새 탭 대신 대화 화면 위 창으로 열어요 (모바일 팝업 차단·탭 혼동 방지)
+  const [checkOpen, setCheckOpen] = useState(false)
 
   // 비동기 함수 안에서 "지금 값"이 필요한 것들은 ref에도 둡니다(state는 다음 렌더에야 바뀌기 때문).
   const idRef = useRef<number | null>(null)
   const versionRef = useRef(0)
   const freshRef = useRef(false) // true면 진행 중 훈련을 이어받지 않고 새로 만듭니다
+  const canGenerateRef = useRef(false) // 빠른 시작에서 답변 직후 바로 시나리오를 만들 수 있는지 보려고 둬요
   const bootingRef = useRef(false) // 개발 모드(StrictMode)에서 effect가 두 번 돌아도 한 번만 요청
   const queueRef = useRef<Promise<unknown>>(Promise.resolve()) // stateVersion이 꼬이지 않게 요청을 한 줄로 세웁니다
 
@@ -88,6 +91,7 @@ export function useSimulation(
   }
 
   const resetLocal = () => {
+    setCheckOpen(false)
     idRef.current = null
     versionRef.current = 0
     setTrainingId(null)
@@ -122,6 +126,11 @@ export function useSimulation(
         const lastAi = [...sim].reverse().find((line) => line.from === "ai")
         if (lastAi) lastAi.mockPage = d.mockPage
       }
+    }
+    if (d.mockAppClicked) {
+      sim.forEach((line) => {
+        if (line.from === "ai" && /\[모의\s*앱\]/.test(line.text)) line.appClicked = true
+      })
     }
     setDiscoveryLines(disc)
     setChatLines(sim)
@@ -231,6 +240,7 @@ export function useSimulation(
       versionRef.current = res.stateVersion
       setDiscoveryLines((lines) => [...lines, toLine(res.reply)])
       setCanGenerate(res.canGenerateScenario)
+      canGenerateRef.current = res.canGenerateScenario
       return true
     } catch (err) {
       setDiscoveryLines((lines) => lines.filter((l) => l.key !== mine.key))
@@ -283,6 +293,15 @@ export function useSimulation(
       setStage("discovery")
       await recover(err)
     }
+  }
+
+  /**
+   * 빠른 시작: 고른 상황 설명을 첫 답변으로 보내고, 서버가 충분하다고 하면 바로 시나리오를 만들어요.
+   * 부족하다고 하면 AI가 이어서 질문하니 대화를 계속하면 돼요.
+   */
+  const quickStart = async (text: string) => {
+    canGenerateRef.current = false
+    if (await sendDiscovery(text) && canGenerateRef.current) await generateScenario()
   }
 
   /** TRN-07 가상 훈련 시작 */
@@ -380,12 +399,13 @@ export function useSimulation(
     }
   }
 
-  /** Open a separate local tab; that tab records its own actions. */
+  /** 모의 페이지 창 열기. 창 안의 화면이 자기 행동(열기·제출·닫기)을 직접 기록해요. */
   const showMockPage = (_fallback?: MockPage) => {
     const id = idRef.current
     if (id === null || stage !== "chat") return
-    openTrainingCheck(id)
+    setCheckOpen(true)
   }
+  const closeMockPage = () => setCheckOpen(false)
 
   // The separate tab records its own actions. Refresh only the authoritative version,
   // so returning to this tab does not discard chat lines or submit an outdated version.
@@ -471,8 +491,8 @@ export function useSimulation(
   return {
     stage, trainingId, discoveryLines, canGenerate, scenario, chatLines, turnCount, shouldFinish, typing, error,
     usedImages, endConfirm, setEndConfirm, report, reportState, saveNotice, saving, resumeInfo,
-    startNew, retry, sendDiscovery, uploadDiscoveryImages, generateScenario, startTraining, sendTraining,
-    showMockPage, clickMockApp, finish, leave, saveReport, downloadPdf, resetForLogout,
+    startNew, retry, sendDiscovery, quickStart, uploadDiscoveryImages, generateScenario, startTraining, sendTraining,
+    showMockPage, closeMockPage, checkOpen, clickMockApp, finish, leave, saveReport, downloadPdf, resetForLogout,
     clearError: () => setError(""),
   }
 }

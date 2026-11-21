@@ -69,7 +69,9 @@ export type ChatMessage = {
 export type CreateTrainingResponse = { trainingId: number; phase: TrainingPhase; status: TrainingStatus; stateVersion: number; firstMessage: ChatMessage }
 /** 진행 중 훈련이 없으면 null */
 export type ActiveTrainingResponse = { trainingId: number; phase: TrainingPhase; status: TrainingStatus; lastActivityAt: string } | null
-export type TrainingScenarioSummary = { title: string; description: string; senderName?: string | null; organizationName?: string | null }
+export type TrainingScenarioSummary = { title: string; description: string; senderName?: string | null; organizationName?: string | null
+  /** 대화 화면 모양 코드: SMS | MESSENGER | MARKET | EMAIL | SNS */
+  channel?: "SMS" | "MESSENGER" | "MARKET" | "EMAIL" | "SNS" | null }
 export type TrainingDetail = {
   trainingId: number
   phase: TrainingPhase
@@ -79,6 +81,8 @@ export type TrainingDetail = {
   messages: ChatMessage[]
   availableOptions: ChoiceOption[]
   mockPageSubmitted?: boolean
+  /** 훈련 중 가상 앱 설치 링크를 누른 적이 있는지 (새로고침 후 카드 상태 복원용) */
+  mockAppClicked?: boolean
   mockPage: MockPage | null
   /** 가안(노션에 없음): 복원 때 시나리오 제목·설명을 다시 보여 주려면 필요해요 */
   scenario?: TrainingScenarioSummary | null
@@ -131,12 +135,15 @@ export type Evaluation = {
   overallFeedback: string
   strengths?: string[] // RPT-01에만 있음
   improvements?: string[] // RPT-01에만 있음
-  turnFeedback: unknown[] // 형식 미정
+  /** 리포트 타임라인. AI가 주는 항목은 TurnFeedback 모양이지만, 예전 리포트는 빈 배열이에요 */
+  turnFeedback: unknown[]
   mockPageEvaluation: MockPageEvaluation
   recommendations: string[]
   /** 가안(노션에 없음): 11/16 팀 결정 — 요구받은 개인정보 종류와 실제로 넘긴 종류. 값은 없음 */
   infoDisclosure?: InfoDisclosure
 }
+/** 훈련자 n번째 답변에서 있었던 일 (risky: 요구에 응함, safe: 잘 막음) */
+export type TurnFeedback = { turn: number; outcome: "safe" | "risky"; userAction: string; feedback: string }
 export type InfoDisclosure = { requested: string[]; provided: string[] }
 /** RPT-01 훈련 직후 결과 */
 export type TrainingReport = { reportId: number; trainingId: number; title: string; fraudTypeCode: string; saved: boolean; evaluation: Evaluation }
