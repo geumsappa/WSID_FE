@@ -4,7 +4,8 @@ import type { AssistantReply, FactKey, Institution, NextQuestion, ResponseCard, 
 import type { Page, UploadedImage } from "@/types/common"
 import { maskSensitive } from "@/lib/privacy"
 import { devOcr } from "@/api/mock/devOcr"
-import type { AssistantMessage, SituationKey } from "../types"
+import type { AssistantMessage, CardNotice, SituationKey } from "../types"
+import { toTextItems } from "@/lib/normalize"
 import { situationGuides } from "../data/situationGuides"
 import { dedupeMessages, situationOfText } from "../lib/historyView"
 import { CHECK_LABEL, CHECK_ORDER, checklistReply, composeReply, parseShortAnswer } from "../lib/composeReply"
@@ -182,8 +183,28 @@ export function useEmergency(go: (next: Page) => void) {
   /** 지금 화면 상태 (응답 전후 비교용) */
   const view = (): SolutionView => ({ facts, cards, nextQuestion })
   /** 응답을 화면에 반영하고, 무엇이 바뀌었는지·질문에 대한 답을 도우미 말로 만들어 돌려줘요 */
+  /** 대응 카드가 바뀌었으면 채팅에 보낼 알림 카드. 유형 카드(고정 안내) 상담에서는 위 카드가 안 바뀌어서 보내지 않아요 */
+  const noticeOf = (prev: SolutionView, nextCards: SolutionCard[], details: Record<string, ResponseCard>): AssistantMessage | null => {
+    if (situationRef.current !== null) return null
+    const had = new Set(prev.cards.map((c) => c.code))
+    const now = new Set(nextCards.map((c) => c.code))
+    const added: CardNotice["added"] = nextCards.filter((c) => !had.has(c.code)).map((c) => {
+      const step = toTextItems(details[c.code]?.actions)[0]
+      return { code: c.code, title: details[c.code]?.title ?? c.title ?? c.code, first: step?.title || step?.body, urgent: (c.priority ?? details[c.code]?.priority) === "URGENT" }
+    })
+    const removed = prev.cards.filter((c) => !now.has(c.code)).map((c) => details[c.code]?.title ?? cardDetails[c.code]?.title ?? c.title ?? c.code)
+    return added.length || removed.length ? { key: key(), from: "assistant", text: "", notice: { added, removed } } : null
+  }
+  const noticeRef = useRef<AssistantMessage | null>(null)
+  /** 도우미 답 + (카드가 바뀌었으면) 알림 카드를 이어서 보여 줘요 */
+  const pushReply = (reply: string) => {
+    const notice = noticeRef.current
+    noticeRef.current = null
+    setMessages((m) => [...m, { key: key(), from: "assistant", text: reply }, ...(notice ? [notice] : [])])
+  }
   const reflect = async (kind: "start" | "choice" | "text" | "correct", prev: SolutionView, r: Result, userText?: string, answered?: { factKey: FactKey; value: YesNoUnknown }) => {
     const details = await applyResult(r)
+    noticeRef.current = kind === "start" ? null : noticeOf(prev, r.responseCards, details)
     const next: SolutionView = { facts: r.facts, cards: r.responseCards, nextQuestion: r.nextQuestion ?? null }
     return composeReply({ kind, prev, next, details, institutions, userText, explanation: r.explanation, answered, fixedGuide: situationRef.current !== null })
   }
@@ -278,7 +299,7 @@ export function useEmergency(go: (next: Page) => void) {
       const prev = view()
       const r = await solutionApi.message(id, { stateVersion: versionRef.current, inputKind: "CHOICE", factKey, selectedCode: value })
       const reply = await reflect("choice", prev, r, undefined, { factKey, value })
-      setMessages((m) => [...m, { key: key(), from: "assistant", text: reply }])
+      pushReply(reply)
     } catch (err) {
       await recover(err)
     } finally {
@@ -321,7 +342,7 @@ export function useEmergency(go: (next: Page) => void) {
         // 상황 설명이거나 assistant를 아직 안 보내는 서버(feature/emergency-reply): 규칙 기반 도우미 말
         setClarification(null)
         const reply = await reflect("text", prev, r, body.content)
-        setMessages((m) => [...m, { key: key(), from: "assistant", text: reply }])
+        pushReply(reply)
       }
       return true
     } catch (err) {
@@ -386,7 +407,7 @@ export function useEmergency(go: (next: Page) => void) {
       // 백엔드 공유(11/17): 응답의 nextQuestion으로 질문을 바꿔요(null이면 질문 숨김).
       // 아직 nextQuestion을 안 주는 서버라면(필드 자체가 없으면) 지금 질문을 그대로 둬요.
       const reply = await reflect("correct", prev, { ...r, nextQuestion: r.nextQuestion !== undefined ? r.nextQuestion : nextQuestion }, undefined, { factKey, value })
-      setMessages((m) => [...m, { key: key(), from: "assistant", text: reply }])
+      pushReply(reply)
     } catch (err) {
       await recover(err)
     } finally {
@@ -410,7 +431,8 @@ export function useEmergency(go: (next: Page) => void) {
       const r = await solutionApi.updateFacts(id, { stateVersion: versionRef.current, changes })
       const details = await applyResult({ ...r, nextQuestion: r.nextQuestion ?? null })
       const reply = checklistReply(prev, { facts: r.facts, cards: r.responseCards, nextQuestion: r.nextQuestion ?? null }, details)
-      setMessages((m) => [...m, { key: key(), from: "assistant", text: reply }])
+      noticeRef.current = noticeOf(prev, r.responseCards, details)
+      pushReply(reply)
     } catch (err) {
       await recover(err)
     } finally {

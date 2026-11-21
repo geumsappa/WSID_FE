@@ -13,6 +13,14 @@ export type AssistantMessage = {
   kind?: "clarification" | "answer" | "unable"
   /** AI 답변의 근거 카드 코드 (assistant.referenceCodes) */
   references?: string[]
+  /** 대응 카드가 바뀌었을 때 채팅에 보내는 작은 알림 카드 (위쪽 전체 대응 방법으로 안내) */
+  notice?: CardNotice
+}
+
+/** 새로 생긴 대응(제목·가장 먼저 할 일)과 빠진 대응 제목 */
+export type CardNotice = {
+  added: { code: string; title: string; first?: string; urgent: boolean }[]
+  removed: string[]
 }
 
 /** 첫 화면 상황 카드(사기 유형 6종). 누르면 data/situationGuides.ts의 고정 안내가 나와요 */
