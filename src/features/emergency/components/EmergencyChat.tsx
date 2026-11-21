@@ -165,7 +165,33 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
   const guide = em.situation ? situationGuides[em.situation] : null
   const first = em.messages.slice(0, 2)
   const rest = em.messages.slice(2)
-  const renderMessage = (m: Emergency["messages"][number]) => (
+  const renderMessage = (m: Emergency["messages"][number]) => m.notice ? (
+    // 대응 카드가 바뀌었을 때: 제목·가장 먼저 할 일만 짧게, 전체는 위쪽 대응 방법으로
+    <div className="prep-message assistant" key={m.key}>
+      <span><Icon name="shield" size={18} /></span>
+      <div>
+        <small>어떡하지 도우미 · 대응 방법 변경</small>
+        <div style={{ background: "#fff", border: "1px solid #d6e4fb", borderRadius: 14, padding: "12px 14px", display: "grid", gap: 10, maxWidth: 560 }}>
+          {m.notice.added.map((a) => (
+            <div key={a.code}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                {a.urgent && <span style={{ padding: "2px 8px", borderRadius: 999, background: "#fff2f1", color: "#b43b38", fontSize: 12, fontWeight: 700 }}>긴급</span>}
+                <strong style={{ fontSize: 15 }}>새 대응: {a.title}</strong>
+              </div>
+              {a.first && <div style={{ marginTop: 4, fontSize: 14, color: "#526174" }}>먼저: {a.first}</div>}
+            </div>
+          ))}
+          {m.notice.removed.length > 0 && (
+            <div style={{ fontSize: 13, color: "#697586" }}>{m.notice.removed.map((t) => `'${t}'`).join(", ")}은(는) 지금 상황에 맞지 않아 뺐어요.</div>
+          )}
+          <button type="button" onClick={() => document.getElementById("em-plan")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            style={{ justifySelf: "start", padding: "6px 12px", border: "1px solid #1769e0", borderRadius: 999, background: "#fff", color: "#1769e0", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+            위에서 전체 보기 ↑
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : (
     <div className={`prep-message ${m.from}`} key={m.key}>
       {m.from === "assistant" && <span><Icon name="shield" size={18} /></span>}
       <div>
@@ -202,7 +228,7 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
           <div className="emergency-messages" ref={scrollRef} aria-live="polite">
             {first.slice(0, 1).map(renderMessage)}
             {/* 대응 카드를 먼저(화면 폭 가득), 그 아래에 도우미 첫 안내 */}
-            <div className="analysis-result-stack">
+            <div className="analysis-result-stack" id="em-plan">
               {SHOW_FACT_PANEL && em.facts && (
                 <section className="result-card summary-result">
                   <div className="result-card-heading"><span><Icon name="search" size={21} /></span><div><small>입력 내용 확인</small><h3>파악한 피해 사실</h3></div></div>

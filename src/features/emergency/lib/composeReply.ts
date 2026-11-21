@@ -228,7 +228,8 @@ const SECONDHAND_NOTE = "중고거래 사기는 보이스피싱과 달리 통신
 
 /** 도우미가 할 말 한 덩어리 */
 export function composeReply({ kind, prev, next, details, institutions, userText, explanation, answered, fixedGuide }: ReplyInput): string {
-  const change = describeChange(prev, next, details, fixedGuide)
+  // 대응 카드가 늘고 준 건 채팅의 알림 카드(또는 고정 안내)가 보여 줘서, 답 글에서는 말하지 않아요
+  const change = describeChange(prev, next, details, true)
   const parts: string[] = []
   if (kind === "start") {
     // 짧게: 무엇을 준비했는지 + 가장 먼저 할 일 하나. ("돈을 보내셨군요" 같은 사실 되풀이는 아래 체크리스트가 대신해요)
@@ -252,7 +253,9 @@ export function composeReply({ kind, prev, next, details, institutions, userText
     if (answered && !factChanged) {
       parts.push(answered.value === "UNKNOWN" ? `알겠어요. ${FACT_PHRASE[answered.factKey].UNKNOWN}으로 둘게요. 나중에 확인되면 채팅으로 알려 주세요.` : "확인했어요.")
     }
-    parts.push(...(change.length ? change : answered ? ["지금 안내된 대응은 그대로예요."] : ["확인했어요. 지금 안내된 대응은 그대로예요."]))
+    // 카드가 바뀌었으면 아래 알림 카드가 보여 주니 "그대로예요"라고 하지 않아요
+    const cardsChanged = !fixedGuide && (prev.cards.length !== next.cards.length || next.cards.some((c) => !has(prev.cards, c.code)))
+    parts.push(...(change.length ? change : cardsChanged ? (answered ? [] : ["확인했어요."]) : answered ? ["지금 안내된 대응은 그대로예요."] : ["확인했어요. 지금 안내된 대응은 그대로예요."]))
   }
   // 선택·정정 뒤에도 같은 질문이 남아 있으면 다시 보여 줘서, 다음에 "네/아니요"로 답할 때 무엇에 답하는지 알 수 있게 해요
   // 중고거래 + 송금이 새로 확인되면, 지급정지가 안 될 수 있다는 점을 한 번 알려요
@@ -290,9 +293,8 @@ export function checklistReply(prev: SolutionView, next: SolutionView, d: Detail
   if (yes("sharedInformation")) steps.push("개인정보노출자 사고예방시스템에 등록하고 금융 비밀번호 바꾸기")
   if (yes("installedApp")) steps.push("다른 전화로 신고하고, 설치한 앱 지우기 또는 휴대폰 초기화하기")
   if (yes("contactContinues")) steps.push("상대가 무엇을 더 요구해도 응하지 말고 연락 끊기")
-  const added = next.cards.some((c) => !has(prev.cards, c.code))
   const lead = steps.length
-    ? `지금 할 일을 순서대로 정리했어요.${added ? " 위 대응 방법도 맞춰 바꿨어요." : ""}`
+    ? "지금 할 일을 순서대로 정리했어요."
     : "다행이에요. 지금은 이렇게만 해 두세요."
   if (!steps.length) steps.push("상대와 더 연락하지 않기", "대화 화면 저장해 두기")
   // 화면에서 번호 목록으로 보이게 줄바꿈 + "1. " 형식으로 돌려줘요
