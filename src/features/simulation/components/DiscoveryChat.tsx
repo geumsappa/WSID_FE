@@ -3,7 +3,7 @@ import { Icon } from "@/components/Icon"
 import { Typing } from "@/components/Typing"
 import type { Simulation } from "../hooks/useSimulation"
 
-// 빠른 시작: 질문에 답하지 않고 흔한 상황을 골라 바로 훈련을 만들어요. 고른 문장이 첫 답변으로 보내져요.
+// 첫 답변 고르기: 흔한 상황을 고르면 그 문장이 첫 답변으로 보내져요. 이후 대화는 평소처럼 이어가요.
 const QUICK_STARTS = [
   { label: "택배 문자", text: "택배를 자주 시키고 배송 문자를 자주 받아요. 주소를 확인하라는 문자를 받은 적이 있어요." },
   { label: "중고거래", text: "중고거래 앱으로 물건을 팔고 있어요. 구매자가 앱 밖에서 결제하자고 한 적이 있어요." },
@@ -44,10 +44,10 @@ export function DiscoveryChat({ sim }: { sim: Simulation }) {
     </div>
     {answered === 0 && !sim.typing && (
       <div className="quick-start">
-        <strong>바로 체험하기</strong>
-        <span>상황을 고르면 질문 없이 바로 훈련을 만들어요.</span>
+        <strong>비슷한 상황 고르기</strong>
+        <span>직접 적기 어렵다면 가까운 상황을 골라 시작해 보세요.</span>
         <div className="interview-choices">
-          {QUICK_STARTS.map((q) => <button key={q.label} type="button" onClick={() => void sim.quickStart(q.text)}>{q.label}</button>)}
+          {QUICK_STARTS.map((q) => <button key={q.label} type="button" onClick={() => void send(q.text)}>{q.label}</button>)}
         </div>
       </div>
     )}

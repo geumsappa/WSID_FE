@@ -75,7 +75,6 @@ export function useSimulation(
   const idRef = useRef<number | null>(null)
   const versionRef = useRef(0)
   const freshRef = useRef(false) // true면 진행 중 훈련을 이어받지 않고 새로 만듭니다
-  const canGenerateRef = useRef(false) // 빠른 시작에서 답변 직후 바로 시나리오를 만들 수 있는지 보려고 둬요
   const bootingRef = useRef(false) // 개발 모드(StrictMode)에서 effect가 두 번 돌아도 한 번만 요청
   const queueRef = useRef<Promise<unknown>>(Promise.resolve()) // stateVersion이 꼬이지 않게 요청을 한 줄로 세웁니다
 
@@ -240,7 +239,6 @@ export function useSimulation(
       versionRef.current = res.stateVersion
       setDiscoveryLines((lines) => [...lines, toLine(res.reply)])
       setCanGenerate(res.canGenerateScenario)
-      canGenerateRef.current = res.canGenerateScenario
       return true
     } catch (err) {
       setDiscoveryLines((lines) => lines.filter((l) => l.key !== mine.key))
@@ -293,15 +291,6 @@ export function useSimulation(
       setStage("discovery")
       await recover(err)
     }
-  }
-
-  /**
-   * 빠른 시작: 고른 상황 설명을 첫 답변으로 보내고, 서버가 충분하다고 하면 바로 시나리오를 만들어요.
-   * 부족하다고 하면 AI가 이어서 질문하니 대화를 계속하면 돼요.
-   */
-  const quickStart = async (text: string) => {
-    canGenerateRef.current = false
-    if (await sendDiscovery(text) && canGenerateRef.current) await generateScenario()
   }
 
   /** TRN-07 가상 훈련 시작 */
@@ -491,7 +480,7 @@ export function useSimulation(
   return {
     stage, trainingId, discoveryLines, canGenerate, scenario, chatLines, turnCount, shouldFinish, typing, error,
     usedImages, endConfirm, setEndConfirm, report, reportState, saveNotice, saving, resumeInfo,
-    startNew, retry, sendDiscovery, quickStart, uploadDiscoveryImages, generateScenario, startTraining, sendTraining,
+    startNew, retry, sendDiscovery, uploadDiscoveryImages, generateScenario, startTraining, sendTraining,
     showMockPage, closeMockPage, checkOpen, clickMockApp, finish, leave, saveReport, downloadPdf, resetForLogout,
     clearError: () => setError(""),
   }
