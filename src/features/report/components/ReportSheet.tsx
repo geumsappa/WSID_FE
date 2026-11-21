@@ -1,4 +1,4 @@
-import type { Evaluation, TurnFeedback } from "@/api"
+import type { Evaluation } from "@/api"
 import { Icon } from "@/components/Icon"
 
 const FRAUD_LABEL: Record<string, string> = {
@@ -24,17 +24,6 @@ const toDay = (iso?: string) => {
 
 type Tone = "good" | "warn" | "risk"
 type Fact = { label: string; value: string; tone: Tone }
-
-/** 서버가 준 타임라인 중 모양이 맞는 것만 답변 순서대로 써요 */
-function timelineOf(e: Evaluation): TurnFeedback[] {
-  return (e.turnFeedback ?? [])
-    .filter((x): x is TurnFeedback => {
-      const t = x as Partial<TurnFeedback> | null
-      return !!t && typeof t.turn === "number" && (t.outcome === "safe" || t.outcome === "risky")
-        && typeof t.userAction === "string" && typeof t.feedback === "string"
-    })
-    .sort((a, b) => a.turn - b.turn)
-}
 
 /** 핵심 3칸: 모의 페이지 행동(mockPageEvaluation)과 개인정보 제공 여부(infoDisclosure)로 만들어요 */
 function keyFacts(e: Evaluation): Fact[] {
@@ -62,7 +51,6 @@ export function ReportSheet({ title, fraudTypeCode, completedAt, evaluation }: {
   const strengths = evaluation.strengths ?? []
   const improvements = evaluation.improvements ?? []
   const recs = evaluation.recommendations ?? []
-  const timeline = timelineOf(evaluation)
   const day = toDay(completedAt)
   const type = fraudTypeCode ? FRAUD_LABEL[fraudTypeCode] : undefined
   return (
@@ -91,23 +79,6 @@ export function ReportSheet({ title, fraudTypeCode, completedAt, evaluation }: {
         <div className="rs-facts">
           {facts.map((f) => <div key={f.label}><span>{f.label}</span><strong className={f.tone}>{f.value}</strong></div>)}
         </div>
-      )}
-
-      {timeline.length > 0 && (
-        <section className="rs-timeline">
-          <h2>대화 속 결정적 순간</h2>
-          <ol>
-            {timeline.map((t) => (
-              <li key={t.turn} className={t.outcome}>
-                <span className="rs-turn">{t.turn}번째 답변</span>
-                <div>
-                  <strong><em>{t.outcome === "risky" ? "위험" : "잘 막음"}</em>{t.userAction}</strong>
-                  <p>{t.feedback}</p>
-                </div>
-              </li>
-            ))}
-          </ol>
-        </section>
       )}
 
       {(strengths.length > 0 || improvements.length > 0) && (

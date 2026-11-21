@@ -2,6 +2,7 @@ import { USE_MOCK } from "@/api"
 import { Icon } from "@/components/Icon"
 import { displayName, type Account } from "@/features/auth/types"
 import { ReportSheet } from "@/features/report/components/ReportSheet"
+import { TurnReview } from "@/features/report/components/TurnReview"
 import { printAsPdf } from "@/lib/print"
 import type { SavedReports } from "../hooks/useSavedReports"
 import type { SolutionHistory, SolutionRecord } from "../hooks/useSolutionHistory"
@@ -55,6 +56,7 @@ export function MyPage({ account, reports, history, onLogout }: { account: Accou
           <button className="outline-button" title="인쇄 창에서 대상을 'PDF로 저장'으로 고르세요" onClick={() => printAsPdf(`어떡하지 리포트 - ${r.detail!.title}`)}><Icon name="download" size={17}/> PDF로 저장</button>
         </div>
         <ReportSheet title={r.detail.title} fraudTypeCode={detailItem?.fraudTypeCode} completedAt={detailItem?.completedAt} evaluation={r.detail.evaluation} />
+        <TurnReview turnFeedback={r.detail.evaluation.turnFeedback} className="no-print" style={{ maxWidth: 794, margin: "22px auto 0" }} />
       </div>
       : r.detailLoading || (r.loading && !r.items.length) ? <div className="record-empty"><div className="record-empty-icon"><Icon name="refresh" size={30}/></div><h3>불러오는 중...</h3></div>
       : r.items.length ? <>

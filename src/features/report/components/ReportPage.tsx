@@ -2,8 +2,8 @@ import { Icon } from "@/components/Icon"
 import { PageIntro } from "@/components/PageIntro"
 import type { Simulation } from "@/features/simulation/hooks/useSimulation"
 import { printAsPdf } from "@/lib/print"
-import { toTextItems } from "@/lib/normalize"
 import { ReportSheet } from "./ReportSheet"
+import { TurnReview } from "./TurnReview"
 
 // 훈련 직후 결과 리포트(RPT-01). 저장(RPT-02)도 여기서.
 // 리포트는 A4 한 장 크기 종이(ReportSheet)로 보여 주고, "PDF로 저장"은 그 종이만 인쇄해요(서버 PDF RPT-05 대신).
@@ -20,12 +20,7 @@ export function ReportPage({ sim, onEmergency }: { sim: Simulation; onEmergency:
         {!r && sim.reportState === "missing" && <div className="loading-card" role="alert"><div className="loader-visual"><Icon name="alert" size={34}/></div><h2>표시할 리포트가 없어요.</h2><p>{sim.error || "훈련을 마친 뒤 결과를 볼 수 있어요. 저장한 리포트는 마이페이지에서 확인하세요."}</p><button className="primary-button" onClick={sim.startNew}>새 훈련 시작하기 <Icon name="arrow" size={17}/></button></div>}
         {r && <div className="report-sheet-wrap">
           <ReportSheet title={r.title} fraudTypeCode={r.fraudTypeCode} evaluation={r.evaluation} />
-          {toTextItems(r.evaluation.turnFeedback).length > 0 && (
-            <div className="guide-card no-print" style={{ maxWidth: 794, margin: "22px auto 0" }}>
-              <div className="section-heading left"><span>대화 되짚어 보기</span><h2>턴별 피드백</h2></div>
-              <div className="action-steps">{toTextItems(r.evaluation.turnFeedback).map((t, i) => <div key={i}><span>{i + 1}</span><div>{t.title && <h4>{t.title}</h4>}<p>{t.body}</p></div></div>)}</div>
-            </div>
-          )}
+          <TurnReview turnFeedback={r.evaluation.turnFeedback} className="no-print" style={{ maxWidth: 794, margin: "22px auto 0" }} />
           <div className="report-actions no-print">
             <button className="primary-button" disabled={sim.saving || r.saved} onClick={() => void sim.saveReport()}><Icon name="shield" size={18} /> {r.saved ? "내 리포트에 저장됨" : sim.saving ? "저장 중..." : "내 리포트에 저장"}</button>
             {sim.saveNotice && <p role="status" className="report-save-notice">{sim.saveNotice}</p>}
