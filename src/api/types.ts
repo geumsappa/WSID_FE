@@ -88,8 +88,7 @@ export type TrainingDetail = {
   scenario?: TrainingScenarioSummary | null
 }
 
-/** quickStart: '바로 체험하기'로 고른 상황. 서버가 추가 질문 없이 시나리오를 만들 수 있게 해요 */
-export type DiscoveryMessageRequest = Versioned & { content: string; quickStart?: boolean }
+export type DiscoveryMessageRequest = Versioned & { content: string }
 export type DiscoveryMessageResponse = { reply: ChatMessage; discoveryTurnCount: number; canGenerateScenario: boolean; stateVersion: number }
 /** multipart/form-data: images(File[]), requestId */
 export type DiscoveryImagesResponse = { recognizedText: string; usable: boolean }

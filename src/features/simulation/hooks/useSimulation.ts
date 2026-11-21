@@ -75,7 +75,6 @@ export function useSimulation(
   const idRef = useRef<number | null>(null)
   const versionRef = useRef(0)
   const freshRef = useRef(false) // true면 진행 중 훈련을 이어받지 않고 새로 만듭니다
-  const canGenerateRef = useRef(false) // 빠른 시작에서 답변 직후 바로 시나리오를 만들 수 있는지 보려고 둬요
   const bootingRef = useRef(false) // 개발 모드(StrictMode)에서 effect가 두 번 돌아도 한 번만 요청
   const queueRef = useRef<Promise<unknown>>(Promise.resolve()) // stateVersion이 꼬이지 않게 요청을 한 줄로 세웁니다
 
@@ -225,7 +224,7 @@ export function useSimulation(
   const retry = () => setBootTick((n) => n + 1)
 
   /** TRN-04 상황 대화 한 턴. 성공하면 true (실패하면 입력창에 글을 되돌려 놓기 위해) */
-  const sendDiscovery = async (raw: string, quickStart = false): Promise<boolean> => {
+  const sendDiscovery = async (raw: string): Promise<boolean> => {
     const id = idRef.current
     if (id === null || typing || stage !== "discovery") return false
     // 상황 설명에는 실제 번호가 필요 없으므로, 값은 가리고 종류만 남긴 글을 보냅니다.
@@ -236,12 +235,10 @@ export function useSimulation(
     setDiscoveryLines((lines) => [...lines.map((l) => ({ ...l, options: undefined })), mine])
     setTyping(true)
     try {
-      const res = await inOrder(() => trainingApi.discoveryMessage(id, { stateVersion: versionRef.current, content: text,
-        ...(quickStart ? { quickStart: true } : {}) }))
+      const res = await inOrder(() => trainingApi.discoveryMessage(id, { stateVersion: versionRef.current, content: text }))
       versionRef.current = res.stateVersion
       setDiscoveryLines((lines) => [...lines, toLine(res.reply)])
       setCanGenerate(res.canGenerateScenario)
-      canGenerateRef.current = res.canGenerateScenario
       return true
     } catch (err) {
       setDiscoveryLines((lines) => lines.filter((l) => l.key !== mine.key))
@@ -294,15 +291,6 @@ export function useSimulation(
       setStage("discovery")
       await recover(err)
     }
-  }
-
-  /**
-   * 빠른 시작: 고른 상황 설명을 quickStart 표시와 함께 첫 답변으로 보내요.
-   * 서버가 추가 질문 없이 '만들 수 있음'으로 답하면 바로 시나리오를 만들어요.
-   */
-  const quickStart = async (text: string) => {
-    canGenerateRef.current = false
-    if (await sendDiscovery(text, true) && canGenerateRef.current) await generateScenario()
   }
 
   /** TRN-07 가상 훈련 시작 */
@@ -492,7 +480,7 @@ export function useSimulation(
   return {
     stage, trainingId, discoveryLines, canGenerate, scenario, chatLines, turnCount, shouldFinish, typing, error,
     usedImages, endConfirm, setEndConfirm, report, reportState, saveNotice, saving, resumeInfo,
-    startNew, retry, sendDiscovery, quickStart, uploadDiscoveryImages, generateScenario, startTraining, sendTraining,
+    startNew, retry, sendDiscovery, uploadDiscoveryImages, generateScenario, startTraining, sendTraining,
     showMockPage, closeMockPage, checkOpen, clickMockApp, finish, leave, saveReport, downloadPdf, resetForLogout,
     clearError: () => setError(""),
   }
