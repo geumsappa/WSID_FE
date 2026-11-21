@@ -802,6 +802,14 @@ textarea:focus { border-color: #78aaed; background: #fff; outline: 3px solid rgb
 
 .simulation-inline-link { display: inline; padding: 0; margin: 0 3px; border: 0; background: transparent; color: #1769e0; text-decoration: underline; text-underline-offset: 3px; font: inherit; font-weight: 600; overflow-wrap: anywhere; }
 .simulation-inline-link:disabled { color: #64748b; }
+/* 대화 속 가상 앱 설치 링크 카드 ([모의앱]) */
+.simulation-app-card { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 280px; margin: 8px 0 2px; padding: 10px 12px; border: 1px solid #d6e0ee; border-radius: 12px; background: #f7f9fc; color: #1d2a3a; font: inherit; text-align: left; cursor: pointer; }
+.simulation-app-card:hover:not(:disabled) { border-color: #1769e0; background: #eef4fd; }
+.simulation-app-card:disabled { cursor: default; opacity: 0.75; }
+.simulation-app-icon { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 10px; background: #1769e0; color: #fff; }
+.simulation-app-text { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.simulation-app-text strong { font-size: 13px; font-weight: 700; }
+.simulation-app-text small { font-size: 11px; color: #5d6b80; }
 
 
 /* Standalone local applicant page; no official logos or external resources. */

@@ -351,6 +351,35 @@ export function useSimulation(
     }
   }
 
+  /**
+   * 대화 속 가상 앱 설치 링크([모의앱])를 눌렀을 때. 실제로는 아무것도 내려받지 않고,
+   * 눌렀다는 사실(MOCK_APP_CLICK)만 서버에 남겨 리포트에 반영해요.
+   */
+  const clickMockApp = async (key: string) => {
+    const id = idRef.current
+    if (id === null || stage !== "chat") return
+    setChatLines((lines) => lines.map((l) => l.key === key
+      ? { ...l, appClicked: true, note: "훈련용 가상 앱이에요. 실제로는 아무것도 설치되지 않았어요." } : l))
+    const record = async () => {
+      const res = await inOrder(() => trainingApi.action(id, { stateVersion: versionRef.current, actionCode: "MOCK_APP_CLICK" }))
+      versionRef.current = res.stateVersion
+    }
+    try {
+      await record()
+    } catch (err) {
+      if (isStateConflict(err)) {
+        try {
+          const detail = await trainingApi.detail(id)
+          versionRef.current = detail.stateVersion
+          await record()
+          return
+        } catch { /* 아래 안내로 넘어가요 */ }
+      }
+      setError("앱 링크를 누른 기록을 남기지 못했어요. 잠시 후 다시 눌러 주세요.")
+      setChatLines((lines) => lines.map((l) => l.key === key ? { ...l, appClicked: false, note: undefined } : l))
+    }
+  }
+
   /** Open a separate local tab; that tab records its own actions. */
   const showMockPage = (_fallback?: MockPage) => {
     const id = idRef.current
@@ -443,7 +472,7 @@ export function useSimulation(
     stage, trainingId, discoveryLines, canGenerate, scenario, chatLines, turnCount, shouldFinish, typing, error,
     usedImages, endConfirm, setEndConfirm, report, reportState, saveNotice, saving, resumeInfo,
     startNew, retry, sendDiscovery, uploadDiscoveryImages, generateScenario, startTraining, sendTraining,
-    showMockPage, finish, leave, saveReport, downloadPdf, resetForLogout,
+    showMockPage, clickMockApp, finish, leave, saveReport, downloadPdf, resetForLogout,
     clearError: () => setError(""),
   }
 }

@@ -157,7 +157,9 @@ export const trainingsMock = withSave({
     t.log.push({ sender: "USER", inputKind: body.inputKind, content: text, phase: "SIMULATION" })
     const content = types.length
       ? `${types.join(", ")} 확인 감사하다며, 처리를 마치려면 추가 확인이 필요하다고 다른 정보도 요구합니다.`
-      : createDemoReply(text, turn, t.scenario!)
+      : turn === 3 // 네 번째 답장에는 담당자가 바뀌며 가상 앱 설치 링크를 보내는 흉내
+        ? "[화자: 박서연/보안관리팀] 방금 연결받은 보안관리팀입니다. 확인용 앱을 설치하셔야 다음 처리가 돼요. [모의앱]"
+        : createDemoReply(text, turn, t.scenario!)
     t.messages.push({ from: "contact", text: content })
     const reply = ai(content, "SIMULATION")
     t.log.push(reply)
@@ -210,6 +212,7 @@ export const trainingsMock = withSave({
           openedPage: t.actions.includes("MOCK_PAGE_OPEN"),
           attemptedMockLogin: t.actions.includes("MOCK_LOGIN_ATTEMPT"),
           checkedOfficialChannel: t.actions.includes("OFFICIAL_CHANNEL_CHECK") || /공식|고객센터/.test(t.messages.map((m) => m.text).join(" ")),
+          clickedAppLink: t.actions.includes("MOCK_APP_CLICK"),
         },
         recommendations: ["메시지 속 연락처 대신 공식 앱·대표번호로 확인하기", "비밀번호·인증번호는 누구에게도 알려주지 않기", "금전 피해가 생기면 112와 금융회사에 바로 연락하기"],
         infoDisclosure: { requested: t.requested, provided: a.leaked ?? [] },

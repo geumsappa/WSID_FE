@@ -114,7 +114,8 @@ export type TrainingMessageResponse = {
 
 export type MockPage = { templateCode: string; title: string; institutionName: string; screenCode: string; isSimulation: boolean }
 /** 노션: "MOCK_PAGE_OPEN,CLOSE,MOCK_LOGIN_ATTEMPT,OFFICIAL_CHANNEL_CHECK". CLOSE의 정확한 코드는 확인 필요 */
-export type MockActionCode = "MOCK_PAGE_OPEN" | "MOCK_PAGE_CLOSE" | "MOCK_LOGIN_ATTEMPT" | "OFFICIAL_CHANNEL_CHECK"
+/** MOCK_APP_CLICK: 대화 속 가상 앱 설치 링크를 누름 (모의 페이지 없이 기록, actionMeta 없음) */
+export type MockActionCode = "MOCK_PAGE_OPEN" | "MOCK_PAGE_CLOSE" | "MOCK_LOGIN_ATTEMPT" | "OFFICIAL_CHANNEL_CHECK" | "MOCK_APP_CLICK"
 export type MockActionRequest = Versioned & { actionCode: MockActionCode; actionMeta?: { templateCode: string; screenCode: string } }
 export type MockActionResponse = { recorded: boolean; stateVersion: number }
 
@@ -123,7 +124,9 @@ export type FinishTrainingRequest = Versioned & { reason: FinishReason }
 export type FinishTrainingResponse = { trainingId: number; status: TrainingStatus; phase: TrainingPhase; reportId: number }
 
 // ───────── 리포트 (RPT-01~05) ─────────
-export type MockPageEvaluation = { openedPage: boolean; attemptedMockLogin: boolean; checkedOfficialChannel: boolean }
+export type MockPageEvaluation = { openedPage: boolean; attemptedMockLogin: boolean; checkedOfficialChannel: boolean
+  /** 가상 앱 설치 링크를 눌렀는지. 예전 리포트에는 없어요 */
+  clickedAppLink?: boolean }
 export type Evaluation = {
   overallFeedback: string
   strengths?: string[] // RPT-01에만 있음
