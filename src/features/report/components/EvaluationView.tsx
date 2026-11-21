@@ -1,12 +1,11 @@
 import type { Evaluation } from "@/api"
 import { Icon } from "@/components/Icon"
-import { toTextItems } from "@/lib/normalize"
+import { TurnReview } from "./TurnReview"
 
 // 리포트 본문. 결과 화면(RPT-01)과 마이페이지 상세(RPT-04)가 같이 써요.
 export function EvaluationView({ evaluation, compact = false }: { evaluation: Evaluation; compact?: boolean }) {
   const info = evaluation.infoDisclosure
   const mock = evaluation.mockPageEvaluation
-  const turns = toTextItems(evaluation.turnFeedback)
   const strengths = evaluation.strengths ?? []
   const improvements = evaluation.improvements ?? []
   return <>
@@ -39,12 +38,7 @@ export function EvaluationView({ evaluation, compact = false }: { evaluation: Ev
         </ul>
       </div>
     )}
-    {turns.length > 0 && !compact && (
-      <div className="guide-card" style={{ marginTop: 20 }}>
-        <div className="section-heading left"><span>대화 되짚어 보기</span><h2>턴별 피드백</h2></div>
-        <div className="action-steps">{turns.map((t, i) => <div key={i}><span>{i + 1}</span><div>{t.title && <h4>{t.title}</h4>}<p>{t.body}</p></div></div>)}</div>
-      </div>
-    )}
+    {!compact && <TurnReview turnFeedback={evaluation.turnFeedback} style={{ marginTop: 20 }} />}
     {evaluation.recommendations.length > 0 && (
       <div className="guide-card" style={{ marginTop: 20 }}>
         <div className="section-heading left"><span>맞춤 예방 안내</span><h2>다음에는 이렇게 대응해 보세요.</h2></div>
