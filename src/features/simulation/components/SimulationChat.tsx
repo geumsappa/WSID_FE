@@ -3,7 +3,7 @@ import { USE_MOCK } from "@/api"
 import { Icon } from "@/components/Icon"
 import type { Simulation } from "../hooks/useSimulation"
 import { MockPhotoPreview } from "./MockPhotoPreview"
-import { containsMockLink, TrainingMessageContent } from "./TrainingMessageContent"
+import { containsMockLink, splitSpeaker, TrainingMessageContent } from "./TrainingMessageContent"
 
 const MAX_TURNS = 15 // 명세 초안: 전체 최대 15턴
 
@@ -16,6 +16,15 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
   const finished = sim.stage === "done" || sim.stage === "finishing"
   const progress = Math.min(MAX_TURNS, sim.turnCount)
   const senderName = sim.scenario?.senderName || "상대방"
+  // 사기범 쪽 담당자가 중간에 바뀌면([화자: ...]) 그 뒤 말풍선의 보낸 사람 이름도 바꿔요
+  let speaker = senderName
+  const rows = lines.map((m) => {
+    if (m.from !== "ai") return { m, name: "나", text: m.text }
+    const split = splitSpeaker(m.text)
+    if (split.speaker) speaker = split.speaker
+    return { m, name: speaker, text: split.body }
+  })
+  const currentSpeaker = speaker
   const disclaimer = sim.scenario?.organizationName
     ? `${sim.scenario.organizationName} 측이 운영하거나 승인한 서비스가 아닙니다. 실제 해당 기관과 무관한 가상 대화입니다.`
     : "실제 기관이나 인물이 운영하거나 승인한 서비스가 아닌 교육용 가상 대화입니다."
@@ -62,15 +71,16 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
             <div><strong>사기 예방을 위한 가상 훈련입니다.</strong><p>{disclaimer}</p></div>
           </div>
           <div className="messages" ref={scrollRef} aria-live="polite">
-            {lines.map((m) => (
+            {rows.map(({ m, name, text }) => (
               <div className={`message-row ${m.from === "ai" ? "contact" : "user"}`} key={m.key}>
                 {m.from === "ai" && <span className="avatar"><Icon name="chat" size={18} /></span>}
                 <div>
-                  <span className="sender">{m.from === "ai" ? senderName : "나"}</span>
-                  {m.text && (m.from === "ai"
-                    ? <TrainingMessageContent text={m.text} page={m.mockPage} disabled={finished || sim.typing}
-                        onOpen={(page) => void sim.showMockPage(page)} />
-                    : <p>{m.text}</p>)}
+                  <span className="sender">{name}</span>
+                  {text && (m.from === "ai"
+                    ? <TrainingMessageContent text={text} page={m.mockPage} disabled={finished || sim.typing}
+                        onOpen={(page) => void sim.showMockPage(page)}
+                        appClicked={m.appClicked} onAppClick={() => void sim.clickMockApp(m.key)} />
+                    : <p>{text}</p>)}
                   {m.mockAttachment && <MockPhotoPreview attachment={m.mockAttachment} />}
                   {m.mockPage && !containsMockLink(m.text) && (
                     <button type="button" className="outline-button" style={{ marginTop: 8, padding: "9px 13px", fontSize: 12 }} disabled={finished || sim.typing} onClick={() => void sim.showMockPage(m.mockPage!)}>
@@ -83,10 +93,10 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
             ))}
             {/* 답장 기다리는 중: 상대방 말풍선과 같은 자리·모양(아바타, 이름, 말풍선)으로 점 세 개를 보여 줘요 */}
             {sim.typing && (
-              <div className="message-row contact" role="status" aria-label={`${senderName}이(가) 답장을 쓰고 있어요`}>
+              <div className="message-row contact" role="status" aria-label={`${currentSpeaker}이(가) 답장을 쓰고 있어요`}>
                 <span className="avatar"><Icon name="chat" size={18} /></span>
                 <div>
-                  <span className="sender">{senderName}</span>
+                  <span className="sender">{currentSpeaker}</span>
                   <div className="typing-dots"><i /><i /><i /></div>
                 </div>
               </div>
