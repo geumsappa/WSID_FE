@@ -30,5 +30,10 @@ try {
     assert.match(view, /참고한 실제 사기 수법/)
     assert.match(view, /원문 보기/)
   }
+  const { ReportSheet } = await server.ssrLoadModule("/src/features/report/components/ReportSheet.tsx")
+  const sheet = renderToStaticMarkup(createElement(ReportSheet, { title: "결과 리포트", evaluation, completedAt: "2026-11-22" }))
+  assert.match(sheet, /참고한 실제 사기 수법/)
+  assert.match(sheet, /report-sheet--sources/)
+  assert.match(sheet, /원문 보기/)
   console.log("PASS: actual credits, immediate/saved report, legacy empty state, deduplication, safe links, escaped text")
 } finally { await server.close() }

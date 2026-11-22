@@ -39,7 +39,8 @@ export const ENDPOINTS = {
     pdf: (reportId: number) => `/api/reports/${reportId}/pdf`, // RPT-05 리포트 PDF 다운로드
   },
   solutions: {
-    start: "/api/solutions/sessions", // SOL-01 피해 대응 상담 시작
+    start: "/api/solutions/sessions", // SOL-01 피해 대응 상담 시작 (POST)
+    list: "/api/solutions/sessions", // SOL-06(가안) 내가 마친 상담 목록 (GET, 로그인 필요, ?size=10&cursor=)
     detail: (solutionId: number) => `/api/solutions/sessions/${solutionId}`, // SOL-02 피해 대응 상담 복원
     messages: (solutionId: number) => `/api/solutions/sessions/${solutionId}/messages`, // SOL-03 피해 대응 상담 메시지
     facts: (solutionId: number) => `/api/solutions/sessions/${solutionId}/facts`, // SOL-04 피해 사실 수정 (PATCH)

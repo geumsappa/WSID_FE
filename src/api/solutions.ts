@@ -6,7 +6,7 @@ import { TIMEOUT, USE_MOCK } from "./config"
 import { ENDPOINTS } from "./endpoints"
 import { solutionsMock } from "./mock/solutionsMock"
 import type {
-  CompleteSolutionResponse, SolutionDetail, SolutionMessageRequest, SolutionMessageResponse,
+  CompleteSolutionResponse, SolutionDetail, SolutionListResponse, SolutionMessageRequest, SolutionMessageResponse,
   StartSolutionRequest, StartSolutionResponse, UpdateFactsRequest, UpdateFactsResponse,
 } from "./types"
 
@@ -36,6 +36,13 @@ export const solutionApi = {
   /** 응답에 다음 질문(nextQuestion)과 전체 사실 기준 카드가 함께 와요. 409면 자동 재전송하지 말고 detail로 다시 불러오세요 */
   updateFacts: (solutionId: number, body: UpdateFactsRequest): Promise<UpdateFactsResponse> =>
     USE_MOCK ? solutionsMock.updateFacts(solutionId, body) : request(E.facts(solutionId), { method: "PATCH", body, csrf: E.csrf }),
+
+  /**
+   * SOL-06(가안) 내가 마친 상담 목록 (최신순, 로그인 필요). 마이페이지 '긴급 대응 기록'에서 써요.
+   * 회원으로 시작해 상담 마치기(SOL-05)까지 한 상담만 와요. 상세 대화는 detail(SOL-02)로 불러요.
+   */
+  list: (params: { size?: number; cursor?: string | null } = {}): Promise<SolutionListResponse> =>
+    USE_MOCK ? solutionsMock.list(params) : request(E.list, { query: { size: params.size ?? 10, cursor: params.cursor } }),
 
   /** SOL-05 상담 종료 */
   complete: (solutionId: number): Promise<CompleteSolutionResponse> =>

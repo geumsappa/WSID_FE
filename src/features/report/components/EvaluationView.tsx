@@ -1,13 +1,12 @@
 import type { Evaluation } from "@/api"
 import { ReportSources } from "./ReportSources"
 import { Icon } from "@/components/Icon"
-import { toTextItems } from "@/lib/normalize"
+import { TurnReview } from "./TurnReview"
 
 // 리포트 본문. 결과 화면(RPT-01)과 마이페이지 상세(RPT-04)가 같이 써요.
 export function EvaluationView({ evaluation, compact = false }: { evaluation: Evaluation; compact?: boolean }) {
   const info = evaluation.infoDisclosure
   const mock = evaluation.mockPageEvaluation
-  const turns = toTextItems(evaluation.turnFeedback)
   const strengths = evaluation.strengths ?? []
   const improvements = evaluation.improvements ?? []
   return <>
@@ -28,7 +27,7 @@ export function EvaluationView({ evaluation, compact = false }: { evaluation: Ev
         {improvements.length > 0 && <article className="analysis-card caution"><span className="analysis-icon"><Icon name="alert" size={23} /></span><h3>보완할 점</h3><ul>{improvements.map((x, i) => <li key={i}>{x}</li>)}</ul></article>}
       </div>
     )}
-    {mock && (mock.openedPage || mock.attemptedMockLogin || mock.checkedOfficialChannel) && (
+    {mock && (mock.openedPage || mock.attemptedMockLogin || mock.checkedOfficialChannel || mock.clickedAppLink) && (
       <div className="analysis-card signal" style={{ marginTop: 20 }}>
         <span className="analysis-icon"><Icon name="link" size={23} /></span>
         <h3>모의 페이지에서의 행동</h3>
@@ -36,15 +35,11 @@ export function EvaluationView({ evaluation, compact = false }: { evaluation: Ev
           <li>{mock.openedPage ? "링크를 눌러 안내 페이지를 열었어요." : "링크를 열지 않았어요."}</li>
           <li>{mock.attemptedMockLogin ? "가짜 페이지에 로그인 정보를 입력했어요. 실제였다면 계정이 넘어갔을 수 있어요." : "로그인 정보를 입력하지 않았어요."}</li>
           <li>{mock.checkedOfficialChannel ? "공식 채널로 확인했어요. 가장 안전한 대응이에요." : "공식 채널 확인은 하지 않았어요."}</li>
+          {mock.clickedAppLink && <li>대화에서 받은 앱 설치 링크를 눌렀어요. 앱은 공식 앱 마켓에서 직접 찾아 설치하세요.</li>}
         </ul>
       </div>
     )}
-    {turns.length > 0 && !compact && (
-      <div className="guide-card" style={{ marginTop: 20 }}>
-        <div className="section-heading left"><span>대화 되짚어 보기</span><h2>턴별 피드백</h2></div>
-        <div className="action-steps">{turns.map((t, i) => <div key={i}><span>{i + 1}</span><div>{t.title && <h4>{t.title}</h4>}<p>{t.body}</p></div></div>)}</div>
-      </div>
-    )}
+    {!compact && <TurnReview turnFeedback={evaluation.turnFeedback} style={{ marginTop: 20 }} />}
     {evaluation.recommendations.length > 0 && (
       <div className="guide-card" style={{ marginTop: 20 }}>
         <div className="section-heading left"><span>맞춤 예방 안내</span><h2>다음에는 이렇게 대응해 보세요.</h2></div>

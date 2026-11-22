@@ -1,12 +1,16 @@
 import { useEffect, useRef, useState } from "react"
 import { USE_MOCK } from "@/api"
 import { Icon } from "@/components/Icon"
-import { Typing } from "@/components/Typing"
 import type { Simulation } from "../hooks/useSimulation"
 import { MockPhotoPreview } from "./MockPhotoPreview"
-import { containsMockLink, TrainingMessageContent } from "./TrainingMessageContent"
+import { TrainingCheckPage } from "./TrainingCheckPage"
+import { containsMockLink, splitSpeaker, TrainingMessageContent } from "./TrainingMessageContent"
 
 const MAX_TURNS = 15 // 명세 초안: 전체 최대 15턴
+// 채널에 따라 대화창 머리글에 보여 줄 말 (실제 앱 이름·로고는 쓰지 않아요)
+const CHANNEL_LABEL: Record<string, string> = {
+  SMS: "문자 메시지", MESSENGER: "메신저", MARKET: "중고거래 채팅", EMAIL: "이메일", SNS: "SNS 메시지",
+}
 
 // 가상 훈련 대화(TRN-07~11): 가상 사기범과 대화하며 대응을 연습하는 단계.
 export function SimulationChat({ sim }: { sim: Simulation }) {
@@ -14,10 +18,19 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const lines = sim.chatLines
   const last = lines[lines.length - 1]
-  const options = last?.from === "ai" ? last.options ?? [] : []
   const finished = sim.stage === "done" || sim.stage === "finishing"
   const progress = Math.min(MAX_TURNS, sim.turnCount)
   const senderName = sim.scenario?.senderName || "상대방"
+  const channel = sim.scenario?.channel ?? "MESSENGER"
+  // 사기범 쪽 담당자가 중간에 바뀌면([화자: ...]) 그 뒤 말풍선의 보낸 사람 이름도 바꿔요
+  let speaker = senderName
+  const rows = lines.map((m) => {
+    if (m.from !== "ai") return { m, name: "나", text: m.text }
+    const split = splitSpeaker(m.text)
+    if (split.speaker) speaker = split.speaker
+    return { m, name: speaker, text: split.body }
+  })
+  const currentSpeaker = speaker
   const disclaimer = sim.scenario?.organizationName
     ? `${sim.scenario.organizationName} 측이 운영하거나 승인한 서비스가 아닙니다. 실제 해당 기관과 무관한 가상 대화입니다.`
     : "실제 기관이나 인물이 운영하거나 승인한 서비스가 아닌 교육용 가상 대화입니다."
@@ -37,6 +50,17 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
 
   return (
     <section className="chat-page">
+      {sim.checkOpen && sim.trainingId !== null && (
+        <div className="training-check-modal" role="dialog" aria-modal="true" aria-label="훈련용 확인 화면"
+          onClick={sim.closeMockPage}>
+          <div className="training-check-modal-body" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="training-check-modal-close" aria-label="닫기" onClick={sim.closeMockPage}>
+              <Icon name="close" size={18} />
+            </button>
+            <TrainingCheckPage trainingId={sim.trainingId} onClose={sim.closeMockPage} />
+          </div>
+        </div>
+      )}
       <div className="container chat-layout">
         <aside className="scenario-sidebar">
           <span className="sidebar-kicker">현재 체험 중인 상황</span>
@@ -51,11 +75,13 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
           </div>
           {!finished && <button className="outline-button" disabled={sim.typing} onClick={() => sim.setEndConfirm(true)}><Icon name="close" size={17} /> 훈련 종료하고 결과 보기</button>}
         </aside>
-        <div className="messenger">
+        <div className={`messenger channel-${channel.toLowerCase()}`}>
           <div className="messenger-header">
             <div>
               <h2>{senderName}</h2>
-              <p><span /> {USE_MOCK ? "mock 모드 (서버 없음)" : "AI 훈련 연결됨"}</p>
+              {/* 초록불: AI 서버 연결 상태(테스트 확인용). mock 모드면 주황불 */}
+              <p><span className={USE_MOCK ? "mock" : undefined} title={USE_MOCK ? "mock 모드 (서버 없음)" : "AI 연결됨"}
+                aria-label={USE_MOCK ? "mock 모드" : "AI 연결됨"} /> {CHANNEL_LABEL[channel] ?? "메신저"}</p>
             </div>
             <span className="header-shield"><Icon name="shield" size={22} /></span>
           </div>
@@ -64,15 +90,16 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
             <div><strong>사기 예방을 위한 가상 훈련입니다.</strong><p>{disclaimer}</p></div>
           </div>
           <div className="messages" ref={scrollRef} aria-live="polite">
-            {lines.map((m) => (
+            {rows.map(({ m, name, text }) => (
               <div className={`message-row ${m.from === "ai" ? "contact" : "user"}`} key={m.key}>
                 {m.from === "ai" && <span className="avatar"><Icon name="chat" size={18} /></span>}
                 <div>
-                  <span className="sender">{m.from === "ai" ? senderName : "나"}</span>
-                  {m.text && (m.from === "ai"
-                    ? <TrainingMessageContent text={m.text} page={m.mockPage} disabled={finished || sim.typing}
-                        onOpen={(page) => void sim.showMockPage(page)} />
-                    : <p>{m.text}</p>)}
+                  <span className="sender">{name}</span>
+                  {text && (m.from === "ai"
+                    ? <TrainingMessageContent text={text} page={m.mockPage} disabled={finished || sim.typing}
+                        onOpen={(page) => void sim.showMockPage(page)}
+                        appClicked={m.appClicked} onAppClick={() => void sim.clickMockApp(m.key)} />
+                    : <p>{text}</p>)}
                   {m.mockAttachment && <MockPhotoPreview attachment={m.mockAttachment} />}
                   {m.mockPage && !containsMockLink(m.text) && (
                     <button type="button" className="outline-button" style={{ marginTop: 8, padding: "9px 13px", fontSize: 12 }} disabled={finished || sim.typing} onClick={() => void sim.showMockPage(m.mockPage!)}>
@@ -83,7 +110,16 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
                 </div>
               </div>
             ))}
-            {sim.typing && <Typing />}
+            {/* 답장 기다리는 중: 상대방 말풍선과 같은 자리·모양(아바타, 이름, 말풍선)으로 점 세 개를 보여 줘요 */}
+            {sim.typing && (
+              <div className="message-row contact" role="status" aria-label={`${currentSpeaker}이(가) 답장을 쓰고 있어요`}>
+                <span className="avatar"><Icon name="chat" size={18} /></span>
+                <div>
+                  <span className="sender">{currentSpeaker}</span>
+                  <div className="typing-dots"><i /><i /><i /></div>
+                </div>
+              </div>
+            )}
             {sim.stage === "finishing" && (
               <div className="complete-card"><span><Icon name="refresh" size={26} /></span><h3>결과를 분석하고 있어요.</h3><p>대화 내용을 바탕으로 리포트를 만드는 중이에요. 잠시만 기다려 주세요.</p></div>
             )}
@@ -96,8 +132,7 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
           </div>
           {sim.stage === "chat" && (
             <div className="simulation-chat-input">
-              {options.length > 0 && !sim.typing && <div className="interview-choices" style={{ margin: "0 0 10px" }}>{options.map((o) => <button key={o.code} type="button" onClick={() => void sim.sendTraining({ option: o })}>{o.label}</button>)}</div>}
-              <div className="privacy"><Icon name="lock" size={15} /><span>사진은 준비된 가상 자료만 보낼 수 있어요. 실제 신분증을 촬영하거나 첨부하지 마세요.</span></div>
+              {/* 서버가 주는 빠른 답변 버튼(availableOptions)은 보여 주지 않아요: 사용자가 직접 판단해 입력하게 */}
               {sim.error && <p className="upload-error" role="alert">{sim.error}</p>}
               <div className="chat-input-row">
                 <textarea rows={1} maxLength={500} value={input} disabled={sim.typing}

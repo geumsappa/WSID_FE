@@ -37,7 +37,14 @@ const MAX_DISCOVERY_TURNS = 3
 const MAX_TRAINING_TURNS = 5
 const MAX_IMAGES = 3
 const FRAUD_TYPE: Record<SituationKey, string> = { trade: "SECONDHAND_TRADE", delivery: "SMISHING", loan: "LOAN_FRAUD", job: "JOB_SCAM", institution: "INSTITUTION_IMPERSONATION" }
-const MOCK_PAGE: MockPage = { templateCode: "BANK_NOTICE", title: "가상 금융 안내", institutionName: "가상금융센터", screenCode: "LOGIN_CHECK", isSimulation: true }
+/** 시나리오별 모의 페이지 (실제 서버도 사기 유형마다 다른 templateCode를 보내야 화면이 바뀌어요) */
+const MOCK_PAGES: Record<SituationKey, MockPage> = {
+  trade: { templateCode: "SECONDHAND_SAFE_PAY", title: "안전결제 안내", institutionName: "가상마켓 안전결제", screenCode: "PAY_CHECK", isSimulation: true },
+  delivery: { templateCode: "DELIVERY_ADDRESS", title: "배송지 재확인", institutionName: "가상택배", screenCode: "ADDRESS_CHECK", isSimulation: true },
+  loan: { templateCode: "LOAN_APPLY", title: "대출 한도 조회", institutionName: "가상캐피탈", screenCode: "LIMIT_CHECK", isSimulation: true },
+  job: { templateCode: "RECRUIT_APPLICANT", title: "지원자 확인", institutionName: "가상채용센터", screenCode: "APPLICANT_CHECK", isSimulation: true },
+  institution: { templateCode: "CASE_LOOKUP", title: "사건 조회", institutionName: "가상수사센터", screenCode: "CASE_CHECK", isSimulation: true },
+}
 const ASKS = /인증|비밀번호|코드|본인 확인|번호|계좌/
 
 function get(id: number) {
@@ -119,8 +126,9 @@ export const trainingsMock = withSave({
       trainingId: t.id,
       phase: t.phase,
       fraudTypeCode: FRAUD_TYPE[t.scenario.key],
-      scenario: { title: t.scenario.title, description: t.scenario.description },
-      mockPageTemplateCode: MOCK_PAGE.templateCode,
+      scenario: { title: t.scenario.title, description: t.scenario.description,
+        channel: t.scenario.key === "delivery" ? "SMS" : t.scenario.key === "trade" ? "MARKET" : "MESSENGER" },
+      mockPageTemplateCode: MOCK_PAGES[t.scenario.key].templateCode,
       stateVersion: bump(t),
     }
   },
@@ -150,7 +158,9 @@ export const trainingsMock = withSave({
     t.log.push({ sender: "USER", inputKind: body.inputKind, content: text, phase: "SIMULATION" })
     const content = types.length
       ? `${types.join(", ")} 확인 감사하다며, 처리를 마치려면 추가 확인이 필요하다고 다른 정보도 요구합니다.`
-      : createDemoReply(text, turn, t.scenario!)
+      : turn === 3 // 네 번째 답장에는 담당자가 바뀌며 가상 앱 설치 링크를 보내는 흉내
+        ? "[화자: 박서연/보안관리팀] 방금 연결받은 보안관리팀입니다. 확인용 앱을 설치하셔야 다음 처리가 돼요. [모의앱]"
+        : createDemoReply(text, turn, t.scenario!)
     t.messages.push({ from: "contact", text: content })
     const reply = ai(content, "SIMULATION")
     t.log.push(reply)
@@ -165,14 +175,15 @@ export const trainingsMock = withSave({
       recognizedActions,
       turnCount,
       shouldFinish: hasSafeEnding(text) || turnCount >= MAX_TRAINING_TURNS,
-      mockPage: turnCount === 2 ? MOCK_PAGE : null, // 두 번째 턴에 모의 페이지 링크를 보내는 흉내
+      mockPage: turnCount === 2 && t.scenario ? MOCK_PAGES[t.scenario.key] : null, // 두 번째 턴에 모의 페이지 링크를 보내는 흉내
       stateVersion: bump(t),
     }
   },
   async mockPage(id: number): Promise<MockPage> {
     await delay(200)
-    get(id)
-    return MOCK_PAGE
+    const t = get(id)
+    if (!t.scenario) throw errorFromCode(404, "MOCK_PAGE_NOT_FOUND")
+    return MOCK_PAGES[t.scenario.key]
   },
   async action(id: number, body: MockActionRequest): Promise<MockActionResponse> {
     await delay(100)
@@ -197,11 +208,17 @@ export const trainingsMock = withSave({
         overallFeedback: a.summary,
         strengths: a.safe,
         improvements: [...(a.risky[0]?.includes("발견되지 않았") ? [] : a.risky), ...a.missed],
-        turnFeedback: [],
+        // mock 타임라인: 개인정보를 적은 답변은 위험, 공식 확인·거절은 잘 막음으로 표시해요
+        turnFeedback: t.messages.filter((m) => m.from === "user").flatMap((m, i) => m.leaked?.length
+          ? [{ turn: i + 1, outcome: "risky", userAction: `${m.leaked.join(", ")}을(를) 적음`, feedback: "요구받은 정보를 적기 전에 공식 앱이나 대표번호로 먼저 확인하세요." }]
+          : /공식|고객센터|안 할게|싫어|차단/.test(m.text)
+            ? [{ turn: i + 1, outcome: "safe", userAction: "요구를 거절하거나 공식 채널로 확인함", feedback: "상대가 준 경로 대신 스스로 확인하려 한 좋은 대응이에요." }]
+            : []),
         mockPageEvaluation: {
           openedPage: t.actions.includes("MOCK_PAGE_OPEN"),
           attemptedMockLogin: t.actions.includes("MOCK_LOGIN_ATTEMPT"),
           checkedOfficialChannel: t.actions.includes("OFFICIAL_CHANNEL_CHECK") || /공식|고객센터/.test(t.messages.map((m) => m.text).join(" ")),
+          clickedAppLink: t.actions.includes("MOCK_APP_CLICK"),
         },
         recommendations: ["메시지 속 연락처 대신 공식 앱·대표번호로 확인하기", "비밀번호·인증번호는 누구에게도 알려주지 않기", "금전 피해가 생기면 112와 금융회사에 바로 연락하기"],
         infoDisclosure: { requested: t.requested, provided: a.leaked ?? [] },

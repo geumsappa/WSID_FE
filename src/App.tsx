@@ -11,6 +11,7 @@ import { useEmergency } from "@/features/emergency/hooks/useEmergency"
 import { HomePage } from "@/features/home/HomePage"
 import { MyPage } from "@/features/mypage/components/MyPage"
 import { useSavedReports } from "@/features/mypage/hooks/useSavedReports"
+import { useSolutionHistory } from "@/features/mypage/hooks/useSolutionHistory"
 import { ReportPage } from "@/features/report/components/ReportPage"
 import { SimulationPage } from "@/features/simulation/components/SimulationPage"
 import { useSimulation } from "@/features/simulation/hooks/useSimulation"
@@ -23,8 +24,11 @@ export default function App() {
   const { account } = auth
   const sim = useSimulation(account, page, go, auth.handleUnauthorized)
   const reports = useSavedReports(account, page, auth.handleUnauthorized)
+  const history = useSolutionHistory(account, page, auth.handleUnauthorized)
   const em = useEmergency(go)
   const [loginPopup, setLoginPopup] = useState(false)
+  // 진행 중인 훈련이 있는데 새로 시작하려 할 때 묻는 창
+  const [resumePrompt, setResumePrompt] = useState(false)
 
   const logout = async () => {
     await auth.signOut()
@@ -38,7 +42,9 @@ export default function App() {
       setLoginPopup(true)
       return
     }
-    if (fresh) sim.startNew()
+    // 진행 중인 훈련이 있으면 바로 새로 만들지 않고 이어서 할지 먼저 물어요 (실수로 새 훈련이 생기는 것 방지)
+    if (fresh && sim.resumeInfo) setResumePrompt(true)
+    else if (fresh) sim.startNew()
     else go("simulation")
   }
   const needsTraining = sim.stage === "chat" // 훈련 대화 중에만 "종료하면 결과 리포트" 흐름
@@ -48,6 +54,14 @@ export default function App() {
       {loginPopup && (
         <ConfirmModal title="로그인이 필요해요" message="금융사기 시뮬레이션은 로그인 이후 사용할 수 있습니다." confirmLabel="로그인하러 가기" cancelLabel="닫기"
           onConfirm={() => { setLoginPopup(false); go("login") }} onCancel={() => { setLoginPopup(false); auth.setReturnAfterLogin("mypage") }} />
+      )}
+      {resumePrompt && sim.resumeInfo && (
+        <ConfirmModal title="진행 중인 훈련이 있어요"
+          message={`'${sim.resumeInfo.title}' 훈련을 ${sim.resumeInfo.label} 단계에서 멈췄어요. 이어서 할까요? 새로 시작하면 이전 훈련은 이어서 할 수 없어요.`}
+          confirmLabel="이어서 하기" cancelLabel="새로 시작하기"
+          onConfirm={() => { setResumePrompt(false); go("simulation") }}
+          onCancel={() => { setResumePrompt(false); sim.startNew() }}
+          onDismiss={() => setResumePrompt(false)} />
       )}
       {sim.endConfirm && (
         <ConfirmModal
@@ -62,17 +76,17 @@ export default function App() {
         {page === "simulation" && (auth.ready && !account
           ? <AuthGate message="금융사기 시뮬레이션은 로그인 이후 사용할 수 있습니다." onLogin={() => { auth.setReturnAfterLogin("simulation"); go("login") }} />
           : <SimulationPage sim={sim} />)}
-        {page === "emergency" && <EmergencyPage text={em.text} setText={em.setText} attachments={em.images} setAttachments={em.setImages} analyzing={em.analyzing} error={em.error} onSelect={em.selectSituation} onAnalyze={em.analyze} />}
+        {page === "emergency" && <EmergencyPage text={em.text} setText={em.setText} attachments={em.images} setAttachments={em.setImages} analyzing={em.analyzing} error={em.error} onSelect={em.selectSituation} onAnalyze={em.analyze} loggedIn={Boolean(account)} onLogin={() => { auth.setReturnAfterLogin("emergency"); go("login") }} />}
         {page === "emergencyChat" && (em.solutionId !== null
-          ? <EmergencyChat em={em} />
-          : <EmergencyPage text={em.text} setText={em.setText} attachments={em.images} setAttachments={em.setImages} analyzing={em.analyzing} error={em.error} onSelect={em.selectSituation} onAnalyze={em.analyze} />)}
+          ? <EmergencyChat em={em} loggedIn={Boolean(account)} onMyPage={() => go("mypage")} />
+          : <EmergencyPage text={em.text} setText={em.setText} attachments={em.images} setAttachments={em.setImages} analyzing={em.analyzing} error={em.error} onSelect={em.selectSituation} onAnalyze={em.analyze} loggedIn={Boolean(account)} onLogin={() => { auth.setReturnAfterLogin("emergency"); go("login") }} />)}
         {page === "report" && (auth.ready && !account
           ? <AuthGate message="결과 리포트는 로그인 이후 볼 수 있습니다." onLogin={() => { auth.setReturnAfterLogin("report"); go("login") }} />
           : <ReportPage sim={sim} onEmergency={() => go("emergency")} />)}
         {page === "login" && <AuthPage mode="login" onSwitch={() => go("signup")} onLogin={auth.login} />}
         {page === "signup" && <AuthPage mode="signup" onSwitch={() => go("login")} onLogin={auth.login} />}
         {page === "mypage" && (account
-          ? <MyPage account={account} reports={reports} onLogout={() => void logout()} />
+          ? <MyPage account={account} reports={reports} history={history} onLogout={() => void logout()} />
           : auth.ready ? <AuthGate onLogin={() => { auth.setReturnAfterLogin("mypage"); go("login") }} /> : null)}
       </main>
       {page !== "home" && <Footer onHome={() => go("home")} />}

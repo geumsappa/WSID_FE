@@ -17,7 +17,8 @@ export const CARD_CODE: Record<EmergencyKey, string> = {
   trade: "SECONDHAND_TRADE_RESPONSE",
   custom: "GENERAL_RESPONSE",
 }
-const INSTITUTION_CODE: Record<keyof typeof organizationData, string> = { police: "POLICE", cyber: "CYBER_POLICE", fss: "FSS", kisa: "KISA" }
+const INSTITUTION_CODE: Record<keyof typeof organizationData, string> = { police: "POLICE", cyber: "CYBER_POLICE", fss: "FSS", kisa: "KISA",
+  counterscam: "COUNTER_SCAM_1394", pd: "FSS_PD", payinfo: "PAYINFO", msafer: "MSAFER" }
 export const URGENT_KEYS: EmergencyKey[] = ["transfer", "privacy", "app"]
 
 const FRAUD_TYPES: FraudTypeDetail[] = [
@@ -62,13 +63,17 @@ export const guidesMock = {
   },
   async institutions(): Promise<Institution[]> {
     await delay(150)
-    return (Object.keys(organizationData) as (keyof typeof organizationData)[]).map((k) => ({
-      code: INSTITUTION_CODE[k],
-      name: organizationData[k].name,
-      role: organizationData[k].desc,
-      phone: organizationData[k].href.startsWith("tel:") ? organizationData[k].href.slice(4) : null,
-      officialUrl: organizationData[k].href.startsWith("http") ? organizationData[k].href : null,
-      reviewedAt: null,
-    }))
+    return institutionList()
   },
+}
+/** 기관 목록 (mock 상담 답변에서도 바로 쓰려고 동기 함수로 뺐어요) */
+export function institutionList(): Institution[] {
+  return (Object.keys(organizationData) as (keyof typeof organizationData)[]).map((k) => ({
+    code: INSTITUTION_CODE[k],
+    name: organizationData[k].name,
+    role: organizationData[k].desc,
+    phone: organizationData[k].href.startsWith("tel:") ? organizationData[k].href.slice(4) : null,
+    officialUrl: organizationData[k].href.startsWith("http") ? organizationData[k].href : null,
+    reviewedAt: null,
+  }))
 }

@@ -7,6 +7,7 @@ const server = await createServer({ server: { middlewareMode: true }, appType: "
 try {
   const api = await server.ssrLoadModule("/src/api/index.ts")
   const { openTrainingCheck, recordPageAction } = await server.ssrLoadModule("/src/features/simulation/lib/mockPageSession.ts")
+  const { resolveMockTemplate } = await server.ssrLoadModule("/src/features/simulation/data/mockPageTemplates.ts")
   const { TrainingCheckView } = await server.ssrLoadModule("/src/features/simulation/components/TrainingCheckView.tsx")
   const opened = []
   globalThis.window = { location: { origin: "http://localhost:8443" }, open: (...args) => opened.push(args) }
@@ -20,7 +21,8 @@ try {
   assert.equal(features, "noopener,noreferrer")
 
   const page = { templateCode: "BANK_NOTICE", title: "지원자 본인 확인", institutionName: "기업은행", screenCode: "LOGIN_CHECK", isSimulation: true }
-  const html = renderToStaticMarkup(createElement(TrainingCheckView, { page, loading: false, busy: false, error: "", result: "", onAction() {} }))
+  const template = resolveMockTemplate(page)
+  const html = renderToStaticMarkup(createElement(TrainingCheckView, { page, template, loading: false, busy: false, error: "", result: "", onAction() {} }))
   assert.match(html, /기업은행/)
   assert.match(html, /지원자 확인/)
   assert.match(html, /실제 기관과 무관합니다/)
@@ -32,7 +34,7 @@ try {
   assert.match(html, /지원자 번호를 입력해 주세요/)
   assert.match(html, /확인 비밀번호를 입력해 주세요/)
   const order = []
-  const tree = TrainingCheckView({ page, loading: false, busy: false, error: "", result: "", onAction: (kind) => order.push(kind) })
+  const tree = TrainingCheckView({ page, template, loading: false, busy: false, error: "", result: "", onAction: (kind) => order.push(kind) })
   function findForm(node) {
     if (!node || typeof node !== "object") return null
     if (node.type === "form") return node
@@ -47,7 +49,7 @@ try {
   } })
   assert.deepEqual(order, ["prevented", "cleared", "submitted"])
 
-  const submittedHtml = renderToStaticMarkup(createElement(TrainingCheckView, { page, loading: false, busy: false, error: "", result: "submitted", onAction() {} }))
+  const submittedHtml = renderToStaticMarkup(createElement(TrainingCheckView, { page, template, loading: false, busy: false, error: "", result: "submitted", onAction() {} }))
   assert.match(submittedHtml, /확인 요청이 접수되었습니다/)
   assert.doesNotMatch(submittedHtml, /<form|<input/)
 

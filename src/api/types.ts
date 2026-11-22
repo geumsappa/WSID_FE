@@ -69,7 +69,9 @@ export type ChatMessage = {
 export type CreateTrainingResponse = { trainingId: number; phase: TrainingPhase; status: TrainingStatus; stateVersion: number; firstMessage: ChatMessage }
 /** 진행 중 훈련이 없으면 null */
 export type ActiveTrainingResponse = { trainingId: number; phase: TrainingPhase; status: TrainingStatus; lastActivityAt: string } | null
-export type TrainingScenarioSummary = { title: string; description: string; senderName?: string | null; organizationName?: string | null }
+export type TrainingScenarioSummary = { title: string; description: string; senderName?: string | null; organizationName?: string | null
+  /** 대화 화면 모양 코드: SMS | MESSENGER | MARKET | EMAIL | SNS */
+  channel?: "SMS" | "MESSENGER" | "MARKET" | "EMAIL" | "SNS" | null }
 export type TrainingDetail = {
   trainingId: number
   phase: TrainingPhase
@@ -79,6 +81,8 @@ export type TrainingDetail = {
   messages: ChatMessage[]
   availableOptions: ChoiceOption[]
   mockPageSubmitted?: boolean
+  /** 훈련 중 가상 앱 설치 링크를 누른 적이 있는지 (새로고침 후 카드 상태 복원용) */
+  mockAppClicked?: boolean
   mockPage: MockPage | null
   /** 가안(노션에 없음): 복원 때 시나리오 제목·설명을 다시 보여 주려면 필요해요 */
   scenario?: TrainingScenarioSummary | null
@@ -108,11 +112,14 @@ export type TrainingMessageResponse = {
   shouldFinish: boolean
   mockPage: MockPage | null
   stateVersion: number
+  /** 이름·주소처럼 규칙으로 못 가리는 개인정보를 AI가 가린 내 메시지 (예: "[이름, 주소 입력함]"). 가릴 게 없으면 null/없음 */
+  maskedInput?: string | null
 }
 
 export type MockPage = { templateCode: string; title: string; institutionName: string; screenCode: string; isSimulation: boolean }
 /** 노션: "MOCK_PAGE_OPEN,CLOSE,MOCK_LOGIN_ATTEMPT,OFFICIAL_CHANNEL_CHECK". CLOSE의 정확한 코드는 확인 필요 */
-export type MockActionCode = "MOCK_PAGE_OPEN" | "MOCK_PAGE_CLOSE" | "MOCK_LOGIN_ATTEMPT" | "OFFICIAL_CHANNEL_CHECK"
+/** MOCK_APP_CLICK: 대화 속 가상 앱 설치 링크를 누름 (모의 페이지 없이 기록, actionMeta 없음) */
+export type MockActionCode = "MOCK_PAGE_OPEN" | "MOCK_PAGE_CLOSE" | "MOCK_LOGIN_ATTEMPT" | "OFFICIAL_CHANNEL_CHECK" | "MOCK_APP_CLICK"
 export type MockActionRequest = Versioned & { actionCode: MockActionCode; actionMeta?: { templateCode: string; screenCode: string } }
 export type MockActionResponse = { recorded: boolean; stateVersion: number }
 
@@ -121,7 +128,9 @@ export type FinishTrainingRequest = Versioned & { reason: FinishReason }
 export type FinishTrainingResponse = { trainingId: number; status: TrainingStatus; phase: TrainingPhase; reportId: number }
 
 // ───────── 리포트 (RPT-01~05) ─────────
-export type MockPageEvaluation = { openedPage: boolean; attemptedMockLogin: boolean; checkedOfficialChannel: boolean }
+export type MockPageEvaluation = { openedPage: boolean; attemptedMockLogin: boolean; checkedOfficialChannel: boolean
+  /** 가상 앱 설치 링크를 눌렀는지. 예전 리포트에는 없어요 */
+  clickedAppLink?: boolean }
 export type ReportSource = {
   title: string
   issuer: string
@@ -136,12 +145,15 @@ export type Evaluation = {
   overallFeedback: string
   strengths?: string[] // RPT-01에만 있음
   improvements?: string[] // RPT-01에만 있음
-  turnFeedback: unknown[] // 형식 미정
+  /** 리포트 타임라인. AI가 주는 항목은 TurnFeedback 모양이지만, 예전 리포트는 빈 배열이에요 */
+  turnFeedback: unknown[]
   mockPageEvaluation: MockPageEvaluation
   recommendations: string[]
   /** 가안(노션에 없음): 11/16 팀 결정 — 요구받은 개인정보 종류와 실제로 넘긴 종류. 값은 없음 */
   infoDisclosure?: InfoDisclosure
 }
+/** 훈련자 n번째 답변에서 있었던 일 (risky: 요구에 응함, safe: 잘 막음) */
+export type TurnFeedback = { turn: number; outcome: "safe" | "risky"; userAction: string; feedback: string }
 export type InfoDisclosure = { requested: string[]; provided: string[] }
 /** RPT-01 훈련 직후 결과 */
 export type TrainingReport = { reportId: number; trainingId: number; title: string; fraudTypeCode: string; saved: boolean; evaluation: Evaluation }
@@ -212,3 +224,6 @@ export type UpdateFactsRequest = Versioned & { changes: Partial<SolutionFacts> }
  */
 export type UpdateFactsResponse = { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion?: NextQuestion | null; stateVersion: number; explanation?: string | null }
 export type CompleteSolutionResponse = { solutionId: number; status: SolutionStatus }
+/** SOL-06(가안, 노션에 아직 없음) 내 피해 대응 상담 목록 항목. title은 첫 상황 설명(가린 글) 앞부분 */
+export type SolutionListItem = { solutionId: number; status: SolutionStatus; title: string; createdAt: string; completedAt: string | null }
+export type SolutionListResponse = { items: SolutionListItem[]; nextCursor: string | null; hasNext: boolean }

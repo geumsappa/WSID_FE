@@ -29,4 +29,32 @@ export const organizationData: Record<OrganizationKey, { name: string; desc: str
     href: "https://www.kisa.kr/118",
     mark: "118",
   },
+  counterscam: {
+    name: "보이스피싱 통합대응단 1394",
+    desc: "보이스피싱 신고·상담·제보 한 번에",
+    action: "1394 전화하기",
+    href: "tel:1394",
+    mark: "1394",
+  },
+  pd: {
+    name: "개인정보노출자 사고예방시스템",
+    desc: "노출된 내 명의로 계좌 개설·대출 차단",
+    action: "공식 사이트 이동",
+    href: "https://pd.fss.or.kr",
+    mark: "노출",
+  },
+  payinfo: {
+    name: "계좌정보통합관리서비스",
+    desc: "모르는 계좌·대출 확인과 일괄 지급정지",
+    action: "공식 사이트 이동",
+    href: "https://www.payinfo.or.kr",
+    mark: "계좌",
+  },
+  msafer: {
+    name: "엠세이퍼 명의도용 방지",
+    desc: "내 명의 휴대폰 개통 조회·차단",
+    action: "공식 사이트 이동",
+    href: "https://www.msafer.or.kr",
+    mark: "명의",
+  },
 }

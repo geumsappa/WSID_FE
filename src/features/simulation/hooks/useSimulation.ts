@@ -8,7 +8,7 @@ import type { Account } from "@/features/auth/types"
 import { readLastFinished, readScenarioInfo, saveLastFinished, saveScenarioInfo } from "../lib/progressStorage"
 import type { ChatLine, ScenarioInfo, SimStage } from "../types"
 import { containsMockLink } from "../components/TrainingMessageContent"
-import { openTrainingCheck, trainingChannel } from "../lib/mockPageSession"
+import { trainingChannel } from "../lib/mockPageSession"
 
 let lineSeq = 0
 const lineKey = () => `line-${++lineSeq}`
@@ -68,6 +68,8 @@ export function useSimulation(
   const [saving, setSaving] = useState(false)
   const [active, setActive] = useState<ActiveTrainingResponse>(null)
   const [bootTick, setBootTick] = useState(0)
+  // 모의 페이지를 새 탭 대신 대화 화면 위 창으로 열어요 (모바일 팝업 차단·탭 혼동 방지)
+  const [checkOpen, setCheckOpen] = useState(false)
 
   // 비동기 함수 안에서 "지금 값"이 필요한 것들은 ref에도 둡니다(state는 다음 렌더에야 바뀌기 때문).
   const idRef = useRef<number | null>(null)
@@ -88,6 +90,7 @@ export function useSimulation(
   }
 
   const resetLocal = () => {
+    setCheckOpen(false)
     idRef.current = null
     versionRef.current = 0
     setTrainingId(null)
@@ -122,6 +125,11 @@ export function useSimulation(
         const lastAi = [...sim].reverse().find((line) => line.from === "ai")
         if (lastAi) lastAi.mockPage = d.mockPage
       }
+    }
+    if (d.mockAppClicked) {
+      sim.forEach((line) => {
+        if (line.from === "ai" && /\[모의\s*앱\]/.test(line.text)) line.appClicked = true
+      })
     }
     setDiscoveryLines(disc)
     setChatLines(sim)
@@ -331,7 +339,14 @@ export function useSimulation(
     try {
       const res = await inOrder(() => trainingApi.message(id, { stateVersion: versionRef.current, ...body }))
       versionRef.current = res.stateVersion
-      setChatLines((lines) => [...lines, { ...toLine(res.reply), mockPage: res.mockPage ?? undefined }])
+      // 서버(AI)가 이름·주소 등을 찾아 가린 문장을 주면, 내 말풍선을 그 문장으로 바꿔요 (원문은 화면에 남기지 않음)
+      const masked = res.maskedInput?.trim()
+      setChatLines((lines) => [
+        ...lines.map((l) => l.key === mine.key && masked
+          ? { ...l, text: masked, note: "입력한 개인정보는 화면에 남기지 않고 가렸어요." }
+          : l),
+        { ...toLine(res.reply), mockPage: res.mockPage ?? undefined },
+      ])
       setTurnCount(res.turnCount)
       setShouldFinish(res.shouldFinish)
       return true
@@ -344,12 +359,42 @@ export function useSimulation(
     }
   }
 
-  /** Open a separate local tab; that tab records its own actions. */
-  const showMockPage = (_fallback: MockPage) => {
+  /**
+   * 대화 속 가상 앱 설치 링크([모의앱])를 눌렀을 때. 실제로는 아무것도 내려받지 않고,
+   * 눌렀다는 사실(MOCK_APP_CLICK)만 서버에 남겨 리포트에 반영해요.
+   */
+  const clickMockApp = async (key: string) => {
     const id = idRef.current
     if (id === null || stage !== "chat") return
-    openTrainingCheck(id)
+    setChatLines((lines) => lines.map((l) => l.key === key
+      ? { ...l, appClicked: true, note: "훈련용 가상 앱이에요. 실제로는 아무것도 설치되지 않았어요." } : l))
+    const record = async () => {
+      const res = await inOrder(() => trainingApi.action(id, { stateVersion: versionRef.current, actionCode: "MOCK_APP_CLICK" }))
+      versionRef.current = res.stateVersion
+    }
+    try {
+      await record()
+    } catch (err) {
+      if (isStateConflict(err)) {
+        try {
+          const detail = await trainingApi.detail(id)
+          versionRef.current = detail.stateVersion
+          await record()
+          return
+        } catch { /* 아래 안내로 넘어가요 */ }
+      }
+      setError("앱 링크를 누른 기록을 남기지 못했어요. 잠시 후 다시 눌러 주세요.")
+      setChatLines((lines) => lines.map((l) => l.key === key ? { ...l, appClicked: false, note: undefined } : l))
+    }
   }
+
+  /** 모의 페이지 창 열기. 창 안의 화면이 자기 행동(열기·제출·닫기)을 직접 기록해요. */
+  const showMockPage = (_fallback?: MockPage) => {
+    const id = idRef.current
+    if (id === null || stage !== "chat") return
+    setCheckOpen(true)
+  }
+  const closeMockPage = () => setCheckOpen(false)
 
   // The separate tab records its own actions. Refresh only the authoritative version,
   // so returning to this tab does not discard chat lines or submit an outdated version.
@@ -436,7 +481,7 @@ export function useSimulation(
     stage, trainingId, discoveryLines, canGenerate, scenario, chatLines, turnCount, shouldFinish, typing, error,
     usedImages, endConfirm, setEndConfirm, report, reportState, saveNotice, saving, resumeInfo,
     startNew, retry, sendDiscovery, uploadDiscoveryImages, generateScenario, startTraining, sendTraining,
-    showMockPage, finish, leave, saveReport, downloadPdf, resetForLogout,
+    showMockPage, closeMockPage, checkOpen, clickMockApp, finish, leave, saveReport, downloadPdf, resetForLogout,
     clearError: () => setError(""),
   }
 }
