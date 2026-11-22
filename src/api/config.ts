@@ -19,6 +19,7 @@ export const TIMEOUT = {
   default: 15_000,
   aiTurn: 25_000,
   scenario: 60_000,
+  scenarioGeneration: 130_000,
 }
 
 /**
