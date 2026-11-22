@@ -26,7 +26,7 @@ export const SITUATION_ORDER: SituationKey[] = ["institution", "loan", "acquaint
 export const situationGuides: Record<SituationKey, SituationGuide> = {
   institution: {
     title: "기관 사칭 전화·문자",
-    short: "검찰·경찰·금감원이라며 연락이 와요",
+    short: "검찰·경찰·금감원이라며 연락이 왔어요",
     icon: "shield",
     startText: "검찰·경찰·금감원 같은 기관을 사칭한 전화나 문자를 받았어요.",
     intro: "검찰·경찰·금감원 같은 국가기관은 어떤 이유로도 전화로 돈을 보내라고 하거나 앱 설치를 시키지 않아요. 지금 통화 중이라면 바로 끊고, 위 대응 방법을 순서대로 확인해 주세요.",
@@ -40,7 +40,7 @@ export const situationGuides: Record<SituationKey, SituationGuide> = {
   },
   loan: {
     title: "대출 빙자 사기",
-    short: "대출을 미끼로 선입금·앱 설치 요구",
+    short: "선입금이나 앱 설치를 요구해요",
     icon: "building",
     startText: "대출을 해 준다며 선입금이나 앱 설치를 요구받았어요.",
     intro: "대출을 위해 보증금·수수료·기존 대출 상환 같은 돈을 먼저 보내라는 요구와, 메신저로 '대출 전용 앱'을 깔라는 요구는 사기예요. 더 보내지 말고 위 대응 방법을 확인해 주세요.",
@@ -54,7 +54,7 @@ export const situationGuides: Record<SituationKey, SituationGuide> = {
   },
   acquaintance: {
     title: "가족·지인 사칭 메신저",
-    short: "'폰 고장'이라며 송금·인증번호 요구",
+    short: "'폰 고장'이라며 돈을 보내 달라고 해요",
     icon: "user",
     startText: "가족이나 지인을 사칭한 메신저로 송금이나 개인정보를 요구받았어요.",
     intro: "'폰이 고장 나서 친구 폰으로 연락한다'며 돈이나 신분증 사진, 인증번호를 요구하는 메신저는 대표적인 사기예요. 가족이라도 반드시 전화로 직접 확인해 주세요.",
@@ -82,7 +82,7 @@ export const situationGuides: Record<SituationKey, SituationGuide> = {
   },
   trade: {
     title: "중고거래 사기",
-    short: "입금 후 물건이 안 오고 연락 두절",
+    short: "돈만 보내고 물건을 못 받았어요",
     icon: "cart",
     startText: "중고거래에서 사기가 의심돼요.",
     intro: "중고거래 사기는 보이스피싱과 달리 지급정지·피해금 환급 제도 대상이 아니에요. 추가로 돈을 보내지 말고, 증거를 모아 경찰에 신고하는 것이 중심이에요.",
@@ -96,7 +96,7 @@ export const situationGuides: Record<SituationKey, SituationGuide> = {
   },
   investment: {
     title: "투자 리딩방·코인 사기",
-    short: "고수익 단체방·가짜 투자앱에 입금",
+    short: "고수익 단체방·투자앱에 돈을 넣었어요",
     icon: "spark",
     startText: "투자 리딩방이나 코인 투자에 돈을 넣었는데 사기가 의심돼요.",
     intro: "출금하려면 수수료·세금을 먼저 내라거나 추가 입금을 요구하는 건 전형적인 투자 사기 수법이에요. 더 이상 입금하지 말고 위 대응 방법을 확인해 주세요.",
