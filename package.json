@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:training-check": "node scripts/test-training-check.mjs",
-    "format": "oxfmt"
+    "format": "oxfmt",
+    "test:report-sources": "node scripts/test-report-sources.mjs"
   },
   "dependencies": {
     "react": "^19.0.0",

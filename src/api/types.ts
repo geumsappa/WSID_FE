@@ -122,7 +122,17 @@ export type FinishTrainingResponse = { trainingId: number; status: TrainingStatu
 
 // ───────── 리포트 (RPT-01~05) ─────────
 export type MockPageEvaluation = { openedPage: boolean; attemptedMockLogin: boolean; checkedOfficialChannel: boolean }
+export type ReportSource = {
+  title: string
+  issuer: string
+  author: string | null
+  publishedDate: string | null
+  sourceUrl: string
+  license: "KOGL-1"
+}
 export type Evaluation = {
+  /** 생성 전에 실제 참고한 자료. 이전 리포트에는 없을 수 있어요. */
+  sources?: ReportSource[]
   overallFeedback: string
   strengths?: string[] // RPT-01에만 있음
   improvements?: string[] // RPT-01에만 있음
