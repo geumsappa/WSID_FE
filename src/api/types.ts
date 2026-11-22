@@ -131,7 +131,17 @@ export type FinishTrainingResponse = { trainingId: number; status: TrainingStatu
 export type MockPageEvaluation = { openedPage: boolean; attemptedMockLogin: boolean; checkedOfficialChannel: boolean
   /** 가상 앱 설치 링크를 눌렀는지. 예전 리포트에는 없어요 */
   clickedAppLink?: boolean }
+export type ReportSource = {
+  title: string
+  issuer: string
+  author: string | null
+  publishedDate: string | null
+  sourceUrl: string
+  license: "KOGL-1"
+}
 export type Evaluation = {
+  /** 생성 전에 실제 참고한 자료. 이전 리포트에는 없을 수 있어요. */
+  sources?: ReportSource[]
   overallFeedback: string
   strengths?: string[] // RPT-01에만 있음
   improvements?: string[] // RPT-01에만 있음

@@ -1,4 +1,5 @@
 import type { Evaluation } from "@/api"
+import { ReportSources } from "./ReportSources"
 import { Icon } from "@/components/Icon"
 
 const FRAUD_LABEL: Record<string, string> = {
@@ -54,7 +55,7 @@ export function ReportSheet({ title, fraudTypeCode, completedAt, evaluation }: {
   const day = toDay(completedAt)
   const type = fraudTypeCode ? FRAUD_LABEL[fraudTypeCode] : undefined
   return (
-    <article className="report-sheet">
+    <article className={`report-sheet${evaluation.sources?.length ? " report-sheet--sources" : ""}`}>
       <header className="rs-top">
         <span className="rs-brand">어떡하지</span>
         <span className="rs-meta">금융사기 예방 훈련 리포트 · {day}</span>
@@ -104,6 +105,8 @@ export function ReportSheet({ title, fraudTypeCode, completedAt, evaluation }: {
           {recs.map((x, i) => <div key={i}><span>{i + 1}</span><p>{x}</p></div>)}
         </section>
       )}
+
+      <ReportSources sources={evaluation.sources} />
 
       <footer className="rs-foot">
         <span>가상 훈련 대화를 바탕으로 한 분석이며, 실제 피해가 있다면 112 · 1332에 신고하세요.</span>

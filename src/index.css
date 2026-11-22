@@ -943,3 +943,10 @@ textarea:focus { border-color: #78aaed; background: #fff; outline: 3px solid rgb
   .report-sheet, .report-sheet * { visibility: visible; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
   .report-sheet { position: absolute; left: 0; top: 0; width: 210mm; max-width: none; height: 297mm; min-height: 0; margin: 0; border: 0; border-radius: 0; box-shadow: none; overflow: hidden; }
 }
+
+/* Reference credits must remain printable when a report exceeds one page. */
+@media print {
+  html:has(.report-sheet--sources), body:has(.report-sheet--sources) { height: auto; overflow: visible; }
+  .report-sheet--sources { height: auto; min-height: 297mm; overflow: visible; }
+  .report-sheet--sources [aria-label="참고한 실제 사기 수법"] li { break-inside: avoid; }
+}

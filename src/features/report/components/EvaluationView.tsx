@@ -1,4 +1,5 @@
 import type { Evaluation } from "@/api"
+import { ReportSources } from "./ReportSources"
 import { Icon } from "@/components/Icon"
 import { TurnReview } from "./TurnReview"
 
@@ -45,5 +46,6 @@ export function EvaluationView({ evaluation, compact = false }: { evaluation: Ev
         <div className="guide-grid">{evaluation.recommendations.map((r, i) => <div key={i}><span><Icon name="shield" /></span><small>0{i + 1}</small><p>{r}</p></div>)}</div>
       </div>
     )}
+    <ReportSources sources={evaluation.sources} />
   </>
 }

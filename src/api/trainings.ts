@@ -48,7 +48,7 @@ export const trainingApi = {
   /** TRN-06 개인화 시나리오 생성. 60초까지 걸릴 수 있어 로딩 화면 필요 */
   scenario: (trainingId: number, body: Versioned, requestId = newRequestId()): Promise<ScenarioResponse> =>
     USE_MOCK ? trainingsMock.scenario(trainingId, body)
-      : request(E.scenario(trainingId), { method: "POST", body: { ...body, requestId }, timeoutMs: TIMEOUT.scenario, csrf: true }),
+      : request(E.scenario(trainingId), { method: "POST", body: { ...body, requestId }, timeoutMs: TIMEOUT.scenarioGeneration, csrf: true }),
 
   /** TRN-07 가상 훈련 시작. SCENARIO_READY 단계에서만 가능 */
   start: (trainingId: number, body: Versioned, requestId = newRequestId()): Promise<StartTrainingResponse> =>
