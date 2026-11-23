@@ -857,6 +857,15 @@ textarea:focus { border-color: #78aaed; background: #fff; outline: 3px solid rgb
 .training-check-modal-body .training-check-layout { grid-template-columns: 1fr; }
 .training-check-modal-body .training-check-card { padding: 24px; }
 @media (max-width: 600px) { .training-check-modal { padding: 0; } .training-check-modal-body { max-width: none; height: 100%; max-height: none; border-radius: 0; } }
+/* 대화 속 훈련용 입금 계좌 카드 ([모의계좌]) */
+.simulation-account-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; width: 100%; max-width: 280px; margin: 8px 0 2px; padding: 12px 14px; border: 1px solid #d6e0ee; border-radius: 12px; background: #f7f9fc; font: inherit; text-align: left; cursor: pointer; transition: border-color .15s, background .15s; }
+.simulation-account-card:hover:not(:disabled) { border-color: #1769e0; background: #eef4fd; }
+.simulation-account-card:disabled { cursor: default; }
+.simulation-account-head { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #5d6b80; }
+.simulation-account-card strong { font-size: 15px; font-weight: 800; color: #1d2a3a; letter-spacing: 0.5px; }
+.simulation-account-card small { font-size: 12px; color: #5d6b80; }
+.simulation-account-action { margin-top: 4px; font-size: 13px; font-weight: 700; color: #1769e0; }
+.simulation-account-card.done .simulation-account-action { color: #64748b; font-weight: 600; }
 /* 대화 속 가상 앱 설치 링크 카드 ([모의앱]) */
 .simulation-app-card { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 280px; margin: 8px 0 2px; padding: 10px 12px; border: 1px solid #d6e0ee; border-radius: 12px; background: #f7f9fc; color: #1d2a3a; font: inherit; text-align: left; cursor: pointer; }
 .simulation-app-card:hover:not(:disabled) { border-color: #1769e0; background: #eef4fd; }
