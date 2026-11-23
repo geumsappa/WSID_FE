@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { errorMessage, isStateConflict, reportsApi, trainingApi } from "@/api"
+import { ApiError, errorMessage, isStateConflict, reportsApi, trainingApi } from "@/api"
 import type { ActiveTrainingResponse, ChatMessage, ChoiceOption, MockPage, TrainingDetail, TrainingReport } from "@/api"
 import type { Page } from "@/types/common"
 import { SIM_IMAGE_LIMITS } from "@/lib/image"
@@ -242,6 +242,12 @@ export function useSimulation(
       return true
     } catch (err) {
       setDiscoveryLines((lines) => lines.filter((l) => l.key !== mine.key))
+      // Keep a valid session on transient AI/transport failure; the view restores its draft.
+      // State-version conflicts still reconcile a request whose response was lost.
+      if (err instanceof ApiError && (err.status === 503 || err.status === 0)) {
+        setError("일시적으로 답변을 받지 못했어요. 대화와 입력은 유지했으니 잠시 후 다시 보내 주세요.")
+        return false
+      }
       await recover(err)
       return false
     } finally {
@@ -289,6 +295,10 @@ export function useSimulation(
       setStage("ready")
     } catch (err) {
       setStage("discovery")
+      if (err instanceof ApiError && (err.status === 503 || err.status === 0)) {
+        setError("시나리오를 받지 못했어요. 대화와 선택은 유지했으니 잠시 후 다시 만들어 주세요.")
+        return
+      }
       await recover(err)
     }
   }

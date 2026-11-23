@@ -29,8 +29,6 @@ export function SimulationPage({ sim }: { sim: Simulation }) {
           <strong>훈련 시작 전에 꼭 확인하세요</strong>
           <ul>
             <li>이 시나리오는 <b>교육용 가상 상황</b>이에요. 실제 금융기관이나 업체에서 보낸 연락이 아니에요.</li>
-            <li>대화 중 상대가 <b>개인정보를 요구할 수 있어요.</b></li>
-            <li><b>실제 값은 입력하지 마세요.</b> 지어낸 값이나 "모르겠어요"로 답해도 충분해요.</li>
           </ul>
         </div>
       </div>
