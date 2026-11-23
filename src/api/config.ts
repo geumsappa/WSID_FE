@@ -14,10 +14,11 @@ export const USE_MOCK = import.meta.env.VITE_USE_MOCK === "true" || !API_BASE_UR
  */
 export const AI_DEV_URL = USE_MOCK ? (import.meta.env.VITE_AI_DEV_URL ?? "").replace(/\/$/, "") : ""
 
-/** 요청별 제한 시간(ms). 구조 문서 7장: AI 대화 25초, 시나리오 생성 60초 */
+/** 요청별 제한 시간(ms). 상황 답변·시나리오 생성은 AI/BE 대기시간보다 길게 설정해요. */
 export const TIMEOUT = {
   default: 15_000,
   aiTurn: 25_000,
+  discovery: 130_000,
   scenario: 60_000,
   scenarioGeneration: 130_000,
 }

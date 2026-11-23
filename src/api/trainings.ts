@@ -34,7 +34,7 @@ export const trainingApi = {
   /** TRN-04 상황 파악 대화 한 턴 */
   discoveryMessage: (trainingId: number, body: DiscoveryMessageRequest, requestId = newRequestId()): Promise<DiscoveryMessageResponse> =>
     USE_MOCK ? trainingsMock.discoveryMessage(trainingId, { ...body, requestId })
-      : request(E.discoveryMessages(trainingId), { method: "POST", body: { requestId, ...body }, timeoutMs: TIMEOUT.aiTurn, csrf: true }),
+      : request(E.discoveryMessages(trainingId), { method: "POST", body: { requestId, ...body }, timeoutMs: TIMEOUT.discovery, csrf: true }),
 
   /** TRN-05 이미지 첨부·OCR (multipart: images, requestId). PNG/JPEG 최대 3장, 장당 5MB */
   discoveryImages: (trainingId: number, files: File[], requestId = newRequestId()): Promise<DiscoveryImagesResponse> => {
