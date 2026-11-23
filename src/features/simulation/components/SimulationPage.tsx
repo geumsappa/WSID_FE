@@ -17,7 +17,7 @@ const CONSENT_ITEMS: { icon: "send" | "lock" | "shield" | "user"; title: string;
   { icon: "send", title: "외부 AI로 처리돼요", body: "답변과 훈련 시나리오를 만들기 위해 입력 내용이 OpenAI(해외 서버)로 전송돼요." },
   { icon: "lock", title: "개인정보는 가려서 보내요", body: "주민번호·계좌·카드·전화번호·이메일, 이름·주소는 가린 뒤 보내요." },
   { icon: "shield", title: "원문은 남기지 않아요", body: "서버에는 가린 내용만 저장하고, 리포트를 저장하면 대화 원문은 삭제해요." },
-  { icon: "user", title: "가상 정보로 해도 괜찮아요", body: "개인정보를 넘기는지 보는 훈련이라, 지어낸 값을 입력해도 결과는 같아요." },
+  { icon: "user", title: "지어낸 정보로 해도 괜찮아요", body: "개인정보를 넘기는지 보는 훈련이라, 지어낸 값을 입력해도 결과는 같아요." },
 ]
 
 function AiConsent({ onAgree }: { onAgree: () => void }) {
@@ -74,7 +74,7 @@ export function SimulationPage({ sim }: { sim: Simulation }) {
   if (sim.stage === "chat" || sim.stage === "finishing" || sim.stage === "done") return <SimulationChat sim={sim} />
   return <section className="subpage"><div className="container preparation-container">
     <PageIntro kicker="일상에서 시작하는 금융사기 대응 훈련" title={"오늘 겪은 상황을 알려 주시면\n맞춤 훈련을 만들어 드려요"}
-      subtitle="짧은 대화로 상황을 파악한 뒤, 그 상황에 맞는 가상 사기범과 실제처럼 대화하며 대응 방법을 연습해요." />
+      subtitle="짧은 대화로 상황을 파악한 뒤, 그 상황에 맞는 사기범 역할 AI와 실제처럼 대화하며 대응 방법을 연습해요." />
     {(sim.stage === "idle" || sim.stage === "loading") && <div className="loading-card" aria-live="polite"><div className="loader-visual"><Icon name="shield" size={34}/><span/></div><h2>훈련을 준비하고 있어요.</h2><p>진행 중인 훈련이 있으면 이어서 보여 드려요.</p></div>}
     {sim.stage === "failed" && <div className="loading-card" role="alert"><div className="loader-visual"><Icon name="alert" size={34}/></div><h2>훈련을 불러오지 못했어요.</h2><p>{sim.error || "서버에 연결할 수 없어요."}</p><div className="button-row" style={{ justifyContent: "center" }}><button className="primary-button" onClick={sim.retry}><Icon name="refresh" size={16}/> 다시 시도</button><button className="text-button" onClick={sim.leave}>홈으로</button></div></div>}
     {sim.stage === "discovery" && <div className="input-card simulation-setup simulation-new-flow">
@@ -94,7 +94,7 @@ export function SimulationPage({ sim }: { sim: Simulation }) {
         <div>
           <strong>훈련 시작 전에 꼭 확인하세요</strong>
           <ul>
-            <li>이 시나리오는 <b>교육용 가상 상황</b>이에요. 실제 금융기관이나 업체에서 보낸 연락이 아니에요.</li>
+            <li>이 시나리오는 <b>교육용 훈련 상황</b>이에요. 실제 금융기관이나 업체에서 보낸 연락이 아니에요.</li>
             <li>입력 내용은 개인정보를 가린 뒤 외부 AI(해외 서버)로 처리돼요.</li>
           </ul>
         </div>

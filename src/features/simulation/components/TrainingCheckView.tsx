@@ -15,7 +15,7 @@ export function TrainingCheckView({ page, template: t, loading, busy, error, res
 }) {
   return <div className="training-check-page">
     <div className="training-check-banner" role="note"><Icon name="shield" size={19} />
-      <div><strong>어떡하지 · 사기 예방을 위한 가상 훈련 화면</strong>
+      <div><strong>어떡하지 · 사기 예방을 위한 훈련용 화면</strong>
         <p>{page?.institutionName || "화면에 표시되는 기관"} 측이 운영하거나 승인한 서비스가 아닙니다. 실제 기관과 무관합니다.</p>
       </div>
     </div>
@@ -53,6 +53,6 @@ export function TrainingCheckView({ page, template: t, loading, busy, error, res
         </aside>
       </div>}
     </main>
-    <footer className="training-check-footer">어떡하지 · 금융사기 예방 교육용 가상 페이지</footer>
+    <footer className="training-check-footer">어떡하지 · 금융사기 예방 교육용 훈련 페이지</footer>
   </div>
 }

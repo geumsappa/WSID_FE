@@ -46,7 +46,7 @@ export function TrainingMessageContent({ text, page, disabled, onOpen, appClicke
         <span className="simulation-app-icon"><Icon name="app" size={20} /></span>
         <span className="simulation-app-text">
           <strong>설치 파일 받기</strong>
-          <small>{appClicked ? "눌렀어요 · 훈련용 가상 앱이라 설치되지 않았어요" : "앱 설치 링크"}</small>
+          <small>{appClicked ? "눌렀어요 · 훈련용이라 실제로 설치되지 않았어요" : "앱 설치 링크"}</small>
         </span>
         <Icon name="download" size={17} />
       </button>
