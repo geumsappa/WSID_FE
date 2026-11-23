@@ -13,6 +13,8 @@ type MockAccount = { id: number; email: string; password: string; gender: Gender
 const ACCOUNTS_KEY = "wsid-mock-accounts-v2"
 const SESSION_KEY = "wsid-mock-session-v2"
 const codes = new Map<string, { code: string; expires: number }>()
+const CONSENT_KEY = "wsid-mock-ai-consent-v1" // mock: 계정 이메일별 AI 처리 동의 기록
+const consents = () => readStore<Record<string, { version: string; at: string }>>(CONSENT_KEY, {})
 
 const accounts = () => readStore<MockAccount[]>(ACCOUNTS_KEY, [])
 const saveAccounts = (list: MockAccount[]) => localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(list))
@@ -82,6 +84,16 @@ export const authMock = {
   async me(): Promise<MeResponse> {
     await delay(100)
     const u = requireMockUser()
-    return { id: u.id, email: u.email, gender: u.gender, status: u.status, createdAt: u.createdAt }
+    const consent = consents()[u.email]
+    return { id: u.id, email: u.email, gender: u.gender, status: u.status, createdAt: u.createdAt,
+      aiConsentVersion: consent?.version ?? null, aiConsentAt: consent?.at ?? null }
+  },
+  async agreeAiConsent(version: string): Promise<MeResponse> {
+    await delay(100)
+    const u = requireMockUser()
+    const all = consents()
+    if (all[u.email]?.version !== version) all[u.email] = { version, at: new Date().toISOString() }
+    localStorage.setItem(CONSENT_KEY, JSON.stringify(all))
+    return authMock.me()
   },
 }

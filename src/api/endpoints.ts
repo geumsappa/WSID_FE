@@ -11,6 +11,7 @@ export const ENDPOINTS = {
     logout: "/api/auth/logout", // AUTH-06 로그아웃
     csrf: "/api/auth/csrf", // AUTH-06 CSRF 토큰 발급 (로그아웃·리포트 저장 전에 호출)
     me: "/api/users/me", // AUTH-07 내 회원정보 조회
+    aiConsent: "/api/users/me/ai-consent", // 시뮬레이션 AI 처리(해외 전송) 안내 동의 기록
   },
   guides: {
     fraudTypes: "/api/guides/fraud-types", // GUIDE-01 사기 유형 목록
