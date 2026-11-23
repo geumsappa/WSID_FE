@@ -26,7 +26,9 @@ export type LoginRequest = { email: string; password: string }
 /** 세션 ID는 응답 JSON에 없고 Set-Cookie로만 와요 */
 export type LoginResponse = { user: SessionUser }
 export type SessionResponse = { authenticated: boolean; user: SessionUser | null }
-export type MeResponse = { id: number; email: string; gender: Gender | null; status: UserStatus; createdAt: string }
+/** aiConsentVersion·aiConsentAt: 시뮬레이션 AI 처리(해외 전송) 안내에 동의한 문구 버전과 시각. 동의 전이면 null */
+export type MeResponse = { id: number; email: string; gender: Gender | null; status: UserStatus; createdAt: string
+  aiConsentVersion?: string | null; aiConsentAt?: string | null }
 
 // ───────── 가이드 (GUIDE-01~04) ─────────
 export type FraudTypeSummary = { code: string; name: string; description: string }

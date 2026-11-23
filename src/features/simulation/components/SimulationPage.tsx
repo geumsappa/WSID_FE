@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { authApi, errorMessage } from "@/api"
 import { Icon } from "@/components/Icon"
 import { PageIntro } from "@/components/PageIntro"
 import type { Simulation } from "../hooks/useSimulation"
@@ -6,10 +7,10 @@ import { DiscoveryChat } from "./DiscoveryChat"
 import { SimulationChat } from "./SimulationChat"
 
 
-// AI 처리(해외 전송) 동의는 이 브라우저에 한 번 기억해요. 문구를 바꾸면 키 뒤 버전을 올려 다시 묻게 해요
-const CONSENT_KEY = "wsid-ai-consent-v1"
-const readConsent = () => { try { return localStorage.getItem(CONSENT_KEY) === "yes" } catch { return false } }
-const saveConsent = () => { try { localStorage.setItem(CONSENT_KEY, "yes") } catch { /* 저장이 안 돼도 이번엔 진행 */ } }
+// AI 처리(해외 전송) 동의는 계정에 기록해요(서버 users.ai_consent_version·ai_consent_at).
+// 안내 문구를 바꾸면 이 버전을 올려요. 그러면 모든 사용자에게 새 문구로 다시 동의를 받아요.
+const CONSENT_VERSION = "v1"
+type ConsentState = "checking" | "needed" | "ok"
 
 /** 상황 대화를 시작하기 전에 받는 AI 처리 안내·동의. 입력 내용이 외부 AI로 가기 전에 보여 줘요 */
 const CONSENT_ITEMS: { icon: "send" | "lock" | "shield" | "user"; title: string; body: string }[] = [
@@ -21,6 +22,18 @@ const CONSENT_ITEMS: { icon: "send" | "lock" | "shield" | "user"; title: string;
 
 function AiConsent({ onAgree }: { onAgree: () => void }) {
   const [checked, setChecked] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
+  // 서버에 동의 기록이 남아야 시작해요 (기록 없이 진행하지 않음)
+  const agree = async () => {
+    setSaving(true); setError("")
+    try {
+      await authApi.agreeAiConsent(CONSENT_VERSION)
+      onAgree()
+    } catch (cause) {
+      setError(`동의 기록을 저장하지 못했어요. 다시 눌러 주세요. (${errorMessage(cause)})`)
+    } finally { setSaving(false) }
+  }
   return <div className="ai-consent" role="region" aria-label="AI 처리 안내">
     <div className="ai-consent-head">
       <strong>시작 전에 확인해 주세요</strong>
@@ -35,18 +48,29 @@ function AiConsent({ onAgree }: { onAgree: () => void }) {
       ))}
     </ul>
     <label className={`ai-consent-check${checked ? " checked" : ""}`}>
+      {/* 기본 체크박스는 전역 입력창 스타일이 섞여 어색해서, 숨기고 직접 그린 상자로 보여 줘요 (키보드·화면낭독은 그대로) */}
       <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />
+      <span className="ai-consent-box" aria-hidden="true"><Icon name="check" size={14} /></span>
       <span>위 내용을 확인했고, 입력 내용의 AI 처리(해외 전송)에 동의해요.</span>
     </label>
-    <button className="primary-button full" disabled={!checked} onClick={() => { saveConsent(); onAgree() }}>
-      동의하고 시작하기 <Icon name="arrow" size={17} />
+    {error && <p className="upload-error" role="alert">{error}</p>}
+    <button className="primary-button full" disabled={!checked || saving} onClick={() => void agree()}>
+      {saving ? "저장하는 중..." : "동의하고 시작하기"} <Icon name="arrow" size={17} />
     </button>
   </div>
 }
 
 // 시뮬레이션 화면 전체. 단계(stage)에 따라 상황 대화 → 시나리오 생성 → 가상 훈련 대화를 보여 줘요.
 export function SimulationPage({ sim }: { sim: Simulation }) {
-  const [consented, setConsented] = useState(readConsent)
+  const [consent, setConsent] = useState<ConsentState>("checking")
+  // 계정에 지금 문구 버전으로 동의한 기록이 있는지 확인해요 (계정·기기가 바뀌어도 기준은 계정)
+  useEffect(() => {
+    let alive = true
+    authApi.me()
+      .then((me) => { if (alive) setConsent(me.aiConsentVersion === CONSENT_VERSION ? "ok" : "needed") })
+      .catch(() => { if (alive) setConsent("needed") })
+    return () => { alive = false }
+  }, [])
   if (sim.stage === "chat" || sim.stage === "finishing" || sim.stage === "done") return <SimulationChat sim={sim} />
   return <section className="subpage"><div className="container preparation-container">
     <PageIntro kicker="일상에서 시작하는 금융사기 대응 훈련" title={"오늘 겪은 상황을 알려 주시면\n맞춤 훈련을 만들어 드려요"}
@@ -55,7 +79,9 @@ export function SimulationPage({ sim }: { sim: Simulation }) {
     {sim.stage === "failed" && <div className="loading-card" role="alert"><div className="loader-visual"><Icon name="alert" size={34}/></div><h2>훈련을 불러오지 못했어요.</h2><p>{sim.error || "서버에 연결할 수 없어요."}</p><div className="button-row" style={{ justifyContent: "center" }}><button className="primary-button" onClick={sim.retry}><Icon name="refresh" size={16}/> 다시 시도</button><button className="text-button" onClick={sim.leave}>홈으로</button></div></div>}
     {sim.stage === "discovery" && <div className="input-card simulation-setup simulation-new-flow">
       <div className="step-label"><span>1</span> 상황 파악</div>
-      {consented ? <DiscoveryChat sim={sim} /> : <AiConsent onAgree={() => setConsented(true)} />}
+      {consent === "ok" ? <DiscoveryChat sim={sim} />
+        : consent === "needed" ? <AiConsent onAgree={() => setConsent("ok")} />
+        : <p className="interview-help" aria-live="polite">확인 중이에요...</p>}
       <button className="outline-button sim-later-button" onClick={sim.leave}>나중에 이어서 하기</button>
     </div>}
     {sim.stage === "generating" && <div className="loading-card" aria-live="polite"><div className="loader-visual"><Icon name="shield" size={34}/><span/></div><h2>맞춤 시나리오를 만들고 있어요.</h2><p>알려 주신 상황을 분석해 훈련 시나리오를 준비하고 있습니다. 최대 1분 정도 걸릴 수 있어요.</p></div>}

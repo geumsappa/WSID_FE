@@ -47,4 +47,8 @@ export const authApi = {
 
   /** AUTH-07 내 회원정보 */
   me: (): Promise<MeResponse> => (USE_MOCK ? authMock.me() : request(E.me)),
+
+  /** 시뮬레이션 AI 처리(해외 전송) 안내 동의를 계정에 기록. version: 안내 문구 버전 */
+  agreeAiConsent: (version: string): Promise<MeResponse> =>
+    USE_MOCK ? authMock.agreeAiConsent(version) : request(E.aiConsent, { method: "POST", body: { version }, csrf: true }),
 }
