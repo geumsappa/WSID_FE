@@ -992,3 +992,7 @@ textarea:focus { border-color: #78aaed; background: #fff; outline: 3px solid rgb
   .report-sheet--sources { height: auto; min-height: 297mm; overflow: visible; }
   .report-sheet--sources [aria-label="참고한 실제 사기 수법"] li { break-inside: avoid; }
 }
+
+/* 마이페이지 기록 삭제 버튼 */
+.record-actions { flex: none; display: flex; gap: 8px; align-items: center; }
+.record-delete:hover { color: #b42318; border-color: #f3c4bf; background: #fff6f5; }

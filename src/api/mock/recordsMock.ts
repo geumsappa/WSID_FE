@@ -35,6 +35,15 @@ export const recordsMock = {
     const hasNext = start + size < all.length
     return { items, nextCursor: hasNext ? String(start + size) : null, hasNext }
   },
+  /** 마이페이지에서 저장한 리포트 삭제 */
+  async remove(reportId: number): Promise<{ reportId: number; deleted: true }> {
+    await delay(150)
+    const user = requireMockUser()
+    const all = load(user.email)
+    if (!all.some((r) => r.reportId === reportId)) throw errorFromCode(404, "REPORT_NOT_FOUND")
+    localStorage.setItem(key(user.email), JSON.stringify(all.filter((r) => r.reportId !== reportId)))
+    return { reportId, deleted: true }
+  },
   async get(reportId: number): Promise<ReportDetail> {
     await delay(150)
     const r = load(requireMockUser().email).find((x) => x.reportId === reportId)

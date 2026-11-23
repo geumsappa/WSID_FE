@@ -17,6 +17,10 @@ export const reportsApi = {
     USE_MOCK ? recordsMock.list(params)
       : request(E.list, { query: { size: params.size ?? 10, cursor: params.cursor } }),
 
+  /** 저장한 리포트 삭제 (마이페이지) */
+  remove: (reportId: number): Promise<{ reportId: number; deleted: true }> =>
+    USE_MOCK ? recordsMock.remove(reportId) : request(E.detail(reportId), { method: "DELETE", csrf: true }),
+
   /** RPT-04 저장된 리포트 상세 */
   get: (reportId: number): Promise<ReportDetail> => (USE_MOCK ? recordsMock.get(reportId) : request(E.detail(reportId))),
 

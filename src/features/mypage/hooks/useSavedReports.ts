@@ -44,6 +44,17 @@ export function useSavedReports(account: Account | null, page: Page, onUnauthori
   const downloadPdf = async (reportId: number) => {
     try { await reportsApi.downloadPdf(reportId) } catch (err) { if (!onUnauthorized(err, "mypage")) setError(errorMessage(err)) }
   }
-  return { items, nextCursor, loading, error, detail, detailLoading, loadMore: () => load(nextCursor), open, close, downloadPdf }
+  /** 리포트 삭제: 서버에서 지우고 목록·상세에서도 빼요 */
+  const remove = async (reportId: number) => {
+    setError("")
+    try {
+      await reportsApi.remove(reportId)
+      setItems((prev) => prev.filter((i) => i.reportId !== reportId))
+      setDetail((d) => (d?.reportId === reportId ? null : d))
+    } catch (err) {
+      if (!onUnauthorized(err, "mypage")) setError(errorMessage(err))
+    }
+  }
+  return { items, nextCursor, loading, error, detail, detailLoading, loadMore: () => load(nextCursor), open, close, downloadPdf, remove }
 }
 export type SavedReports = ReturnType<typeof useSavedReports>
