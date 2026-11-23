@@ -32,7 +32,7 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
   })
   const currentSpeaker = speaker
   const disclaimer = sim.scenario?.organizationName
-    ? `${sim.scenario.organizationName} 측이 운영하거나 승인한 서비스가 아닙니다. 실제 해당 기관과 무관한 가상 대화입니다.`
+    ? `${sim.scenario.organizationName} 측이 운영하거나 승인한 서비스가 아닙니다. 실제 해당 기관과 무관한 훈련 대화입니다.`
     : "실제 기관이나 인물이 운영하거나 승인한 서비스가 아닌 교육용 훈련 대화입니다."
 
   useEffect(() => {
