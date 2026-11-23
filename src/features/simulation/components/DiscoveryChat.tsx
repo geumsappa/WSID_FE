@@ -25,6 +25,14 @@ export function DiscoveryChat({ sim }: { sim: Simulation }) {
 
   useEffect(() => { endRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }) }, [lines.length, sim.typing])
 
+  // 홈의 유행 수법 카드로 들어왔으면, 그 상황 문장을 첫 답변으로 한 번 보내요 (이후는 평소 대화)
+  useEffect(() => {
+    if (!sim.pendingPreset || answered > 0 || sim.typing || sim.stage !== "discovery") return
+    const preset = sim.pendingPreset
+    sim.clearPreset()
+    void send(preset)
+  }, [sim.pendingPreset, answered, sim.typing, sim.stage]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const send = async (value: string) => {
     if (!value.trim() || sim.typing) return
     setDraft("")

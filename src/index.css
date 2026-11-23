@@ -803,6 +803,26 @@ textarea:focus { border-color: #78aaed; background: #fff; outline: 3px solid rgb
 
 .simulation-inline-link { display: inline; padding: 0; margin: 0 3px; border: 0; background: transparent; color: #1769e0; text-decoration: underline; text-underline-offset: 3px; font: inherit; font-weight: 600; overflow-wrap: anywhere; }
 .simulation-inline-link:disabled { color: #64748b; }
+/* 홈: 요즘 유행하는 수법 카드 */
+.trend-section { max-width: 880px; margin: 0 auto 72px; }
+.trend-head { margin-bottom: 16px; text-align: left; }
+.trend-head span { font-size: 12px; font-weight: 700; color: #1769e0; letter-spacing: 0.5px; }
+.trend-head h2 { margin-top: 4px; font-size: 22px; font-weight: 800; color: #1d2a3a; }
+.trend-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.trend-card { display: flex; flex-direction: column; gap: 8px; padding: 22px; border: 1px solid #e1e7ef; border-radius: 18px; background: #fff; box-shadow: 0 8px 26px rgba(34, 61, 99, 0.06); text-align: left; }
+.trend-card small { font-size: 12px; color: #7a8798; }
+.trend-card h3 { font-size: 17px; font-weight: 800; color: #1d2a3a; }
+.trend-card p { flex: 1; font-size: 14px; line-height: 1.6; color: #475569; }
+.trend-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-top: 6px; }
+.trend-actions a { font-size: 12px; color: #64748b; text-decoration: underline; text-underline-offset: 3px; }
+@media (max-width: 760px) { .trend-cards { grid-template-columns: 1fr; } .trend-section { padding: 0 16px; } }
+/* AI 처리(해외 전송) 안내·동의 */
+.ai-consent { display: flex; flex-direction: column; gap: 12px; padding: 20px 22px; border: 1px solid #d6e0ee; border-radius: 16px; background: #f7faff; }
+.ai-consent h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 17px; font-weight: 800; color: #1d3557; }
+.ai-consent ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; line-height: 1.6; color: #3b4859; }
+.ai-consent-check { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; font-weight: 600; color: #1d2a3a; cursor: pointer; }
+.ai-consent-check input { margin-top: 4px; }
+.chat-input-hint { display: flex; align-items: center; gap: 5px; margin: 6px 2px 0; font-size: 11px; color: #7a8798; }
 /* 상황 대화 첫 화면의 빠른 시작 */
 .quick-start { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 14px; padding: 14px 16px; border: 1px dashed #c6d6ee; border-radius: 14px; background: #f7faff; }
 .quick-start > strong { font-size: 14px; color: #1d3557; }

@@ -138,9 +138,10 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
                 <textarea rows={1} maxLength={500} value={input} disabled={sim.typing}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit() } }}
-                  placeholder="상대방에게 보낼 답변을 직접 입력해 주세요." />
+                  placeholder="상대방에게 보낼 답변을 입력해 주세요. 실제 정보 대신 가상 정보로 답해도 돼요." />
                 <button disabled={!input.trim() || sim.typing} onClick={() => void submit()}><Icon name="send" size={17} /> 전송</button>
               </div>
+              <p className="chat-input-hint"><Icon name="lock" size={13} /> 가상 정보를 입력해도 훈련 결과는 같아요. 개인정보는 가린 뒤 AI로 보내요.</p>
             </div>
           )}
         </div>
