@@ -17,10 +17,10 @@ export const AI_DEV_URL = USE_MOCK ? (import.meta.env.VITE_AI_DEV_URL ?? "").rep
 /** 요청별 제한 시간(ms). 상황 답변·시나리오 생성은 AI/BE 대기시간보다 길게 설정해요. */
 export const TIMEOUT = {
   default: 15_000,
-  aiTurn: 25_000,
+  aiTurn: 35_000, // Claude 훈련 턴 15~25초 + 여유 (백엔드 32초보다 길게)
   discovery: 130_000,
   scenario: 60_000,
-  scenarioGeneration: 130_000,
+  scenarioGeneration: 170_000, // 백엔드 160초 + 여유
 }
 
 /**
