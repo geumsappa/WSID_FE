@@ -70,6 +70,8 @@ export function useSimulation(
   const [bootTick, setBootTick] = useState(0)
   // 모의 페이지를 새 탭 대신 대화 화면 위 창으로 열어요 (모바일 팝업 차단·탭 혼동 방지)
   const [checkOpen, setCheckOpen] = useState(false)
+  // 홈 유행 수법 카드에서 고른 상황 문장. 동의 후 상황 대화 첫 답변으로 보내고 비워요
+  const [pendingPreset, setPendingPreset] = useState<string | null>(null)
 
   // 비동기 함수 안에서 "지금 값"이 필요한 것들은 ref에도 둡니다(state는 다음 렌더에야 바뀌기 때문).
   const idRef = useRef<number | null>(null)
@@ -211,8 +213,10 @@ export function useSimulation(
   }, [account, page, report, reportState])
 
   /** 새 훈련 시작(홈의 시작 버튼, "다시 시뮬레이션 하기") */
-  const startNew = () => {
+  /** preset: 첫 답변으로 보낼 상황 문장 (버튼 onClick에 바로 연결되면 이벤트가 들어와서 글자일 때만 써요) */
+  const startNew = (preset?: unknown) => {
     resetLocal()
+    setPendingPreset(typeof preset === "string" && preset.trim() ? preset : null)
     setReport(null)
     setReportState("idle")
     setSaveNotice("")
@@ -490,7 +494,7 @@ export function useSimulation(
   return {
     stage, trainingId, discoveryLines, canGenerate, scenario, chatLines, turnCount, shouldFinish, typing, error,
     usedImages, endConfirm, setEndConfirm, report, reportState, saveNotice, saving, resumeInfo,
-    startNew, retry, sendDiscovery, uploadDiscoveryImages, generateScenario, startTraining, sendTraining,
+    startNew, retry, sendDiscovery, pendingPreset, clearPreset: () => setPendingPreset(null), uploadDiscoveryImages, generateScenario, startTraining, sendTraining,
     showMockPage, closeMockPage, checkOpen, clickMockApp, finish, leave, saveReport, downloadPdf, resetForLogout,
     clearError: () => setError(""),
   }

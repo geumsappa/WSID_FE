@@ -1,15 +1,19 @@
 import { Icon } from "@/components/Icon"
+import { latestScams } from "./data/trendingScams"
 
 export function HomePage({
   onSimulation,
   onEmergency,
   resume,
   onResume,
+  onTrend,
 }: {
   onSimulation: () => void
   onEmergency: () => void
   resume: { title: string; label: string; time: string } | null
   onResume: () => void
+  /** 유행 수법 카드의 "이 수법으로 훈련하기": 그 상황 문장을 첫 답변으로 새 훈련을 시작해요 */
+  onTrend: (preset: string) => void
 }) {
   return (
     <div className="home-page">
@@ -72,6 +76,25 @@ export function HomePage({
               <Icon name="arrow" size={20} />
             </button>
           )}
+        </div>
+      </section>
+      <section className="container trend-section" aria-label="요즘 유행하는 금융사기 수법">
+        <div className="trend-head">
+          <span>최근 공공기관 경보</span>
+          <h2>요즘 유행하는 수법, 미리 겪어 보세요</h2>
+        </div>
+        <div className="trend-cards">
+          {latestScams(2).map((scam) => (
+            <article className="trend-card" key={scam.id}>
+              <small>{scam.date.replace(/-/g, ".")} · {scam.issuer}</small>
+              <h3>{scam.title}</h3>
+              <p>{scam.summary}</p>
+              <div className="trend-actions">
+                <button type="button" className="primary-button" onClick={() => onTrend(scam.preset)}>이 수법으로 훈련하기 <Icon name="arrow" size={16} /></button>
+                <a href={scam.sourceUrl} target="_blank" rel="noopener noreferrer">출처: {scam.sourceLabel}</a>
+              </div>
+            </article>
+          ))}
         </div>
       </section>
     </div>
