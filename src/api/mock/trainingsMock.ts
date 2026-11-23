@@ -39,11 +39,11 @@ const MAX_IMAGES = 3
 const FRAUD_TYPE: Record<SituationKey, string> = { trade: "SECONDHAND_TRADE", delivery: "SMISHING", loan: "LOAN_FRAUD", job: "JOB_SCAM", institution: "INSTITUTION_IMPERSONATION" }
 /** 시나리오별 모의 페이지 (실제 서버도 사기 유형마다 다른 templateCode를 보내야 화면이 바뀌어요) */
 const MOCK_PAGES: Record<SituationKey, MockPage> = {
-  trade: { templateCode: "SECONDHAND_SAFE_PAY", title: "안전결제 안내", institutionName: "가상마켓 안전결제", screenCode: "PAY_CHECK", isSimulation: true },
-  delivery: { templateCode: "DELIVERY_ADDRESS", title: "배송지 재확인", institutionName: "가상택배", screenCode: "ADDRESS_CHECK", isSimulation: true },
-  loan: { templateCode: "LOAN_APPLY", title: "대출 한도 조회", institutionName: "가상캐피탈", screenCode: "LIMIT_CHECK", isSimulation: true },
-  job: { templateCode: "RECRUIT_APPLICANT", title: "지원자 확인", institutionName: "가상채용센터", screenCode: "APPLICANT_CHECK", isSimulation: true },
-  institution: { templateCode: "CASE_LOOKUP", title: "사건 조회", institutionName: "가상수사센터", screenCode: "CASE_CHECK", isSimulation: true },
+  trade: { templateCode: "SECONDHAND_SAFE_PAY", title: "안전결제 안내", institutionName: "한빛마켓 안전결제", screenCode: "PAY_CHECK", isSimulation: true },
+  delivery: { templateCode: "DELIVERY_ADDRESS", title: "배송지 재확인", institutionName: "한빛택배", screenCode: "ADDRESS_CHECK", isSimulation: true },
+  loan: { templateCode: "LOAN_APPLY", title: "대출 한도 조회", institutionName: "한빛캐피탈", screenCode: "LIMIT_CHECK", isSimulation: true },
+  job: { templateCode: "RECRUIT_APPLICANT", title: "지원자 확인", institutionName: "한빛채용센터", screenCode: "APPLICANT_CHECK", isSimulation: true },
+  institution: { templateCode: "CASE_LOOKUP", title: "사건 조회", institutionName: "사건조회센터", screenCode: "CASE_CHECK", isSimulation: true },
 }
 const ASKS = /인증|비밀번호|코드|본인 확인|번호|계좌/
 

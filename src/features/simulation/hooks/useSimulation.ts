@@ -22,7 +22,7 @@ const toLine = (m: ChatMessage): ChatLine => ({
 const PHASE_LABEL: Record<string, string> = {
   DISCOVERY: "상황 대화 진행 중",
   SCENARIO_READY: "시나리오 준비 완료 · 훈련 시작 전",
-  SIMULATION: "가상 훈련 대화 진행 중",
+  SIMULATION: "훈련 대화 진행 중",
 }
 
 /** 서버가 준 전체 메시지를 "상황 대화"와 "가상 훈련"으로 나눕니다. */
@@ -381,7 +381,7 @@ export function useSimulation(
     const id = idRef.current
     if (id === null || stage !== "chat") return
     setChatLines((lines) => lines.map((l) => l.key === key
-      ? { ...l, appClicked: true, note: "훈련용 가상 앱이에요. 실제로는 아무것도 설치되지 않았어요." } : l))
+      ? { ...l, appClicked: true, note: "훈련용 앱이라 실제로는 아무것도 설치되지 않았어요." } : l))
     const record = async () => {
       const res = await inOrder(() => trainingApi.action(id, { stateVersion: versionRef.current, actionCode: "MOCK_APP_CLICK" }))
       versionRef.current = res.stateVersion

@@ -33,7 +33,7 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
   const currentSpeaker = speaker
   const disclaimer = sim.scenario?.organizationName
     ? `${sim.scenario.organizationName} 측이 운영하거나 승인한 서비스가 아닙니다. 실제 해당 기관과 무관한 가상 대화입니다.`
-    : "실제 기관이나 인물이 운영하거나 승인한 서비스가 아닌 교육용 가상 대화입니다."
+    : "실제 기관이나 인물이 운영하거나 승인한 서비스가 아닌 교육용 훈련 대화입니다."
 
   useEffect(() => {
     const node = scrollRef.current
@@ -66,12 +66,12 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
           <span className="sidebar-kicker">현재 체험 중인 상황</span>
           <div className="sidebar-icon"><Icon name="shield" size={26} /></div>
           <h1>{sim.scenario?.title ?? "맞춤 훈련 시나리오"}</h1>
-          <p>{sim.scenario?.description ?? "오늘 알려 주신 상황을 바탕으로 만든 가상 대화예요."}</p>
+          <p>{sim.scenario?.description ?? "오늘 알려 주신 상황을 바탕으로 만든 훈련 대화예요."}</p>
           <div className="progress-head"><strong>진행 턴</strong><span>{progress} / {MAX_TURNS}</span></div>
           <div className="progress-bar"><span style={{ width: `${(progress / MAX_TURNS) * 100}%` }} /></div>
           <div className="education-notice">
             <Icon name="lock" size={18} />
-            <p>이 대화는 금융사기 예방을 위한 가상 시뮬레이션입니다. 실제 금융기관이나 개인과 연결되지 않으며, 입력한 개인정보 값은 저장하지 않고 종류만 기록해요.</p>
+            <p>이 대화는 금융사기 예방을 위한 훈련용 시뮬레이션입니다. 실제 금융기관이나 개인과 연결되지 않으며, 입력한 개인정보 값은 저장하지 않고 종류만 기록해요.</p>
           </div>
           {!finished && <button className="outline-button" disabled={sim.typing} onClick={() => sim.setEndConfirm(true)}><Icon name="close" size={17} /> 훈련 종료하고 결과 보기</button>}
         </aside>
@@ -87,7 +87,7 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
           </div>
           <div className="training-disclaimer" role="note">
             <Icon name="shield" size={18} />
-            <div><strong>사기 예방을 위한 가상 훈련입니다.</strong><p>{disclaimer}</p></div>
+            <div><strong>사기 예방을 위한 훈련입니다.</strong><p>{disclaimer}</p></div>
           </div>
           <div className="messages" ref={scrollRef} aria-live="polite">
             {rows.map(({ m, name, text }) => (
@@ -138,10 +138,10 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
                 <textarea rows={1} maxLength={500} value={input} disabled={sim.typing}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit() } }}
-                  placeholder="상대방에게 보낼 답변을 입력해 주세요. 실제 정보 대신 가상 정보로 답해도 돼요." />
+                  placeholder="상대방에게 보낼 답변을 입력해 주세요. 실제 정보 대신 지어낸 정보로 답해도 돼요." />
                 <button disabled={!input.trim() || sim.typing} onClick={() => void submit()}><Icon name="send" size={17} /> 전송</button>
               </div>
-              <p className="chat-input-hint"><Icon name="lock" size={13} /> 가상 정보를 입력해도 훈련 결과는 같아요. 개인정보는 가린 뒤 AI로 보내요.</p>
+              <p className="chat-input-hint"><Icon name="lock" size={13} /> 지어낸 정보를 입력해도 훈련 결과는 같아요. 개인정보는 가린 뒤 AI로 보내요.</p>
             </div>
           )}
         </div>
