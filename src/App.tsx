@@ -29,6 +29,8 @@ export default function App() {
   const [loginPopup, setLoginPopup] = useState(false)
   // 진행 중인 훈련이 있는데 새로 시작하려 할 때 묻는 창
   const [resumePrompt, setResumePrompt] = useState(false)
+  // 유행 수법 카드에서 고른 상황 문장. 새 훈련의 첫 답변으로 보내요
+  const [pendingPreset, setPendingPreset] = useState<string | undefined>()
 
   const logout = async () => {
     await auth.signOut()
@@ -36,15 +38,15 @@ export default function App() {
     go("home")
   }
   // fresh=true: 홈의 시작 버튼처럼 새 훈련을 시작합니다. false: 진행 중인 훈련이 있으면 이어서 보여줍니다.
-  const openSimulation = (fresh = false) => {
+  const openSimulation = (fresh = false, preset?: string) => {
     if (!account) {
       auth.setReturnAfterLogin("simulation")
       setLoginPopup(true)
       return
     }
     // 진행 중인 훈련이 있으면 바로 새로 만들지 않고 이어서 할지 먼저 물어요 (실수로 새 훈련이 생기는 것 방지)
-    if (fresh && sim.resumeInfo) setResumePrompt(true)
-    else if (fresh) sim.startNew()
+    if (fresh && sim.resumeInfo) { setPendingPreset(preset); setResumePrompt(true) }
+    else if (fresh) sim.startNew(preset)
     else go("simulation")
   }
   const needsTraining = sim.stage === "chat" // 훈련 대화 중에만 "종료하면 결과 리포트" 흐름
@@ -60,7 +62,7 @@ export default function App() {
           message={`'${sim.resumeInfo.title}' 훈련을 ${sim.resumeInfo.label} 단계에서 멈췄어요. 이어서 할까요? 새로 시작하면 이전 훈련은 이어서 할 수 없어요.`}
           confirmLabel="이어서 하기" cancelLabel="새로 시작하기"
           onConfirm={() => { setResumePrompt(false); go("simulation") }}
-          onCancel={() => { setResumePrompt(false); sim.startNew() }}
+          onCancel={() => { setResumePrompt(false); sim.startNew(pendingPreset) }}
           onDismiss={() => setResumePrompt(false)} />
       )}
       {sim.endConfirm && (
@@ -72,7 +74,8 @@ export default function App() {
       )}
       <Header page={page} go={go} mobileMenu={mobileMenu} setMobileMenu={setMobileMenu} loggedIn={Boolean(account)} openSimulation={() => openSimulation()} />
       <main>
-        {page === "home" && <HomePage onSimulation={() => openSimulation(true)} onEmergency={() => go("emergency")} resume={sim.resumeInfo} onResume={() => go("simulation")} />}
+        {page === "home" && <HomePage onSimulation={() => openSimulation(true)} onEmergency={() => go("emergency")} resume={sim.resumeInfo} onResume={() => go("simulation")}
+          onTrend={(preset) => openSimulation(true, preset)} />}
         {page === "simulation" && (auth.ready && !account
           ? <AuthGate message="금융사기 시뮬레이션은 로그인 이후 사용할 수 있습니다." onLogin={() => { auth.setReturnAfterLogin("simulation"); go("login") }} />
           : <SimulationPage sim={sim} />)}
