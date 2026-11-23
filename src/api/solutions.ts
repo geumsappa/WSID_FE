@@ -44,6 +44,10 @@ export const solutionApi = {
   list: (params: { size?: number; cursor?: string | null } = {}): Promise<SolutionListResponse> =>
     USE_MOCK ? solutionsMock.list(params) : request(E.list, { query: { size: params.size ?? 10, cursor: params.cursor } }),
 
+  /** 상담 삭제: 대화와 기록을 모두 지워요 ('저장 없이 나가기', 마이페이지 기록 삭제) */
+  remove: (solutionId: number): Promise<{ solutionId: number; deleted: true }> =>
+    USE_MOCK ? solutionsMock.remove(solutionId) : request(E.detail(solutionId), { method: "DELETE", csrf: E.csrf }),
+
   /** SOL-05 상담 종료 */
   complete: (solutionId: number): Promise<CompleteSolutionResponse> =>
     USE_MOCK ? solutionsMock.complete(solutionId) : request(E.complete(solutionId), { method: "POST", csrf: E.csrf }),

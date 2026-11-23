@@ -172,7 +172,7 @@ export function useEmergency(go: (next: Page) => void) {
     }
     return detailsRef.current
   }
-  type Result = { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion?: NextQuestion | null; stateVersion: number; explanation?: string | null }
+  type Result = { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion?: NextQuestion | null; stateVersion: number; explanation?: string | null; reply?: string | null }
   const applyResult = (r: Result) => {
     versionRef.current = r.stateVersion
     setFacts(r.facts)
@@ -205,6 +205,8 @@ export function useEmergency(go: (next: Page) => void) {
   const reflect = async (kind: "start" | "choice" | "text" | "correct", prev: SolutionView, r: Result, userText?: string, answered?: { factKey: FactKey; value: YesNoUnknown }) => {
     const details = await applyResult(r)
     noticeRef.current = kind === "start" ? null : noticeOf(prev, r.responseCards, details)
+    // 서버(AI-08)가 사실·카드를 보고 만든 도우미 말이 있으면 그걸 써요. 없을 때(AI 실패·mock)만 규칙 문장으로 대신해요
+    if (r.reply?.trim()) return r.reply.trim()
     const next: SolutionView = { facts: r.facts, cards: r.responseCards, nextQuestion: r.nextQuestion ?? null }
     return composeReply({ kind, prev, next, details, institutions, userText, explanation: r.explanation, answered, fixedGuide: situationRef.current !== null })
   }
@@ -430,7 +432,8 @@ export function useEmergency(go: (next: Page) => void) {
       const changes = Object.fromEntries(CHECK_ORDER.map((k) => [k, selected.includes(k) ? "YES" : "NO"])) as Partial<SolutionFacts>
       const r = await solutionApi.updateFacts(id, { stateVersion: versionRef.current, changes })
       const details = await applyResult({ ...r, nextQuestion: r.nextQuestion ?? null })
-      const reply = checklistReply(prev, { facts: r.facts, cards: r.responseCards, nextQuestion: r.nextQuestion ?? null }, details)
+      // 서버 도우미 말(AI-08)이 우선, 없으면 규칙 문장
+      const reply = r.reply?.trim() || checklistReply(prev, { facts: r.facts, cards: r.responseCards, nextQuestion: r.nextQuestion ?? null }, details)
       noticeRef.current = noticeOf(prev, r.responseCards, details)
       pushReply(reply)
     } catch (err) {
@@ -446,6 +449,15 @@ export function useEmergency(go: (next: Page) => void) {
     try { await solutionApi.complete(id); setCompleted(true); setClarification(null); saveSessionId(null) } catch (err) { setError(errorMessage(err)) }
   }
   const back = () => { resetSession(); go("emergency") }
+  /** 저장 없이 나가기: 서버에서 이 상담(대화 포함)을 지우고 처음 화면으로 */
+  const discard = async () => {
+    const id = idRef.current
+    if (id !== null) {
+      try { await solutionApi.remove(id) } catch { /* 이미 없거나 실패해도 화면은 나가요 (마친 상담이 아니라 목록에도 안 보여요) */ }
+    }
+    saveSessionId(null)
+    back()
+  }
 
   return {
     text, setText, images, setImages, analyzing, error,
@@ -455,7 +467,7 @@ export function useEmergency(go: (next: Page) => void) {
     nextQuestion: !situation && !clarification && nextQuestion?.factKey ? nextQuestion : null,
     /** 아직 확인 질문에 한 번도 답하지 않았으면 true (첫 질문 앞에 왜 묻는지 한 줄 덧붙이려고) */
     firstQuestion: !messages.some((m) => m.from === "user" && Object.values(CHOICE_TEXT).some((t) => Object.values(t).includes(m.text))), typing, completed, clarification, failed: failed !== null,
-    selectSituation, analyze, answer, send, retry, correctFact, complete, back,
+    selectSituation, analyze, answer, send, retry, correctFact, complete, back, discard,
   }
 }
 export type Emergency = ReturnType<typeof useEmergency>

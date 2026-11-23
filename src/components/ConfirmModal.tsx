@@ -5,7 +5,7 @@ import type React from "react"
  * onDismiss: 바깥을 누르거나 Esc를 눌렀을 때. 없으면 onCancel과 같아요.
  * (취소 버튼이 "새로 시작"처럼 실제 동작일 때는 onDismiss로 그냥 닫히게 해요)
  */
-export function ConfirmModal({ title, message, confirmLabel, cancelLabel, onConfirm, onCancel, onDismiss }: {
+export function ConfirmModal({ title, message, confirmLabel, cancelLabel, onConfirm, onCancel, onDismiss, extraLabel, onExtra }: {
   title: string
   message: string
   confirmLabel: string
@@ -13,6 +13,9 @@ export function ConfirmModal({ title, message, confirmLabel, cancelLabel, onConf
   onConfirm: () => void
   onCancel: () => void
   onDismiss?: () => void
+  /** 세 번째 선택지 (예: "저장 없이 나가기"). 두 버튼 아래에 작은 글자 버튼으로 보여요 */
+  extraLabel?: string
+  onExtra?: () => void
 }) {
   const dismiss = onDismiss ?? onCancel
   useEffect(() => {
@@ -65,6 +68,15 @@ export function ConfirmModal({ title, message, confirmLabel, cancelLabel, onConf
             {confirmLabel}
           </button>
         </div>
+        {extraLabel && onExtra && (
+          <button
+            type="button"
+            onClick={onExtra}
+            style={{ marginTop: 14, background: "none", border: "none", color: "#b42318", fontSize: 14, fontWeight: 600, cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 3 }}
+          >
+            {extraLabel}
+          </button>
+        )}
       </div>
     </div>
   )

@@ -85,6 +85,8 @@ export type TrainingDetail = {
   mockPageSubmitted?: boolean
   /** 훈련 중 가상 앱 설치 링크를 누른 적이 있는지 (새로고침 후 카드 상태 복원용) */
   mockAppClicked?: boolean
+  /** 훈련 중 훈련용 계좌로 송금 버튼을 누른 적이 있는지 (새로고침 후 카드 상태 복원용) */
+  mockTransferDone?: boolean
   mockPage: MockPage | null
   /** 가안(노션에 없음): 복원 때 시나리오 제목·설명을 다시 보여 주려면 필요해요 */
   scenario?: TrainingScenarioSummary | null
@@ -121,7 +123,7 @@ export type TrainingMessageResponse = {
 export type MockPage = { templateCode: string; title: string; institutionName: string; screenCode: string; isSimulation: boolean }
 /** 노션: "MOCK_PAGE_OPEN,CLOSE,MOCK_LOGIN_ATTEMPT,OFFICIAL_CHANNEL_CHECK". CLOSE의 정확한 코드는 확인 필요 */
 /** MOCK_APP_CLICK: 대화 속 가상 앱 설치 링크를 누름 (모의 페이지 없이 기록, actionMeta 없음) */
-export type MockActionCode = "MOCK_PAGE_OPEN" | "MOCK_PAGE_CLOSE" | "MOCK_LOGIN_ATTEMPT" | "OFFICIAL_CHANNEL_CHECK" | "MOCK_APP_CLICK"
+export type MockActionCode = "MOCK_PAGE_OPEN" | "MOCK_PAGE_CLOSE" | "MOCK_LOGIN_ATTEMPT" | "OFFICIAL_CHANNEL_CHECK" | "MOCK_APP_CLICK" | "MOCK_TRANSFER"
 export type MockActionRequest = Versioned & { actionCode: MockActionCode; actionMeta?: { templateCode: string; screenCode: string } }
 export type MockActionResponse = { recorded: boolean; stateVersion: number }
 
@@ -132,7 +134,9 @@ export type FinishTrainingResponse = { trainingId: number; status: TrainingStatu
 // ───────── 리포트 (RPT-01~05) ─────────
 export type MockPageEvaluation = { openedPage: boolean; attemptedMockLogin: boolean; checkedOfficialChannel: boolean
   /** 가상 앱 설치 링크를 눌렀는지. 예전 리포트에는 없어요 */
-  clickedAppLink?: boolean }
+  clickedAppLink?: boolean
+  /** 대화 속 훈련용 계좌로 송금 버튼을 눌렀는지. 예전 리포트에는 없어요 */
+  attemptedTransfer?: boolean }
 export type ReportSource = {
   title: string
   issuer: string
@@ -185,6 +189,8 @@ export type StartSolutionResponse = {
   facts: SolutionFacts
   responseCards: SolutionCard[]
   nextQuestion: NextQuestion | null
+  /** AI-08 도우미 말 (확인된 사실·검토 카드 기반 LLM 안내). 없으면 화면이 기본 문장을 만들어요 */
+  reply?: string | null
 }
 // ── AI 질문·답변 (백엔드 최종 초안 11/17, Python 계약 확정 시 조금 바뀔 수 있음) ──
 /**
@@ -216,7 +222,7 @@ export type SolutionMessageRequest = Versioned & (
  * explanation: 가안(백엔드에 필드명 문의 중). AI-07 근거 설명이 SOL-03/04 응답에 실려 오면 화면이 도우미 말 끝에 붙여 보여 줘요.
  *   지금 서버·mock은 안 보내서 없어도 돼요(없으면 화면이 규칙 기반 답변만 보여 줌).
  */
-export type SolutionMessageResponse = { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion: NextQuestion | null; stateVersion: number; assistant?: AssistantReply | null; explanation?: string | null }
+export type SolutionMessageResponse = { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion: NextQuestion | null; stateVersion: number; assistant?: AssistantReply | null; explanation?: string | null; reply?: string | null }
 export type UpdateFactsRequest = Versioned & { changes: Partial<SolutionFacts> }
 /**
  * SOL-04 응답. 백엔드 공유(11/17): SOL-03 응답과 같은 모양으로 바뀌어요.
@@ -224,7 +230,7 @@ export type UpdateFactsRequest = Versioned & { changes: Partial<SolutionFacts> }
  * - responseCards: 고친 뒤 "전체 사실" 기준으로 다시 계산된 카드 전부
  * nextQuestion은 백엔드 구현 전까지 안 올 수 있어서 선택(?)으로 둬요. 안 오면 화면은 기존 질문을 유지해요.
  */
-export type UpdateFactsResponse = { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion?: NextQuestion | null; stateVersion: number; explanation?: string | null }
+export type UpdateFactsResponse = { facts: SolutionFacts; responseCards: SolutionCard[]; nextQuestion?: NextQuestion | null; stateVersion: number; explanation?: string | null; reply?: string | null }
 export type CompleteSolutionResponse = { solutionId: number; status: SolutionStatus }
 /** SOL-06(가안, 노션에 아직 없음) 내 피해 대응 상담 목록 항목. title은 첫 상황 설명(가린 글) 앞부분 */
 export type SolutionListItem = { solutionId: number; status: SolutionStatus; title: string; createdAt: string; completedAt: string | null }

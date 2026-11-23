@@ -58,6 +58,17 @@ export function useSolutionHistory(account: Account | null, page: Page, onUnauth
       setDetailLoading(false)
     }
   }
-  return { items, nextCursor, loading, error, detail, detailLoading, loadMore: () => load(nextCursor), open, close: () => setDetail(null) }
+  /** 기록 삭제: 서버에서 지우고 목록·상세에서도 빼요 */
+  const remove = async (solutionId: number) => {
+    setError("")
+    try {
+      await solutionApi.remove(solutionId)
+      setItems((prev) => prev.filter((i) => i.solutionId !== solutionId))
+      setDetail((d) => (d?.solutionId === solutionId ? null : d))
+    } catch (err) {
+      if (!onUnauthorized(err, "mypage")) setError(errorMessage(err))
+    }
+  }
+  return { items, nextCursor, loading, error, detail, detailLoading, loadMore: () => load(nextCursor), open, close: () => setDetail(null), remove }
 }
 export type SolutionHistory = ReturnType<typeof useSolutionHistory>

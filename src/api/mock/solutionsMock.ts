@@ -283,6 +283,13 @@ export const solutionsMock = withSave({
     s.completedAt = new Date().toISOString()
     return { solutionId: s.id, status: s.status }
   },
+  /** 상담 삭제 (저장 없이 나가기 · 마이페이지 기록 삭제) */
+  async remove(id: number): Promise<{ solutionId: number; deleted: true }> {
+    await delay(120)
+    get(id)
+    sessions.delete(id)
+    return { solutionId: id, deleted: true }
+  },
   /** SOL-06(가안) 내가 마친 상담 목록 */
   async list(params: { size?: number; cursor?: string | null } = {}): Promise<SolutionListResponse> {
     await delay(200)

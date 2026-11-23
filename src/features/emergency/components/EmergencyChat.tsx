@@ -210,12 +210,14 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
         <ConfirmModal
           title="상담을 마칠까요?"
           message={loggedIn
-            ? "지금까지의 대화는 마이페이지 '긴급 대응 기록'에 저장돼요. 마친 상담은 이어서 대화할 수 없어요."
+            ? "저장하면 마이페이지 '긴급 대응 기록'에서 다시 볼 수 있어요. 저장하지 않고 나가면 이 대화는 지워져요."
             : "로그인하지 않아 대화 기록이 저장되지 않아요. 상담을 마치면 지금까지의 대화를 다시 볼 수 없어요."}
           confirmLabel={loggedIn ? "마치고 저장하기" : "상담 마치기"}
           cancelLabel="계속 상담하기"
           onConfirm={() => { setConfirmEnd(false); void em.complete() }}
           onCancel={() => setConfirmEnd(false)}
+          extraLabel={loggedIn ? "저장 없이 나가기" : undefined}
+          onExtra={() => { setConfirmEnd(false); void em.discard() }}
         />
       )}
       <div className="container emergency-chat-heading">
