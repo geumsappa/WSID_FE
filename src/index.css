@@ -817,11 +817,18 @@ textarea:focus { border-color: #78aaed; background: #fff; outline: 3px solid rgb
 .trend-actions a { font-size: 12px; color: #64748b; text-decoration: underline; text-underline-offset: 3px; }
 @media (max-width: 760px) { .trend-cards { grid-template-columns: 1fr; } .trend-section { padding: 0 16px; } }
 /* AI 처리(해외 전송) 안내·동의 */
-.ai-consent { display: flex; flex-direction: column; gap: 12px; padding: 20px 22px; border: 1px solid #d6e0ee; border-radius: 16px; background: #f7faff; }
-.ai-consent h3 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 17px; font-weight: 800; color: #1d3557; }
-.ai-consent ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; line-height: 1.6; color: #3b4859; }
-.ai-consent-check { display: flex; align-items: flex-start; gap: 8px; font-size: 14px; font-weight: 600; color: #1d2a3a; cursor: pointer; }
-.ai-consent-check input { margin-top: 4px; }
+.ai-consent { display: flex; flex-direction: column; gap: 18px; }
+.ai-consent-head strong { display: block; font-size: 18px; font-weight: 800; color: #1d2a3a; }
+.ai-consent-head p { margin-top: 4px; font-size: 14px; color: #64748b; }
+.ai-consent-items { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ai-consent-items li { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border: 1px solid #e3e9f2; border-radius: 14px; background: #f8fafd; }
+.ai-consent-icon { display: grid; place-items: center; flex: none; width: 34px; height: 34px; border-radius: 10px; background: #e6f0ff; color: #1769e0; }
+.ai-consent-items strong { display: block; font-size: 14px; font-weight: 700; color: #1d2a3a; }
+.ai-consent-items p { margin-top: 3px; font-size: 13px; line-height: 1.55; color: #5b6878; }
+.ai-consent-check { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border: 1px solid #d6e0ee; border-radius: 12px; background: #fff; font-size: 14px; font-weight: 600; color: #1d2a3a; cursor: pointer; }
+.ai-consent-check.checked { border-color: #1769e0; background: #f3f8ff; }
+.ai-consent-check input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: #1769e0; cursor: pointer; }
+@media (max-width: 640px) { .ai-consent-items { grid-template-columns: 1fr; } }
 .chat-input-hint { display: flex; align-items: center; gap: 5px; margin: 6px 2px 0; font-size: 11px; color: #7a8798; }
 /* 상황 대화 첫 화면의 빠른 시작 */
 .quick-start { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 14px; padding: 14px 16px; border: 1px dashed #c6d6ee; border-radius: 14px; background: #f7faff; }
