@@ -3,14 +3,14 @@ import { Icon } from "@/components/Icon"
 import { Typing } from "@/components/Typing"
 import type { Simulation } from "../hooks/useSimulation"
 
-// 첫 답변 고르기: 흔한 상황을 고르면 그 문장이 첫 답변으로 보내져요. 이후 대화는 평소처럼 이어가요.
+// 선택지는 대화 주제만 전달해요. 실제 역할·경험·연락 내용은 이어지는 대화에서 확인해요.
 const QUICK_STARTS = [
-  { label: "택배 문자", text: "택배를 자주 시키고 배송 문자를 자주 받아요. 주소를 확인하라는 문자를 받은 적이 있어요." },
-  { label: "중고거래", text: "중고거래 앱으로 물건을 팔고 있어요. 구매자가 앱 밖에서 결제하자고 한 적이 있어요." },
-  { label: "가족·지인 사칭", text: "가족과 메신저로 자주 연락해요. 휴대폰이 고장 났다며 모르는 번호로 연락이 온 적이 있어요." },
-  { label: "대출 안내", text: "생활비 때문에 대출을 알아보고 있어요. 저금리 대출 안내 문자를 자주 받아요." },
-  { label: "보상금·환급 문자", text: "최근 개인정보 유출 뉴스를 봤어요. 피해보상금을 신청하라는 문자를 받은 적이 있어요." },
-  { label: "아르바이트 구인", text: "아르바이트를 구하고 있어요. 면접 없이 바로 일할 수 있다는 연락을 받았어요." },
+  { label: "택배·배송", text: "택배나 배송 이야기를 하고 싶어요." },
+  { label: "중고거래", text: "중고거래 이야기를 하고 싶어요." },
+  { label: "가족·지인 연락", text: "가족이나 지인과의 연락 이야기를 하고 싶어요." },
+  { label: "대출", text: "대출 이야기를 하고 싶어요." },
+  { label: "보상금·환급", text: "보상금이나 환급 이야기를 하고 싶어요." },
+  { label: "아르바이트", text: "아르바이트 이야기를 하고 싶어요." },
 ]
 
 // 상황 대화(TRN-04): AI가 묻고 사용자가 답하며 오늘 겪은 상황을 알려 주는 단계.
@@ -53,7 +53,7 @@ export function DiscoveryChat({ sim }: { sim: Simulation }) {
     {answered === 0 && !sim.typing && (
       <div className="quick-start">
         <strong>비슷한 상황 고르기</strong>
-        <span>직접 적기 어렵다면 가까운 상황을 골라 시작해 보세요.</span>
+        <span>주제를 고른 뒤, 실제 겪은 일을 이야기해 주세요.</span>
         <div className="interview-choices">
           {QUICK_STARTS.map((q) => <button key={q.label} type="button" onClick={() => void send(q.text)}>{q.label}</button>)}
         </div>
