@@ -168,8 +168,9 @@ export function useSimulation(
     setTurnCount(d.turnCount ?? 0)
     setShouldFinish(false)
     setScenario(d.scenario ?? readScenarioInfo(d.trainingId))
-    // 복원 응답에는 "시나리오를 만들어도 되는지"가 없어서, 한 번이라도 답했다면 버튼을 보여 줍니다(부족하면 서버가 알려 줘요).
-    setCanGenerate(d.phase === "DISCOVERY" && disc.some((l) => l.from === "user"))
+    // 서버가 '시나리오를 만들어도 된다'고 알려 주면 그 값을 따라요. 예전엔 답이 하나라도 있으면 버튼을 보여 줘서,
+    // 정보가 부족한데 누르면 "현재 훈련 단계에서 사용할 수 없는 요청이에요" 오류가 났어요
+    setCanGenerate(d.phase === "DISCOVERY" && (d.canGenerateScenario ?? disc.some((l) => l.from === "user")))
     setStage(d.phase === "DISCOVERY" ? "discovery" : d.phase === "SCENARIO_READY" ? "ready" : d.phase === "SIMULATION" ? "chat" : "done")
   }
   /** stateVersion이 어긋났을 때: 서버의 최신 상태를 다시 불러옵니다. */
@@ -329,6 +330,12 @@ export function useSimulation(
       setStage("ready")
     } catch (err) {
       setStage("discovery")
+      // 서버가 아직 시나리오를 만들 만큼 정보가 없다고 하면: 버튼을 숨기고 대화를 더 이어 가게 안내해요
+      if (err instanceof ApiError && err.code === "INVALID_TRAINING_PHASE") {
+        setCanGenerate(false)
+        setError("아직 시나리오를 만들 만큼 이야기가 모이지 않았어요. 질문에 조금 더 답해 주세요.")
+        return
+      }
       if (err instanceof ApiError && (err.status === 503 || err.status === 0)) {
         setError("시나리오를 받지 못했어요. 대화와 선택은 유지했으니 잠시 후 다시 만들어 주세요.")
         return
