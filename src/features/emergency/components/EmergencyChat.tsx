@@ -176,6 +176,8 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
   const guide = em.situation ? situationGuides[em.situation] : null
   const first = em.messages.slice(0, 2)
   const rest = em.messages.slice(2)
+  /** 답을 기다리는 도우미 질문 말풍선 (그 바로 아래에 예/아니오/모름 버튼을 보여 줘요) */
+  const pendingClarKey = em.clarification ? [...em.messages].reverse().find((x) => x.kind === "clarification")?.key : undefined
   const renderMessage = (m: Emergency["messages"][number]) => m.notice ? (
     // 대응 카드가 바뀌었을 때: 제목·가장 먼저 할 일만 짧게, 전체는 위쪽 대응 방법으로
     <div className="prep-message assistant" key={m.key}>
@@ -210,7 +212,12 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
         {m.text && (m.from === "assistant"
           ? <MessageText text={m.text} className={m.kind ? `assist-${m.kind}` : undefined} structured={m.kind === "answer" || /\n1\. /.test(m.text)} />
           : <p className={m.kind ? `assist-${m.kind}` : undefined}>{m.text}</p>)}
-        {m.references && <div className="assist-refs">근거: {m.references.map((code) => em.cardDetails[code]?.title ?? em.cards.find((c) => c.code === code)?.title ?? code).join(" · ")}</div>}
+        {/* 근거 카드 코드(m.references)는 내부 확인용이라 화면에는 보여 주지 않아요 */}
+        {em.clarification && m.key === pendingClarKey && !em.completed && (
+          <div className="v2-answer-chips" role="group" aria-label="도우미 질문에 답하기">
+            {em.clarification.options.map((v) => <button key={v} type="button" disabled={em.typing} onClick={() => void em.answerClarification(v)}>{ANSWER_LABEL[v]}</button>)}
+          </div>
+        )}
         {m.images && m.images.length > 0 && <div className="sent-photo-gallery"><EvidenceGallery images={m.images} /></div>}
       </div>
     </div>
@@ -376,9 +383,6 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
             {pendingImages.length > 0 && <div className="chat-attachments pending-photos"><span>전송할 사진: {pendingImages.length}장</span><EvidenceGallery images={pendingImages} onRemove={(id) => setPendingImages((items) => items.filter((i) => i.id !== id))} /></div>}
             {uploadError && <p className="upload-error" role="alert">{uploadError}</p>}
             {em.error && <p className="upload-error" role="alert">{em.error}{em.failed && <> <button type="button" className="assist-retry" disabled={em.typing} onClick={em.retry}>다시 보내기</button></>}</p>}
-            {em.clarification &&
-              <div className="assist-mode answering"><span><Icon name="chat" size={14} /> 도우미 질문에 답하는 중: <strong>{em.clarification.content}</strong></span>
-                {em.clarification.options.length > 0 && <div className="assist-quick">{em.clarification.options.map((v) => <button key={v} type="button" disabled={em.typing} onClick={() => void em.answerClarification(v)}>{ANSWER_LABEL[v]}</button>)}</div>}</div>}
             <div className="chat-input-row">
               <button type="button" className="chat-attach-button" title="사진 첨부" aria-label="사진 첨부" onClick={() => fileRef.current?.click()}><Icon name="image" size={20} /></button>
               <textarea rows={1} value={input} disabled={em.typing} onChange={(e) => setInput(e.target.value)}

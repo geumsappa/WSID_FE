@@ -78,7 +78,7 @@ html.text-large .app { zoom: 1.15; }
 .prep-message > span.v2-avatar, .typing > span.v2-avatar, .interview-avatar.v2-avatar, .assistant-header > span.v2-avatar { width: 44px; height: 44px; background: transparent; border-radius: 0; }
 
 /* ---------- 진행 단계 (시뮬레이션) ---------- */
-.v2-stepper { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin: 0 0 28px; padding: 0; list-style: none; }
+.v2-stepper { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 10px 12px; margin: 0 0 28px; padding: 0; list-style: none; }
 .v2-stepper li { display: flex; align-items: center; gap: 8px; }
 .v2-stepper li + li::before { content: ""; width: 24px; height: 2px; margin-right: 4px; border-radius: 1px; background: #d1d6db; }
 .v2-stepper-dot { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 50%; background: var(--v2-fill); color: var(--v2-mute); font-size: 15px; font-weight: 800; }
@@ -238,7 +238,7 @@ html.text-large .app { zoom: 1.15; }
 .simulation-chat-input button { min-height: 56px; height: 56px; padding: 0 20px; border-radius: 16px; background: var(--v2-blue); font-size: 17px; font-weight: 800; }
 
 /* ---------- 결과 리포트 (종이 밖) ---------- */
-.report-page .page-intro { text-align: left; margin-left: 0; }
+.report-page .page-intro { text-align: center; margin-left: auto; margin-right: auto; }
 .analysis-card { border: 0; background: var(--v2-fill); border-radius: 24px; }
 .analysis-card h3 { color: var(--v2-text); font-size: 21px; }
 .analysis-card li { color: var(--v2-sub); font-size: 17px; border-bottom: 0; }
@@ -615,3 +615,47 @@ html.text-large .app { zoom: 1.15; }
 .v2-check-grid button svg { flex: none; }
 .v2-check-actions .v2-btn-soft, .v2-check-actions .v2-btn-primary { min-height: 46px; padding: 0 18px; font-size: 16px; }
 @media (max-width: 480px) { .v2-check-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ── 도우미 추가 질문 답하기: 질문 말풍선 바로 아래 둥근 버튼 ── */
+.v2-answer-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.v2-answer-chips button { height: 44px; padding: 0 22px; border: 1.5px solid #c9dcfb; border-radius: 999px; background: #fff; color: var(--v2-blue); font-size: 16px; font-weight: 700; cursor: pointer; }
+.v2-answer-chips button:hover:not(:disabled) { border-color: var(--v2-blue); background: var(--v2-blue-soft); }
+.v2-answer-chips button:disabled { opacity: .5; cursor: default; }
+
+/* ── 시뮬레이션 대화 화면: 대화창만 크게, 화면은 고정하고 대화 안에서만 스크롤 ── */
+.chat-page.v2-sim-fixed { display: flex; flex-direction: column; align-items: center; width: 100%; min-height: 0; padding: 16px 0 20px; overflow: hidden; }
+/* 대화창 폭: 화면 가운데, 위 메뉴 폭의 4/5 정도 */
+.v2-sim-fixed .v2-stepper-wrap, .v2-sim-fixed .chat-layout { width: min(880px, calc(100% - 32px)); margin-left: auto; margin-right: auto; }
+.v2-sim-fixed .v2-stepper-wrap { flex: none; margin-bottom: 12px; }
+.v2-sim-fixed .chat-layout { flex: 1; min-height: 0; display: flex; flex-direction: column; max-width: none; }
+.v2-sim-fixed .messenger { flex: 1; width: 100%; min-height: 0; display: flex; flex-direction: column; }
+.v2-sim-fixed .messenger-header, .v2-sim-fixed .market-item-bar, .v2-sim-fixed .simulation-chat-input { flex: none; }
+.v2-sim-fixed .messages { flex: 1; min-height: 0; max-height: none; overflow-y: auto; }
+.v2-sim-fixed .v2-sim-end { flex: none; height: 44px; padding: 0 18px; border: 0; border-radius: 999px; background: var(--v2-fill); color: var(--v2-text); font-size: 15px; font-weight: 700; cursor: pointer; }
+.v2-sim-fixed .v2-sim-end:hover:not(:disabled) { background: var(--v2-line); }
+.v2-sim-fixed .v2-sim-end:disabled { opacity: .5; cursor: default; }
+@media (max-width: 640px) { .v2-sim-fixed .v2-sim-end { height: 40px; padding: 0 14px; font-size: 14px; } }
+
+/* ── 시뮬레이션 상황 이야기: 제목·대화 상자·버튼 폭을 맞추고 대화 상자를 넉넉하게 ── */
+.preparation-container .v2-intro { text-align: center; }
+.preparation-container .simulation-new-flow, .preparation-container .scenario-options-wrap { max-width: none; }
+.experience-interview .interview-thread { min-height: 280px; max-height: min(440px, 50vh); gap: 14px; padding: 20px 22px; border: 0; border-radius: 24px; background: #eef1f4; }
+.experience-interview .interview-bubble { background: #fff; }
+.experience-interview .interview-user span { background: var(--v2-blue); color: #fff; }
+/* 말풍선·상황 버튼·입력창 높이와 글자 크기를 하나로 맞춰요 (한 줄일 때 모두 56px, 글자 17px) */
+.experience-interview .interview-bubble, .experience-interview .interview-user span { min-height: 56px; display: inline-flex; align-items: center; padding: 14px 18px; font-size: 17px; line-height: 1.6; }
+.experience-interview .quick-start .interview-choices button { min-height: 56px; padding: 8px 16px; border-radius: 16px; font-size: 17px; }
+.experience-interview .interview-compose { min-height: 56px; padding: 4px 4px 4px 8px; border-radius: 16px; align-items: center; }
+.experience-interview .interview-compose input { padding: 8px 10px; font-size: 17px; }
+.experience-interview .interview-compose button { min-height: 48px; height: 48px; border-radius: 12px; }
+/* 고르는 버튼을 회색 대화 상자 안에 넣고, 입력창은 상자 바로 밑에 붙여요 */
+.experience-interview .interview-thread { max-height: min(540px, 58vh); }
+.experience-interview .interview-thread .quick-start { margin: 6px 0 0; }
+.experience-interview .interview-thread .quick-start > strong { font-size: 16px; font-weight: 700; color: var(--v2-sub); }
+.experience-interview .interview-thread .interview-choices { margin: 0; }
+.experience-interview .interview-thread .interview-choices button { background: #fff; }
+.experience-interview .interview-thread .interview-choices button:hover { background: var(--v2-blue-soft); color: var(--v2-blue); }
+.experience-interview .interview-thread + .upload-error, .experience-interview .interview-thread + .interview-compose { margin-top: 10px; }
+/* 회색 대화 상자 높이 1.5배, 고르는 버튼은 상자 안 맨 아래에 */
+.experience-interview .interview-thread { display: flex; flex-direction: column; min-height: 420px; max-height: min(640px, 70vh); }
+.experience-interview .interview-thread > .quick-start, .experience-interview .interview-thread > .interview-choices { margin-top: auto; padding-top: 12px; }
