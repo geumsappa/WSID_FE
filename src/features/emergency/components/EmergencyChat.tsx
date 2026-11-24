@@ -10,7 +10,7 @@ import { ConfirmModal } from "@/components/ConfirmModal"
 import { EvidenceGallery } from "@/components/EvidenceGallery"
 import { Typing } from "@/components/Typing"
 import { loadEvidence } from "@/lib/image"
-import { toLinkItems, toTextItems } from "@/lib/normalize"
+import { toTextItems } from "@/lib/normalize"
 import type { Emergency, InputMode } from "../hooks/useEmergency"
 import { situationGuides } from "../data/situationGuides"
 import { CHECK_LABEL, CHECK_ORDER } from "../lib/composeReply"
@@ -60,6 +60,8 @@ const USE_CHECKLIST = true
 const stepIcon = (title: string): DuoIconName =>
   /지급정지|입금|송금/.test(title) ? "stop" : /앱|휴대폰|악성/.test(title) ? "appcheck" : /명의|등록된|확인/.test(title) ? "idcheck"
     : /개인정보|노출|비밀번호/.test(title) ? "shield" : /신고|경찰/.test(title) ? "report" : /전화|연락/.test(title) ? "call" : "shield"
+/** 백엔드 기관 코드 → 아이콘 (상황 카드의 ORG_ICON과 같은 그림) */
+const INSTITUTION_ICON: Record<string, DuoIconName> = { POLICE_112: "report", COUNTERSCAM_1394: "call", FSS: "institution", KISA_118: "shield", MSAFER: "idcheck", PD: "shield" }
 const ORG_ICON: Record<string, DuoIconName> = { police: "report", cyber: "report", fss: "institution", kisa: "shield", counterscam: "call", pd: "shield", payinfo: "idcheck", msafer: "idcheck" }
 
 /** 있었던 일 모두 고르기. 설명·사진에서 이미 '예'로 파악된 항목은 미리 골라 둬요 */
@@ -285,18 +287,23 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
                   const d = em.cardDetails[c.code]
                   const actions = toTextItems(d?.actions)
                   const materials = toTextItems(d?.requiredMaterials)
-                  const sources = toLinkItems(d?.sourceReferences)
                   const urgent = (c.priority ?? d?.priority) === "URGENT" // 상담 응답의 우선순위가 먼저 (중고거래+송금이면 긴급)
+                  const title = d?.title ?? c.title ?? c.code
+                  // 상황 카드 안내와 같은 모양: 긴급 카드는 '가장 먼저' 박스, 할 일은 큰 글씨 단계, 준비물은 회색 박스 (출처 줄은 화면에 안 보여요)
                   return (
-                    <div key={c.code} style={{ marginTop: gi ? 22 : 4 }}>
-                      <h4 style={{ margin: "0 0 10px", display: "flex", alignItems: "center", gap: 8 }}>
-                        <span className="badge" style={urgent ? { background: "#fff2f1", color: "#b43b38" } : undefined}>{urgent ? "긴급" : `상황 ${gi + 1}`}</span>
-                        {d?.title ?? c.title ?? c.code}
-                      </h4>
-                      {actions.length > 0 ? <div className="action-steps">{actions.map((a, i) => <div key={i}><span>{i + 1}</span><div>{a.title && <h4>{a.title}</h4>}<p>{a.body}</p></div></div>)}</div>
-                        : <p style={{ fontSize: 12, color: "#697586" }}>{d ? "세부 조치가 아직 등록되지 않았어요. 아래 공식 기관에 문의해 주세요." : "카드 내용을 불러오는 중이에요."}</p>}
-                      {materials.length > 0 && <p style={{ margin: "10px 0 0", fontSize: 12, color: "#526174" }}><strong>준비할 것:</strong> {materials.map((m) => m.body).join(", ")}</p>}
-                      {sources.length > 0 && <p style={{ margin: "6px 0 0", fontSize: 11, color: "#7a8798" }}>근거: {sources.map((s, i) => <span key={i}>{i ? " · " : ""}{s.url ? <a href={s.url} target="_blank" rel="noreferrer">{s.label}</a> : s.label}</span>)}{d?.reviewedAt && ` (검토 ${d.reviewedAt.slice(0, 10)})`}</p>}
+                    <div key={c.code} style={{ marginTop: gi ? 32 : 4 }}>
+                      {urgent
+                        ? <div className="v2-first"><strong>{gi === 0 ? "가장 먼저" : "긴급"}</strong><h4>{title}</h4></div>
+                        : <h4 className="v2-section-title">{title}</h4>}
+                      {actions.length > 0
+                        ? <div className="action-steps v2-steps">{actions.map((a, i) => <div key={i}><DuoIcon name={stepIcon(`${a.title ?? ""} ${a.body}`)} size={44} /><div><small>{i + 1}단계</small>{a.title && <h4>{a.title}</h4>}<p className="v2-step-body">{a.body}</p></div></div>)}</div>
+                        : <p className="v2-step-body">{d ? "세부 조치가 아직 등록되지 않았어요. 아래 도움받을 곳에 문의해 주세요." : "카드 내용을 불러오는 중이에요."}</p>}
+                      {materials.length > 0 && (
+                        <div className="v2-materials">
+                          <h5>미리 준비해 두세요</h5>
+                          <ul>{materials.map((m, i) => <li key={i}>{m.body}</li>)}</ul>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -331,16 +338,18 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
                 <div className="organization-grid">
                   {institutionCodes.map((code) => {
                     const it = institutionOf(code)
-                    const href = it?.phone ? undefined : it?.officialUrl ?? undefined // 전화번호는 안내만
+                    // 상황 카드의 기관 박스와 같게: 이름에 번호가 있으면(경찰청 112) 안내만, 웹사이트가 있으면 바로가기, 둘 다 아니면 번호 표시
+                    const phoneInName = !!it?.phone && it.name.includes(it.phone)
+                    const href = !phoneInName && it?.officialUrl ? it.officialUrl : undefined
                     const Tag = href ? "a" : "div"
                     return (
-                      <Tag key={code} href={href} target={href?.startsWith("http") ? "_blank" : undefined} rel="noreferrer">
-                        <span className="org-mark"><DuoIcon name={it?.phone ? "call" : "institution"} size={32} /></span>
+                      <Tag key={code} href={href} target={href ? "_blank" : undefined} rel={href ? "noreferrer" : undefined}>
+                        <span className="org-mark"><DuoIcon name={INSTITUTION_ICON[code] ?? (it?.phone ? "call" : "institution")} size={32} /></span>
                         <div>
                           <h4>{it?.name ?? code}</h4>
                           <p>{it?.role ?? "기관 정보를 불러오는 중"}</p>
                         </div>
-                        {it?.phone ? <span className="v2-phone-label">전화 {it.phone}</span> : href && <strong>바로가기 <Icon name="arrow" size={16} /></strong>}
+                        {href ? <strong>바로가기 <Icon name="arrow" size={16} /></strong> : !phoneInName && it?.phone && <span className="v2-phone-label">전화 {it.phone}</span>}
                       </Tag>
                     )
                   })}
