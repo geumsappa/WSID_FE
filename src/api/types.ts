@@ -126,7 +126,8 @@ export type MockPage = { templateCode: string; title: string; institutionName: s
 /** 노션: "MOCK_PAGE_OPEN,CLOSE,MOCK_LOGIN_ATTEMPT,OFFICIAL_CHANNEL_CHECK". CLOSE의 정확한 코드는 확인 필요 */
 /** MOCK_APP_CLICK: 대화 속 가상 앱 설치 링크를 누름 (모의 페이지 없이 기록, actionMeta 없음) */
 export type MockActionCode = "MOCK_PAGE_OPEN" | "MOCK_PAGE_CLOSE" | "MOCK_LOGIN_ATTEMPT" | "OFFICIAL_CHANNEL_CHECK" | "MOCK_APP_CLICK" | "MOCK_TRANSFER"
-export type MockActionRequest = Versioned & { actionCode: MockActionCode; actionMeta?: { templateCode: string; screenCode: string } }
+/** filledFields: 확인 화면에서 값을 채운 칸의 종류 (이름·휴대폰 번호·주소·생년월일·성별). 값은 보내지 않아요 */
+export type MockActionRequest = Versioned & { actionCode: MockActionCode; actionMeta?: { templateCode: string; screenCode: string; filledFields?: string[] } }
 export type MockActionResponse = { recorded: boolean; stateVersion: number }
 
 export type FinishReason = "USER_FINISH" | (string & {})

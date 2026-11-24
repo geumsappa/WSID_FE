@@ -1,9 +1,15 @@
+import type { CSSProperties } from "react"
 import type { MockPage } from "@/api"
-import { Icon } from "@/components/Icon"
-import type { MockTemplate } from "../data/mockPageTemplates"
+import type { MockFieldKind, MockTemplate } from "../data/mockPageTemplates"
 
 type Result = "" | "submitted" | "official" | "closed"
-// 모의 페이지 화면 틀 하나. 제목·입력칸·버튼 문구는 template(설정표 data/mockPageTemplates.ts)에서 와요.
+
+/**
+ * 문자·메신저 링크를 눌렀을 때 뜨는 사이트 화면. 휴대폰 브라우저로 연 것처럼 주소창과 함께 보여요.
+ * 제목·입력칸·색·상태 줄은 template(data/mockPageTemplates.ts)에서 와요.
+ * 화면 안(사이트)에는 설명 문구를 넣지 않고, 대화로 돌아가기·대표번호 확인은 사이트 밖 아래 막대에 둬요.
+ * 입력값은 어디에도 보내지 않고 "제출했다"는 행동만 기록해요 (TrainingCheckPage).
+ */
 export function TrainingCheckView({ page, template: t, loading, busy, error, result, onAction }: {
   page: MockPage | null
   template: MockTemplate
@@ -11,48 +17,91 @@ export function TrainingCheckView({ page, template: t, loading, busy, error, res
   busy: boolean
   error: string
   result: Result
-  onAction: (kind: Exclude<Result, "">) => void
+  /** submitted 일 때 filled: 값을 채운 칸의 종류 (값은 넘기지 않아요) */
+  onAction: (kind: Exclude<Result, "">, filled?: MockFieldKind[]) => void
 }) {
-  return <div className="training-check-page">
-    <header className="training-check-header"><div className="training-check-container training-check-header-inner">
-      <div><strong className="training-check-brand">{page?.institutionName || t.title}</strong><span>{t.service}</span></div>
-      <span className="training-check-nav">{t.nav}</span>
-    </div></header>
-    <main className="training-check-container training-check-main">
-      <div className="training-check-heading"><span>{t.kicker}</span><h1>{t.title}</h1><p>{t.lead}</p></div>
-      {loading ? <div className="training-check-card" role="status">확인 화면을 준비하고 있습니다.</div>
-      : !page ? <div className="training-check-card"><p role="alert">{error || "화면을 열 수 없습니다."}</p><p>원래 대화 탭에서 로그인과 진행 상태를 확인해 주세요.</p></div>
-      : <div className="training-check-layout">
-        <section className="training-check-card">
-          <div className="training-check-section-head"><span>01</span><h2>{t.section}</h2></div>
-          <p className="training-check-description">{t.sectionDesc}</p>
-          {result === "" ? <form autoComplete="off" onSubmit={(event) => {
-            event.preventDefault()
-            event.currentTarget.reset()
-            onAction("submitted")
-          }}>
-            {t.fields.map((f) => f.type === "gender"
-              ? <div key={f.label} className="training-check-field" role="radiogroup" aria-label={f.label}>{f.label}
-                <div className="training-check-choice">{["남성", "여성"].map((g) => <label key={g}>
-                  <input type="radio" name="training-check-gender" value={g} required disabled={busy} />{g}</label>)}</div>
-              </div>
-              : <label key={f.label}>{f.label}<input type="text" inputMode={f.type === "tel" ? "numeric" : undefined}
-                placeholder={f.placeholder} required maxLength={f.maxLength ?? 50} disabled={busy} autoComplete="off" /></label>)}
-            <div className="training-check-data-note"><Icon name="lock" size={16} /><span>입력한 값은 어디에도 보내지 않고, 제출했는지만 기록해요.</span></div>
-            <button className="training-check-submit" type="submit" disabled={busy}>{busy ? "처리 중..." : t.submit}<Icon name="arrow" size={17} /></button>
-            <button className="training-check-verify" type="button" disabled={busy} onClick={() => onAction("official")}>이 요청을 공식 경로로 다시 확인하기</button>
-          </form> : <div className="training-check-result" role="status"><Icon name="check" size={26} />
-            <h3>{result === "submitted" ? t.submitted : result === "official" ? "공식 경로로 확인하는 선택을 기록했습니다." : "대화 탭으로 돌아가 주세요."}</h3>
-            <p>원래 대화 탭으로 돌아가 이어서 대화해 주세요.</p>
-          </div>}
-          {error && <p className="training-check-error" role="alert">{error}</p>}
-          <button className="training-check-return" type="button" disabled={busy} onClick={() => onAction("closed")}>대화로 돌아가기</button>
+  const brand = page?.institutionName || t.title
+  const style = { "--ms-theme": t.theme } as CSSProperties
+  const year = new Date().getFullYear()
+
+  return <div className="msite" style={style}>
+    {/* 휴대폰 브라우저 주소창 */}
+    <div className="msite-chrome">
+      <div className="msite-urlbar">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M12 2 1 21h22L12 2Zm0 6 1 7h-2l1-7Zm0 9.2a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4Z" /></svg>
+        <span className="msite-url">{t.domain}</span>
+      </div>
+      <button type="button" className="msite-chrome-close" aria-label="닫기" disabled={busy} onClick={() => onAction("closed")}>
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+      </button>
+    </div>
+
+    <div className="msite-scroll">
+      <header className="msite-header">
+        <div className="msite-logo"><span className="msite-logo-mark">{brand.slice(0, 1)}</span><strong>{brand}</strong></div>
+        <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" /></svg>
+      </header>
+
+      {loading ? <div className="msite-loading" role="status"><span className="msite-spinner" />페이지를 불러오는 중입니다</div>
+      : !page ? <div className="msite-body"><p className="msite-error" role="alert">{error || "페이지를 표시할 수 없습니다."}</p></div>
+      : result === "submitted" ? <div className="msite-body msite-done" role="status">
+          <span className="msite-done-icon"><svg viewBox="0 0 24 24" width="30" height="30" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7.5" stroke="currentColor" strokeWidth="2.6" fill="none" strokeLinecap="round" strokeLinejoin="round" /></svg></span>
+          <h2>{t.submitted}</h2>
+          <p>담당자 안내에 따라 다음 절차를 진행해 주세요.<br />처리 결과는 문자로 안내됩니다.</p>
+          <button type="button" className="msite-submit" disabled={busy} onClick={() => onAction("closed")}>확인</button>
+        </div>
+      : <>
+        <section className="msite-hero">
+          <span className={t.alert ? "msite-badge alert" : "msite-badge"}>{t.alert ? "중요 알림" : t.nav}</span>
+          <h1>{t.title}</h1>
+          <p>{t.lead}</p>
+          <dl className="msite-status">
+            {t.status.map(([k, v]) => <div key={k}><dt>{k}</dt><dd>{v}</dd></div>)}
+          </dl>
         </section>
-        <aside className="training-check-aside"><h2>진행 안내</h2><ol><li className="active"><span>1</span><div><strong>{t.steps[0].title}</strong><p>{t.steps[0].desc}</p></div></li><li><span>2</span><div><strong>{t.steps[1].title}</strong><p>{t.steps[1].desc}</p></div></li></ol>
-          <div className="training-check-aside-note"><Icon name="alert" size={18} /><p>별도 앱 설치, 실제 결제 또는 외부 사이트 이동은 진행하지 않습니다.</p></div>
-        </aside>
-      </div>}
-    </main>
-    <footer className="training-check-footer">어떡하지 · {page?.institutionName || "표시된 기관"} 측이 운영하거나 승인한 화면이 아니에요</footer>
+
+        <div className="msite-body">
+          <h2 className="msite-section">{t.section}</h2>
+          <p className="msite-section-desc">{t.sectionDesc}</p>
+          <form autoComplete="off" onSubmit={(event) => {
+            event.preventDefault()
+            // 칸은 비워 둬도 제출돼요. 어떤 칸을 채웠는지(종류)만 모으고 값은 바로 지워요
+            const form = new FormData(event.currentTarget)
+            const filled = t.fields.filter((f, i) => String(form.get(`f${i}`) ?? "").trim() !== "").map((f) => f.kind)
+            event.currentTarget.reset()
+            onAction("submitted", filled)
+          }}>
+            {t.fields.map((f, i) => f.type === "gender"
+              ? <div key={f.label} className="msite-field" role="radiogroup" aria-label={f.label}><span>{f.label}</span>
+                <div className="msite-choice">{["남성", "여성"].map((g) => <label key={g}>
+                  <input type="radio" name={`f${i}`} value={g} disabled={busy} /><span>{g}</span></label>)}</div>
+              </div>
+              : <label key={f.label} className="msite-field"><span>{f.label}</span>
+                <input type="text" name={`f${i}`} inputMode={f.type === "tel" ? "numeric" : undefined} placeholder={f.placeholder}
+                  maxLength={f.maxLength ?? 50} disabled={busy} autoComplete="off" /></label>)}
+
+            <label className="msite-agree">
+              <input type="checkbox" disabled={busy} />
+              <span><b>[필수]</b> 개인정보 수집·이용에 동의합니다</span>
+            </label>
+            {error && <p className="msite-error" role="alert">{error}</p>}
+            <button className="msite-submit" type="submit" disabled={busy}>{busy ? "처리 중..." : t.submit}</button>
+          </form>
+        </div>
+      </>}
+
+      <footer className="msite-footer">
+        <nav><span>이용약관</span><span><b>개인정보처리방침</b></span><span>고객센터</span></nav>
+        <p>© {year} {brand}. All rights reserved.</p>
+      </footer>
+    </div>
+
+    {/* 사이트 밖(앱) 막대: 대화로 돌아가기, 사이트를 믿지 않고 대표번호로 확인하기 */}
+    <div className="msite-appbar">
+      {result === "official"
+        ? <span className="msite-appbar-note">대표번호로 직접 확인하기로 했어요</span>
+        : <button type="button" disabled={busy || !page} onClick={() => onAction("official")}>대표번호로 직접 확인할래요</button>}
+      <button type="button" disabled={busy} onClick={() => onAction("closed")}>대화로 돌아가기</button>
+    </div>
   </div>
 }
