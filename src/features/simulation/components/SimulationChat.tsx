@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react"
 import { USE_MOCK } from "@/api"
 import { Icon } from "@/components/Icon"
+import { DuoIcon, type DuoIconName } from "@/components/DuoIcon"
+import { Stepper } from "@/components/Stepper"
 import type { Simulation } from "../hooks/useSimulation"
 import { MockPhotoPreview } from "./MockPhotoPreview"
 import { TrainingCheckPage } from "./TrainingCheckPage"
@@ -11,6 +13,8 @@ const MAX_TURNS = 15 // 명세 초안: 전체 최대 15턴
 const CHANNEL_LABEL: Record<string, string> = {
   SMS: "문자 메시지", MESSENGER: "메신저", MARKET: "중고거래 채팅", EMAIL: "이메일", SNS: "SNS 메시지",
 }
+
+const CHANNEL_ICON: Record<string, DuoIconName> = { SMS: "smishing", MESSENGER: "acquaintance", MARKET: "trade", EMAIL: "chat", SNS: "chat" }
 
 // 가상 훈련 대화(TRN-07~11): 가상 사기범과 대화하며 대응을 연습하는 단계.
 export function SimulationChat({ sim }: { sim: Simulation }) {
@@ -61,19 +65,20 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
           </div>
         </div>
       )}
+      <div className="container v2-stepper-wrap"><Stepper current={3} /></div>
       <div className="container chat-layout">
         <aside className="scenario-sidebar">
-          <span className="sidebar-kicker">현재 체험 중인 상황</span>
-          <div className="sidebar-icon"><Icon name="shield" size={26} /></div>
+          <span className="sidebar-kicker">지금 연습 중인 상황</span>
+          <div className="sidebar-icon"><DuoIcon name={CHANNEL_ICON[channel] ?? "chat"} size={52} /></div>
           <h1>{sim.scenario?.title ?? "맞춤 훈련 시나리오"}</h1>
           <p>{sim.scenario?.description ?? "오늘 알려 주신 상황을 바탕으로 만든 훈련 대화예요."}</p>
-          <div className="progress-head"><strong>진행 턴</strong><span>{progress} / {MAX_TURNS}</span></div>
+          <div className="progress-head"><strong>진행</strong><span>{progress} / {MAX_TURNS}번째 대화</span></div>
           <div className="progress-bar"><span style={{ width: `${(progress / MAX_TURNS) * 100}%` }} /></div>
           <div className="education-notice">
             <Icon name="lock" size={18} />
             <p>이 대화는 금융사기 예방을 위한 훈련용 시뮬레이션입니다. 실제 금융기관이나 개인과 연결되지 않으며, 입력한 개인정보 값은 저장하지 않고 종류만 기록해요.</p>
           </div>
-          {!finished && <button className="outline-button" disabled={sim.typing} onClick={() => sim.setEndConfirm(true)}><Icon name="close" size={17} /> 훈련 종료하고 결과 보기</button>}
+          {!finished && <button className="outline-button" disabled={sim.typing} onClick={() => sim.setEndConfirm(true)}>훈련 마치고 결과 보기</button>}
         </aside>
         <div className={`messenger channel-${channel.toLowerCase()}`}>
           <div className="messenger-header">
@@ -83,7 +88,7 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
               <p><span className={USE_MOCK ? "mock" : undefined} title={USE_MOCK ? "mock 모드 (서버 없음)" : "AI 연결됨"}
                 aria-label={USE_MOCK ? "mock 모드" : "AI 연결됨"} /> {CHANNEL_LABEL[channel] ?? "메신저"}</p>
             </div>
-            <span className="header-shield"><Icon name="shield" size={22} /></span>
+            <span className="header-shield v2-badge">훈련용</span>
           </div>
           <div className="training-disclaimer" role="note">
             <Icon name="shield" size={18} />
@@ -92,7 +97,7 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
           <div className="messages" ref={scrollRef} aria-live="polite">
             {rows.map(({ m, name, text }) => (
               <div className={`message-row ${m.from === "ai" ? "contact" : "user"}`} key={m.key}>
-                {m.from === "ai" && <span className="avatar"><Icon name="chat" size={18} /></span>}
+                {m.from === "ai" && <span className="avatar"><DuoIcon name={CHANNEL_ICON[channel] ?? "chat"} size={26} tone="gray" /></span>}
                 <div>
                   <span className="sender">{name}</span>
                   {text && (m.from === "ai"
@@ -114,7 +119,7 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
             {/* 답장 기다리는 중: 상대방 말풍선과 같은 자리·모양(아바타, 이름, 말풍선)으로 점 세 개를 보여 줘요 */}
             {sim.typing && (
               <div className="message-row contact" role="status" aria-label={`${currentSpeaker}이(가) 답장을 쓰고 있어요`}>
-                <span className="avatar"><Icon name="chat" size={18} /></span>
+                <span className="avatar"><DuoIcon name={CHANNEL_ICON[channel] ?? "chat"} size={26} tone="gray" /></span>
                 <div>
                   <span className="sender">{currentSpeaker}</span>
                   <div className="typing-dots"><i /><i /><i /></div>
