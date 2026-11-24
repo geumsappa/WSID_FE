@@ -322,3 +322,52 @@ html.text-large .app { zoom: 1.15; }
 .emergency-chat-input { padding: 10px 0 12px; }
 .v2-chat-footer { margin-top: 6px; }
 .emergency-chat-input .v2-chat-footer button.v2-btn-soft { min-height: 44px; font-size: 16px; }
+
+/* 긴급 대응 첫 화면: 제목 바로 위 빨간 한 줄 안내 (상자 없이 왼쪽 정렬) */
+.v2-urgent-top { display: flex; align-items: center; gap: 8px; margin: 0 0 14px; color: #c0261d; font-size: 18px; font-weight: 800; line-height: 1.45; }
+.v2-urgent-top svg { flex: none; }
+
+/* ---------- 시뮬레이션: 빠른 시작 3개씩 두 줄 ---------- */
+.quick-start .interview-choices { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+@media (max-width: 680px) { .quick-start .interview-choices { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---------- 마이페이지 ---------- */
+.mypage { background: #fff; padding-top: 40px; }
+.mypage-container { max-width: 960px; }
+.mypage-top { margin-bottom: 24px; }
+.mypage-top h1 { margin: 0 0 8px; color: var(--v2-text); font-size: clamp(26px, 3vw, 32px); letter-spacing: -1px; }
+.mypage-top p { color: var(--v2-sub); font-size: 17px; }
+.logout-button { font-size: 16px; }
+.profile-card { padding: 20px 24px; border: 0; border-radius: 24px; background: var(--v2-fill); box-shadow: none; }
+.profile-avatar { width: 56px; height: 56px; border-radius: 18px; background: #fff; }
+.profile-card strong { color: var(--v2-text); font-size: 20px; }
+.profile-card p { color: var(--v2-sub); font-size: 16px; }
+.profile-status { color: var(--v2-good); font-size: 15px; font-weight: 700; }
+.mypage-stats { gap: 12px; margin: 12px 0 32px; }
+.mypage-stats > div { padding: 20px 24px; border: 0; border-radius: 24px; background: var(--v2-fill); }
+.mypage-stats span { color: var(--v2-sub); font-size: 16px; font-weight: 700; }
+.mypage-stats strong { color: var(--v2-text); font-size: 32px; }
+.mypage-stats small { color: var(--v2-sub); font-size: 16px; }
+.mypage-records { min-height: 0; border: 0; border-radius: 0; background: transparent; overflow: visible; }
+.v2-mypage-h2 { margin: 8px 0 4px; color: var(--v2-text); font-size: 22px; font-weight: 800; }
+.record-list { padding: 0; }
+.record-row { gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--v2-line); }
+.record-icon { width: 52px; height: 52px; border-radius: 16px; background: var(--v2-fill); }
+.record-info strong { color: var(--v2-text); font-size: 18px; font-weight: 800; }
+.record-info p { color: var(--v2-sub); font-size: 15px; margin-top: 4px; }
+.record-actions { display: flex; gap: 8px; }
+.record-view, .record-delete { min-height: 44px; padding: 0 16px; border: 0; border-radius: 12px; font-size: 16px; font-weight: 700; }
+.record-view { background: var(--v2-blue-soft); color: var(--v2-blue); }
+.record-delete { background: var(--v2-fill); color: var(--v2-sub); }
+.record-empty { padding: 36px 20px; border-radius: 24px; background: var(--v2-fill); margin-top: 12px; }
+.record-empty-icon { background: #fff; }
+.record-empty h3 { color: var(--v2-text); font-size: 19px; }
+.record-empty p { color: var(--v2-sub); font-size: 16px; line-height: 1.6; }
+.record-detail { padding: 16px 0 24px; color: var(--v2-text); }
+.record-detail h3 { font-size: 22px; }
+.record-back { min-height: 44px; color: var(--v2-blue); font-size: 17px; font-weight: 700; }
+.mypage-warning { color: var(--v2-mute); font-size: 15px; }
+@media (max-width: 680px) {
+  .record-row { flex-wrap: wrap; }
+  .record-actions { width: 100%; justify-content: flex-end; }
+}

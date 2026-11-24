@@ -2,6 +2,7 @@ import { useState } from "react"
 import { USE_MOCK } from "@/api"
 import { ConfirmModal } from "@/components/ConfirmModal"
 import { Icon } from "@/components/Icon"
+import { DuoIcon, type DuoIconName } from "@/components/DuoIcon"
 import { displayName, type Account } from "@/features/auth/types"
 import { ReportSheet } from "@/features/report/components/ReportSheet"
 import { TurnReview } from "@/features/report/components/TurnReview"
@@ -12,7 +13,18 @@ import { situationGuides } from "@/features/emergency/data/situationGuides"
 import { organizationData } from "@/features/emergency/data/organizations"
 import { toTextItems } from "@/lib/normalize"
 
-const bubble = (mine: boolean) => ({ justifySelf: mine ? "end" : "start", maxWidth: "85%", padding: "10px 14px", borderRadius: 14, background: mine ? "#1d6fe0" : "#f3f6fb", color: mine ? "#fff" : "#1f2937", fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" } as const)
+const bubble = (mine: boolean) => ({ justifySelf: mine ? "end" : "start", maxWidth: "85%", padding: "13px 16px", borderRadius: mine ? "20px 6px 20px 20px" : "6px 20px 20px 20px", background: mine ? "#1b64da" : "#f2f4f6", color: mine ? "#fff" : "#191f28", fontSize: 17, lineHeight: 1.6, whiteSpace: "pre-wrap" } as const)
+
+/** 리포트 사기 유형: 코드 대신 한글 이름과 아이콘으로 */
+const FRAUD: Record<string, { label: string; icon: DuoIconName }> = {
+  SECONDHAND_TRADE: { label: "중고거래", icon: "trade" },
+  SMISHING: { label: "택배·문자 스미싱", icon: "smishing" },
+  LOAN_FRAUD: { label: "대출 사기", icon: "loan" },
+  JOB_SCAM: { label: "취업 사기", icon: "idcheck" },
+  INSTITUTION_IMPERSONATION: { label: "기관 사칭", icon: "institution" },
+  ACQUAINTANCE_IMPERSONATION: { label: "가족·지인 사칭", icon: "acquaintance" },
+  INVESTMENT_FRAUD: { label: "투자 사기", icon: "investment" },
+}
 
 /** 기록 보기에서 대화 사이에 넣는 '그때 안내받은 대응 방법' 말풍선 (유형 고정 안내 또는 서버 대응 카드) */
 function PlanBubble({ d }: { d: SolutionRecord }) {
@@ -24,7 +36,7 @@ function PlanBubble({ d }: { d: SolutionRecord }) {
       return { title: full?.title ?? c.title ?? c.code, steps: toTextItems(full?.actions) }
     })
   if (!groups.length) return null
-  return <div style={{ ...bubble(false), maxWidth: "100%", width: "100%", background: "#fff", border: "1px solid #dfe5ee", whiteSpace: "normal" }}>
+  return <div style={{ ...bubble(false), maxWidth: "100%", width: "100%", background: "#fff", border: "1.5px solid #e5e8eb", borderRadius: 20, whiteSpace: "normal" }}>
     <small style={{ display: "block", opacity: .75, marginBottom: 6 }}>어떡하지 도우미 · 안내한 대응 방법</small>
     {g && <p style={{ margin: "0 0 10px" }}>{g.intro}</p>}
     {groups.map((grp, gi) => <div key={gi} style={{ marginTop: gi ? 14 : 0 }}>
@@ -65,10 +77,11 @@ export function MyPage({ account, reports, history, onLogout }: { account: Accou
       onConfirm={confirmDelete}
       onCancel={() => setPendingDelete(null)}
     />}
-    <div className={`mypage-top${np}`}><div><span className="account-kicker"><Icon name="shield" size={16}/> MY PAGE</span><h1>나의 금융 안전 기록</h1><p>저장한 훈련 리포트와 긴급 대응 상담 기록을 한곳에서 확인해요.</p></div><button className="outline-button logout-button" onClick={onLogout}>로그아웃</button></div>
-    <div className={`profile-card${np}`}><div className="profile-avatar"><Icon name="user" size={26}/></div><div><strong>{displayName(account)}님, 안녕하세요!</strong><p>{account.email}</p></div><span className="profile-status"><Icon name="check" size={15}/> 가입 완료</span></div>
+    <div className={`mypage-top${np}`}><div><h1>나의 금융 안전 기록</h1><p>저장한 훈련 리포트와 긴급 대응 상담 기록을 한곳에서 확인해요.</p></div><button className="outline-button logout-button" onClick={onLogout}>로그아웃</button></div>
+    <div className={`profile-card${np}`}><div className="profile-avatar"><img src="/mascot.png" alt="" width={44} /></div><div><strong>{displayName(account)}님, 안녕하세요!</strong><p>{account.email}</p></div><span className="profile-status"><Icon name="check" size={15}/> 가입 완료</span></div>
     <div className={`mypage-stats${np}`}><div><span>저장한 리포트</span><strong>{r.items.length}{r.nextCursor ? "+" : ""}<small>개</small></strong></div><div><span>긴급 대응 기록</span><strong>{h.items.length}{h.nextCursor ? "+" : ""}<small>개</small></strong></div></div>
     <div className="mypage-records">
+      {!r.detail && <h2 className="v2-mypage-h2">저장한 훈련 리포트</h2>}
       {r.error && <p className="auth-error" role="alert" style={{ margin: 16 }}>{r.error}</p>}
       {r.detail ? <div className="record-detail">
         <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
@@ -83,13 +96,13 @@ export function MyPage({ account, reports, history, onLogout }: { account: Accou
       </div>
       : r.detailLoading || (r.loading && !r.items.length) ? <div className="record-empty"><div className="record-empty-icon"><Icon name="refresh" size={30}/></div><h3>불러오는 중...</h3></div>
       : r.items.length ? <>
-        <div className="record-list">{r.items.map((item) => <div className="record-row" key={item.reportId}><div className="record-icon"><Icon name="shield" size={22}/></div><div className="record-info"><strong>{item.title}</strong><p>{item.fraudTypeCode} · {formatDate(item.completedAt)}</p></div><div className="record-actions"><button className="record-view" onClick={() => void r.open(item.reportId)}>상세보기</button>{deleteButton("report", item.reportId, item.title)}</div></div>)}</div>
+        <div className="record-list">{r.items.map((item) => <div className="record-row" key={item.reportId}><div className="record-icon"><DuoIcon name={FRAUD[item.fraudTypeCode ?? ""]?.icon ?? "shield"} size={30}/></div><div className="record-info"><strong>{item.title}</strong><p>{FRAUD[item.fraudTypeCode ?? ""]?.label ?? "금융사기"} · {formatDate(item.completedAt)}</p></div><div className="record-actions"><button className="record-view" onClick={() => void r.open(item.reportId)}>상세보기</button>{deleteButton("report", item.reportId, item.title)}</div></div>)}</div>
         {r.nextCursor && <button className="outline-button" style={{ margin: "14px auto 0", display: "flex" }} disabled={r.loading} onClick={() => void r.loadMore()}>{r.loading ? "불러오는 중..." : "더 보기"}</button>}
       </>
       : <div className="record-empty"><div className="record-empty-icon"><Icon name="shield" size={30}/></div><h3>아직 저장한 리포트가 없어요</h3><p>시뮬레이션을 마치고 결과 화면에서 리포트를 저장해 보세요.</p></div>}
     </div>
     {!r.detail && <div className="mypage-records no-print" style={{ marginTop: 20 }}>
-      <h2 style={{ margin: "18px 20px 4px", fontSize: 18 }}>긴급 대응 기록</h2>
+      <h2 className="v2-mypage-h2">긴급 대응 기록</h2>
       {h.error && <p className="auth-error" role="alert" style={{ margin: 16 }}>{h.error}</p>}
       {h.detail ? <div className="record-detail">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -97,12 +110,12 @@ export function MyPage({ account, reports, history, onLogout }: { account: Accou
           {deleteButton("solution", h.detail.solutionId, h.detail.title)}
         </div>
         <h3 style={{ margin: "14px 0 4px" }}>{h.detail.title}</h3>
-        <p style={{ margin: "0 0 14px", fontSize: 13, color: "#697586" }}>상담 당시 안내받은 대응 방법과 대화예요. 상담은 마쳐서 이어서 대화할 수 없어요.</p>
+        <p style={{ margin: "0 0 16px", fontSize: 16, color: "#4e5968" }}>상담 당시 안내받은 대응 방법과 대화예요. 상담은 마쳐서 이어서 대화할 수 없어요.</p>
         <div style={{ display: "grid", gap: 10 }}>
           {h.detail.messages.filter((m) => m.content).map((m, i) => {
             const mine = m.sender === "USER"
             return <div key={m.id ?? i} style={{ display: "contents" }}>
-              <div style={bubble(mine)}><small style={{ display: "block", opacity: .75, marginBottom: 2 }}>{mine ? "나" : "어떡하지 도우미"}</small>{m.content}</div>
+              <div style={bubble(mine)}><small style={{ display: "block", opacity: .8, marginBottom: 4, fontSize: 14, fontWeight: 700 }}>{mine ? "나" : "어떡하지 도우미"}</small>{m.content}</div>
               {i === 0 && <PlanBubble d={h.detail!} />}
             </div>
           })}
@@ -110,7 +123,7 @@ export function MyPage({ account, reports, history, onLogout }: { account: Accou
       </div>
       : h.detailLoading || (h.loading && !h.items.length) ? <div className="record-empty"><div className="record-empty-icon"><Icon name="refresh" size={30}/></div><h3>불러오는 중...</h3></div>
       : h.items.length ? <>
-        <div className="record-list">{h.items.map((item) => <div className="record-row" key={item.solutionId}><div className="record-icon"><Icon name="alert" size={22}/></div><div className="record-info"><strong>{item.title}</strong><p>상담 마침 · {formatDate(item.completedAt ?? item.createdAt)}</p></div><div className="record-actions"><button className="record-view" onClick={() => void h.open(item)}>대화 보기</button>{deleteButton("solution", item.solutionId, item.title)}</div></div>)}</div>
+        <div className="record-list">{h.items.map((item) => <div className="record-row" key={item.solutionId}><div className="record-icon"><DuoIcon name="report" size={30}/></div><div className="record-info"><strong>{item.title}</strong><p>상담 마침 · {formatDate(item.completedAt ?? item.createdAt)}</p></div><div className="record-actions"><button className="record-view" onClick={() => void h.open(item)}>대화 보기</button>{deleteButton("solution", item.solutionId, item.title)}</div></div>)}</div>
         {h.nextCursor && <button className="outline-button" style={{ margin: "14px auto 0", display: "flex" }} disabled={h.loading} onClick={() => void h.loadMore()}>{h.loading ? "불러오는 중..." : "더 보기"}</button>}
       </>
       : <div className="record-empty"><div className="record-empty-icon"><Icon name="alert" size={30}/></div><h3>아직 저장된 상담 기록이 없어요</h3><p>로그인한 상태로 긴급 대응 상담을 하고 '상담 마치기'를 누르면 여기에 저장돼요.</p></div>}
