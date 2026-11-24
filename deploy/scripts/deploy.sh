@@ -31,8 +31,11 @@ git -C "$ROOT/$REPO" log --oneline -1
 echo "== [2/3] .env ← Parameter Store $PARAM"
 command -v aws >/dev/null 2>&1 || snap install aws-cli --classic >/dev/null
 echo "   aws: $(command -v aws) / $(aws --version 2>&1 | cut -d' ' -f1)"
-umask 077
-aws ssm get-parameter --name "$PARAM" --with-decryption --query Parameter.Value --output text > "$KIT/$STACK/.env.new"
+# umask 077 상태에서는 snap으로 설치된 aws가 빈 결과를 낼 수 있어서, 값은 변수로 받고 파일 권한은 따로 지정해요
+ENV_VALUE=$(aws ssm get-parameter --name "$PARAM" --with-decryption --query Parameter.Value --output text)
+install -m 600 /dev/null "$KIT/$STACK/.env.new"
+printf '%s\n' "$ENV_VALUE" > "$KIT/$STACK/.env.new"
+unset ENV_VALUE
 LINES=$(grep -c '=' "$KIT/$STACK/.env.new" || true)
 if [ "$LINES" -eq 0 ]; then
   echo "!! Parameter Store에서 받은 .env가 비어 있어요 ($PARAM). 기존 .env를 그대로 두고 멈춰요." >&2
