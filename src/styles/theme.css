@@ -470,3 +470,27 @@ html.text-large .app { zoom: 1.15; }
 .v2-modal-confirm { background: var(--v2-blue); color: #fff; }
 .v2-modal-confirm:hover { background: var(--v2-blue-dark); }
 .v2-modal-extra { margin-top: 16px; border: 0; background: none; color: #b42318; font-size: 16px; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+/* 도움받을 곳: 링크 없는 전화 기관(div)도 링크 기관과 같은 한 줄 배치로 */
+.organization-grid > div { display: flex; }
+/* 도움받을 곳: '순서대로 해 주세요'와 구분되게 회색 상자 안에 */
+.chat-organizations { margin: 28px 0 8px; padding: 20px 24px 12px; border-radius: 22px; background: var(--v2-fill); }
+.chat-organizations > h3 { margin: 0 0 4px; }
+.chat-organizations .organization-grid .org-mark { background: #fff; }
+.chat-organizations .organization-grid a, .chat-organizations .organization-grid > div { border-bottom: 1px solid #e5e8eb; }
+.chat-organizations .organization-grid > :last-child { border-bottom: 0; }
+.chat-organizations .organization-grid strong { background: #fff; }
+
+/* ---------- 마이페이지: 긴급 대응 기록 보기 (긴급 대응 화면과 같은 구성) ---------- */
+.v2-record-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+.v2-record-head { display: flex; align-items: center; gap: 16px; padding: 20px 24px; border-radius: 24px; background: var(--v2-fill); }
+.v2-record-head h3 { margin: 0 0 4px; color: var(--v2-text); font-size: 22px; font-weight: 800; }
+.v2-record-head p { margin: 0; color: var(--v2-sub); font-size: 15px; }
+.v2-record-section { margin-top: 32px; }
+.v2-record-intro { margin: 4px 0 8px; color: var(--v2-sub); font-size: 16px; line-height: 1.6; }
+.v2-record-group { margin: 16px 0 0; color: var(--v2-text); font-size: 18px; font-weight: 800; }
+.v2-record .action-steps > div { border-bottom: 1px solid var(--v2-line); }
+.v2-record .action-steps > div:last-child { border-bottom: 0; }
+.v2-record-chat { margin-top: 12px; }
+/* 상담 마침 카드 안 버튼: 회색 카드 위에서도 버튼으로 보이게 (흰 바탕 + 테두리) */
+.complete-card .outline-button { min-height: 48px; padding: 0 20px; border: 1.5px solid #d1d6db; background: #fff; color: var(--v2-text); font-size: 16px; }
+.complete-card .outline-button:hover { border-color: var(--v2-blue); color: var(--v2-blue); background: #fff; }
