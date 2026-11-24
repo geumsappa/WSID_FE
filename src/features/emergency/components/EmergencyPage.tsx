@@ -1,8 +1,8 @@
 import { useRef, useState } from "react"
 import type { UploadedImage } from "@/types/common"
 import { Icon } from "@/components/Icon"
+import { DuoIcon } from "@/components/DuoIcon"
 import { EvidenceGallery } from "@/components/EvidenceGallery"
-import { PageIntro } from "@/components/PageIntro"
 import { loadEvidence } from "@/lib/image"
 import { SITUATION_ORDER, situationGuides } from "../data/situationGuides"
 import type { SituationKey } from "../types"
@@ -50,56 +50,37 @@ export function EmergencyPage(p: EmergencyProps) {
         </div>
       )}
       <div className="container">
-        <PageIntro
-          kicker="상황별 빠른 안내"
-          title="금융사기 긴급 대응"
-          subtitle="현재 상황을 선택하거나 직접 설명해 주세요. 필요한 대응 방법과 공식 신고 경로를 안내해 드립니다."
-        />
-        <div className="urgent-notice">
-          <span>
-            <Icon name="alert" size={22} />
-          </span>
-          <div>
-            <strong>이미 돈을 송금하셨나요?</strong>
-            <p>
-              보이스피싱으로 돈을 보냈다면 즉시 112나 송금한 금융회사에
-              지급정지를 요청하세요. (중고거래 사기는 경찰 신고가 먼저예요.)
-            </p>
-          </div>
+        {/* 가장 급한 안내: 제목 바로 위 빨간 한 줄 (상자 없이, 제목과 같은 왼쪽 선) */}
+        <p className="v2-urgent-top" role="note">
+          <Icon name="alert" size={20} />
+          이미 돈을 보냈다면 지금 바로 112 · 1394에 지급정지를 요청하세요
+        </p>
+        <div className="v2-intro">
+          <h1>어떤 일이 있었나요?</h1>
+          <p>비슷한 상황을 고르면 지금 해야 할 일을 순서대로 알려 드려요.</p>
         </div>
-        <div className="section-heading left">
-          <span>상황 선택</span>
-          <h2>어떤 사기가 의심되나요?</h2>
-          <p>가장 가까운 유형을 선택하면 대처 방법을 바로 알려 드려요.</p>
-        </div>
-        <div className="situation-grid">
+        <div className="situation-grid v2-situations">
           {SITUATION_ORDER.map((key) => (
             <button
               key={key}
               disabled={p.analyzing}
               onClick={() => p.onSelect(key)}
             >
-              <span>
-                <Icon name={situationGuides[key].icon} size={25} />
-              </span>
+              <DuoIcon name={key} size={56} />
               <div>
                 <h3>{situationGuides[key].title}</h3>
                 <p>{situationGuides[key].short}</p>
               </div>
-              <Icon name="arrow" size={18} />
             </button>
           ))}
         </div>
         <div className="direct-input">
           <div>
             <span className="direct-icon">
-              <Icon name="chat" size={24} />
+              <DuoIcon name="chat" size={30} />
             </span>
-            <h2>내 상황을 직접 설명해 주세요.</h2>
-            <p>
-              의심스러운 문자, 대화, 전화, 송금이나 피싱 상황을 글과 사진으로
-              알려주세요.
-            </p>
+            <h2>목록에 없나요? 직접 알려 주세요</h2>
+            <p>받은 문자나 대화, 있었던 일을 글이나 사진으로 알려 주세요.</p>
           </div>
           <textarea
             value={p.text}
@@ -138,7 +119,7 @@ export function EmergencyPage(p: EmergencyProps) {
               onChange={(event) => void selectImages(event.target.files)}
             />
             <label htmlFor="evidence-image">
-              <span><Icon name="image" size={23} /></span>
+              <span><DuoIcon name="photo" size={30} /></span>
               <span>
                 <strong>사진을 끌어다 놓거나 클릭해서 첨부하기</strong>
                 <small>여러 장을 한꺼번에 선택하거나 추가할 수 있어요. (최대 12장, 장당 10MB)</small>
@@ -175,7 +156,7 @@ export function EmergencyPage(p: EmergencyProps) {
             >
               {p.analyzing
                 ? "상황을 분석하고 있어요..."
-                : "AI로 대응 방법 확인하기"}
+                : "대응 방법 확인하기"}
               {!p.analyzing && <Icon name="arrow" size={17} />}
             </button>
           </div>

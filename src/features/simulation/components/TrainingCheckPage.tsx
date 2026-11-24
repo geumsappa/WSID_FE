@@ -49,7 +49,7 @@ export function TrainingCheckPage({ trainingId: givenId, onClose }: { trainingId
 
   useEffect(() => {
     if (embedded) return // 창으로 열 때는 대화 화면의 탭 제목을 바꾸지 않아요
-    document.title = `${page?.institutionName ? page.institutionName + " | " : ""}${title} · 훈련용`
+    document.title = `${page?.institutionName ? page.institutionName + " | " : ""}${title} · 어떡하지`
     const meta = document.createElement("meta")
     meta.name = "robots"; meta.content = "noindex,nofollow"
     document.head.appendChild(meta)

@@ -1,19 +1,17 @@
 import { Icon } from "@/components/Icon"
-import { latestScams } from "./data/trendingScams"
+import { DuoIcon } from "@/components/DuoIcon"
 
+// 진행 중인 훈련은 '금융사기 시뮬레이션'을 누르면 이어서 할지 묻는 창이 떠서, 홈에 따로 '이어서 하기' 버튼은 두지 않아요
 export function HomePage({
   onSimulation,
   onEmergency,
-  resume,
-  onResume,
-  onTrend,
 }: {
   onSimulation: () => void
   onEmergency: () => void
   resume: { title: string; label: string; time: string } | null
   onResume: () => void
-  /** 유행 수법 카드의 "이 수법으로 훈련하기": 그 상황 문장을 첫 답변으로 새 훈련을 시작해요 */
-  onTrend: (preset: string) => void
+  /** 유행 수법 카드의 "이 수법으로 훈련하기"용 (홈에서 카드 뉴스는 뺐어요. 다시 쓰면 trendingScams의 latestScams로) */
+  onTrend?: (preset: string) => void
 }) {
   return (
     <div className="home-page">
@@ -30,7 +28,7 @@ export function HomePage({
           <div className="home-actions" aria-label="주요 서비스">
             <button onClick={onSimulation}>
               <span className="home-action-icon">
-                <Icon name="chat" size={34} />
+                <DuoIcon name="chat" size={46} />
               </span>
               <span className="home-action-copy">
                 <strong>금융사기 시뮬레이션</strong>
@@ -44,7 +42,7 @@ export function HomePage({
             </button>
             <button className="emergency-action" onClick={onEmergency}>
               <span className="home-action-icon">
-                <Icon name="alert" size={34} />
+                <DuoIcon name="report" size={46} tone="red" />
               </span>
               <span className="home-action-copy">
                 <strong>긴급 대응</strong>
@@ -57,44 +55,6 @@ export function HomePage({
               </span>
             </button>
           </div>
-          {resume && (
-            <button
-              type="button"
-              className="home-resume"
-              onClick={onResume}
-              aria-label={`진행 중인 훈련 이어서 하기: ${resume.title}`}
-              style={{ margin: "24px auto 0", alignSelf: "center", width: "100%", maxWidth: 560, display: "flex", alignItems: "center", gap: 14, padding: "14px 18px", borderRadius: 18, border: "1px solid rgba(37,99,235,.25)", background: "#fff", color: "#0f172a", textAlign: "left", cursor: "pointer", boxShadow: "0 10px 30px rgba(15,23,42,.08)" }}
-            >
-              <span className="home-action-icon" style={{ flexShrink: 0 }}>
-                <Icon name="refresh" size={26} />
-              </span>
-              <span style={{ display: "grid", gap: 3, flex: 1, minWidth: 0 }}>
-                <strong>이어서 하기</strong>
-                <small style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{resume.title}</small>
-                <small style={{ opacity: 0.7 }}>{resume.label} · 마지막 진행 {resume.time}</small>
-              </span>
-              <Icon name="arrow" size={20} />
-            </button>
-          )}
-        </div>
-      </section>
-      <section className="container trend-section" aria-label="요즘 유행하는 금융사기 수법">
-        <div className="trend-head">
-          <span>최근 공공기관 경보</span>
-          <h2>요즘 유행하는 수법, 미리 겪어 보세요</h2>
-        </div>
-        <div className="trend-cards">
-          {latestScams(2).map((scam) => (
-            <article className="trend-card" key={scam.id}>
-              <small>{scam.date.replace(/-/g, ".")} · {scam.issuer}</small>
-              <h3>{scam.title}</h3>
-              <p>{scam.summary}</p>
-              <div className="trend-actions">
-                <button type="button" className="primary-button" onClick={() => onTrend(scam.preset)}>이 수법으로 훈련하기 <Icon name="arrow" size={16} /></button>
-                <a href={scam.sourceUrl} target="_blank" rel="noopener noreferrer">출처: {scam.sourceLabel}</a>
-              </div>
-            </article>
-          ))}
         </div>
       </section>
     </div>
