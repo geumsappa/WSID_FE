@@ -12,8 +12,8 @@ import type { SolutionHistory, SolutionRecord } from "../hooks/useSolutionHistor
 import { situationGuides } from "@/features/emergency/data/situationGuides"
 import { organizationData } from "@/features/emergency/data/organizations"
 import { toTextItems } from "@/lib/normalize"
+import { MessageText } from "@/features/emergency/components/EmergencyChat"
 
-const bubble = (mine: boolean) => ({ justifySelf: mine ? "end" : "start", maxWidth: "85%", padding: "13px 16px", borderRadius: mine ? "20px 6px 20px 20px" : "6px 20px 20px 20px", background: mine ? "#1b64da" : "#f2f4f6", color: mine ? "#fff" : "#191f28", fontSize: 17, lineHeight: 1.6, whiteSpace: "pre-wrap" } as const)
 
 /** 리포트 사기 유형: 코드 대신 한글 이름과 아이콘으로 */
 const FRAUD: Record<string, { label: string; icon: DuoIconName }> = {
@@ -26,8 +26,13 @@ const FRAUD: Record<string, { label: string; icon: DuoIconName }> = {
   INVESTMENT_FRAUD: { label: "투자 사기", icon: "investment" },
 }
 
-/** 기록 보기에서 대화 사이에 넣는 '그때 안내받은 대응 방법' 말풍선 (유형 고정 안내 또는 서버 대응 카드) */
-function PlanBubble({ d }: { d: SolutionRecord }) {
+const stepIcon = (title: string): DuoIconName =>
+  /지급정지|입금|송금/.test(title) ? "stop" : /앱|휴대폰|악성/.test(title) ? "appcheck" : /명의|등록된|확인/.test(title) ? "idcheck"
+    : /개인정보|노출|비밀번호/.test(title) ? "shield" : /신고|경찰/.test(title) ? "report" : /전화|연락/.test(title) ? "call" : "shield"
+const ORG_ICON: Record<string, DuoIconName> = { police: "report", cyber: "report", fss: "institution", kisa: "shield", counterscam: "call", pd: "shield", payinfo: "idcheck", msafer: "idcheck" }
+
+/** 기록 보기의 '그때 안내받은 대응 방법'과 '도움받을 곳' (긴급 대응 화면과 같은 모양) */
+function RecordPlan({ d }: { d: SolutionRecord }) {
   const g = d.situation ? situationGuides[d.situation] : null
   const groups = g
     ? [{ title: g.title, steps: g.steps.map((s) => ({ title: s.title, body: s.body })) }]
@@ -36,18 +41,29 @@ function PlanBubble({ d }: { d: SolutionRecord }) {
       return { title: full?.title ?? c.title ?? c.code, steps: toTextItems(full?.actions) }
     })
   if (!groups.length) return null
-  return <div style={{ ...bubble(false), maxWidth: "100%", width: "100%", background: "#fff", border: "1.5px solid #e5e8eb", borderRadius: 20, whiteSpace: "normal" }}>
-    <small style={{ display: "block", opacity: .75, marginBottom: 6 }}>어떡하지 도우미 · 안내한 대응 방법</small>
-    {g && <p style={{ margin: "0 0 10px" }}>{g.intro}</p>}
-    {groups.map((grp, gi) => <div key={gi} style={{ marginTop: gi ? 14 : 0 }}>
-      <strong style={{ display: "block", marginBottom: 6 }}>{grp.title}</strong>
-      <ol style={{ margin: 0, paddingLeft: 20 }}>{grp.steps.map((s, i) => <li key={i} style={{ marginBottom: 6 }}>{s.title && <b>{s.title}: </b>}{s.body}</li>)}</ol>
-    </div>)}
-    {g && <p style={{ margin: "10px 0 0", fontSize: 13, color: "#526174" }}>연락할 곳: {g.organizations.map((k, i) => {
-      const o = organizationData[k]
-      return <span key={k}>{i ? " · " : ""}<a href={o.href} target={o.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer">{o.name}</a></span>
-    })}</p>}
-  </div>
+  return <>
+    <section className="v2-record-section">
+      <h4 className="v2-section-title">안내받은 대응 방법</h4>
+      {g && <p className="v2-record-intro">{g.intro}</p>}
+      {groups.map((grp, gi) => <div key={gi}>
+        {!g && <h5 className="v2-record-group">{grp.title}</h5>}
+        <div className="action-steps v2-steps">{grp.steps.map((st, i) => <div key={i}><DuoIcon name={stepIcon(st.title ?? st.body)} size={44} /><div><small>{i + 1}단계</small>{st.title && <h4>{st.title}</h4>}<p>{st.body}</p></div></div>)}</div>
+      </div>)}
+    </section>
+    {g && <div className="chat-organizations">
+      <h3>도움받을 곳</h3>
+      <div className="organization-grid">{g.organizations.map((k) => {
+        const o = organizationData[k]
+        const tel = o.href.startsWith("tel:")
+        const Tag = tel ? "div" : "a"
+        return <Tag key={k} href={tel ? undefined : o.href} target={tel ? undefined : "_blank"} rel={tel ? undefined : "noreferrer"}>
+          <span className="org-mark"><DuoIcon name={ORG_ICON[k] ?? "shield"} size={32} /></span>
+          <div><h4>{o.name}</h4><p>{o.desc}</p></div>
+          {!tel && <strong>바로가기 <Icon name="arrow" size={16} /></strong>}
+        </Tag>
+      })}</div>
+    </div>}
+  </>
 }
 
 const formatDate = (iso: string) => { const d = new Date(iso); return isNaN(d.getTime()) ? iso : d.toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "short" }) }
@@ -104,22 +120,31 @@ export function MyPage({ account, reports, history, onLogout }: { account: Accou
     {!r.detail && <div className="mypage-records no-print" style={{ marginTop: 20 }}>
       <h2 className="v2-mypage-h2">긴급 대응 기록</h2>
       {h.error && <p className="auth-error" role="alert" style={{ margin: 16 }}>{h.error}</p>}
-      {h.detail ? <div className="record-detail">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+      {h.detail ? <div className="record-detail v2-record">
+        <div className="v2-record-top">
           <button className="record-back" onClick={h.close}>← 목록으로</button>
           {deleteButton("solution", h.detail.solutionId, h.detail.title)}
         </div>
-        <h3 style={{ margin: "14px 0 4px" }}>{h.detail.title}</h3>
-        <p style={{ margin: "0 0 16px", fontSize: 16, color: "#4e5968" }}>상담 당시 안내받은 대응 방법과 대화예요. 상담은 마쳐서 이어서 대화할 수 없어요.</p>
-        <div style={{ display: "grid", gap: 10 }}>
-          {h.detail.messages.filter((m) => m.content).map((m, i) => {
-            const mine = m.sender === "USER"
-            return <div key={m.id ?? i} style={{ display: "contents" }}>
-              <div style={bubble(mine)}><small style={{ display: "block", opacity: .8, marginBottom: 4, fontSize: 14, fontWeight: 700 }}>{mine ? "나" : "어떡하지 도우미"}</small>{m.content}</div>
-              {i === 0 && <PlanBubble d={h.detail!} />}
-            </div>
-          })}
+        <div className="v2-record-head">
+          <DuoIcon name={h.detail.situation ?? "shield"} size={56} />
+          <div>
+            <h3>{h.detail.situation ? `${situationGuides[h.detail.situation].title} 상담 기록` : h.detail.title}</h3>
+            <p>{(() => { const it = h.items.find((x) => x.solutionId === h.detail!.solutionId); return it ? `${formatDate(it.completedAt ?? it.createdAt)} · ` : "" })()}마친 상담이라 이어서 대화할 수 없어요</p>
+          </div>
         </div>
+        <RecordPlan d={h.detail} />
+        <section className="v2-record-section">
+          <h4 className="v2-section-title">대화 내용</h4>
+          <div className="v2-record-chat">
+            {h.detail.messages.filter((m) => m.content).map((m, i) => {
+              const mine = m.sender === "USER"
+              return <div key={m.id ?? i} className={`prep-message ${mine ? "user" : "assistant"}`}>
+                {!mine && <span className="v2-avatar"><img className="v2-helper-avatar" src="/mascot.png" alt="" width={36} /></span>}
+                <div><small>{mine ? "나" : "어떡하지 도우미"}</small>{mine ? <p>{m.content}</p> : <MessageText text={m.content} structured={/(^|\s)1[.)]\s/.test(m.content)} />}</div>
+              </div>
+            })}
+          </div>
+        </section>
       </div>
       : h.detailLoading || (h.loading && !h.items.length) ? <div className="record-empty"><div className="record-empty-icon"><Icon name="refresh" size={30}/></div><h3>불러오는 중...</h3></div>
       : h.items.length ? <>
