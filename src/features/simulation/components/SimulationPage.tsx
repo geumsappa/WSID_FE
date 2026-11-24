@@ -18,7 +18,6 @@ type ConsentState = "checking" | "needed" | "ok"
 const CONSENT_ITEMS: { icon: "send" | "lock" | "shield" | "user" | "check"; title: string; body: string }[] = [
   { icon: "send", title: "외부 AI로 처리돼요", body: "대화와 시나리오를 만들기 위해 입력 내용이 Anthropic의 Claude(해외 서버)로 전송돼요." },
   { icon: "user", title: "이름은 그대로 사용될 수 있어요", body: "알려 주신 이름은 가리지 않고 AI에 전달돼요. 맞춤 시나리오와 대화에서 상대가 그 이름으로 부를 수 있어요." },
-  { icon: "lock", title: "번호·주소는 가려서 보내요", body: "주민번호·계좌·카드·전화번호·이메일·비밀번호·주소·생년월일은 가린 뒤 보내요." },
   { icon: "shield", title: "원문은 남기지 않아요", body: "서버에는 가린 내용만 저장하고, 리포트를 저장하면 대화 원문은 삭제해요." },
   { icon: "check", title: "지어낸 정보로 해도 괜찮아요", body: "정보를 넘기는 행동을 보는 훈련이라, 지어낸 이름·번호를 입력해도 결과는 같아요." },
 ]
