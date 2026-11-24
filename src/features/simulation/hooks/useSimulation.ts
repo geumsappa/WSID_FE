@@ -263,9 +263,10 @@ export function useSimulation(
     const id = idRef.current
     if (id === null || typing || stage !== "discovery") return false
     // 상황 설명에는 실제 번호가 필요 없으므로, 값은 가리고 종류만 남긴 글을 보냅니다.
-    const { text, types } = scrubPersonalInfo(raw.trim().slice(0, 500))
+    const { text } = scrubPersonalInfo(raw.trim().slice(0, 500))
     if (!text) return false
-    const mine: ChatLine = { key: lineKey(), from: "user", text, note: types.length ? `입력한 ${types.join(", ")}은(는) 가려서 보냈어요.` : undefined }
+    // 내 말풍선에는 쓴 그대로 보여 줘요 (이 화면 안에서만). 서버로는 가린 글(text)만 보내요
+    const mine: ChatLine = { key: lineKey(), from: "user", text: raw.trim().slice(0, 500) }
     setError("")
     setDiscoveryLines((lines) => [...lines.map((l) => ({ ...l, options: undefined })), mine])
     setTyping(true)
@@ -388,7 +389,7 @@ export function useSimulation(
       const prevUser = [...chatLines].reverse().find((l) => l.from === "user")?.text ?? ""
       const shown = scrubPersonalInfo(content, /인증번호|OTP|보안카드|비밀번호/.test(lastAi), { lastAi, prevUser })
       // 내 말풍선에는 내가 쓴 그대로 보여 줘요 (이 화면 안에서만). 서버·AI로는 가린 글(shown.text)만 보내요
-      mine = { key: lineKey(), from: "user", text: content, note: shown.types.length ? `${shown.types.join(", ")}은(는) 가린 뒤 보냈어요.` : undefined }
+      mine = { key: lineKey(), from: "user", text: content }
       body = { inputKind: "TEXT", content: shown.text }
     }
     setError("")
