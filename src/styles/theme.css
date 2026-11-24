@@ -614,3 +614,9 @@ html.text-large .app { zoom: 1.15; }
 .v2-check-grid button svg { flex: none; }
 .v2-check-actions .v2-btn-soft, .v2-check-actions .v2-btn-primary { min-height: 46px; padding: 0 18px; font-size: 16px; }
 @media (max-width: 480px) { .v2-check-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ── 도우미 추가 질문 답하기: 질문 말풍선 바로 아래 둥근 버튼 ── */
+.v2-answer-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.v2-answer-chips button { height: 44px; padding: 0 22px; border: 1.5px solid #c9dcfb; border-radius: 999px; background: #fff; color: var(--v2-blue); font-size: 16px; font-weight: 700; cursor: pointer; }
+.v2-answer-chips button:hover:not(:disabled) { border-color: var(--v2-blue); background: var(--v2-blue-soft); }
+.v2-answer-chips button:disabled { opacity: .5; cursor: default; }
