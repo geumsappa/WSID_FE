@@ -505,3 +505,11 @@ html.text-large .app { zoom: 1.15; }
 .experience-interview .interview-avatar.v2-avatar img { width: 32px; height: auto; }
 .experience-interview .interview-bubble { padding: 11px 15px; font-size: 17px; line-height: 1.55; border-radius: 6px 18px 18px 18px; }
 .experience-interview .interview-user span { padding: 11px 15px; font-size: 17px; border-radius: 18px 6px 18px 18px; }
+
+/* 있었던 일 고르기: 아이콘 없이 한 줄에 두 개씩, 작은 상자 버튼 */
+.v2-checklist { max-width: 560px; gap: 10px; }
+.v2-check-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.v2-check-grid button { min-height: 48px; gap: 6px; padding: 10px 14px; border-radius: 14px; font-size: 16px; font-weight: 700; line-height: 1.35; }
+.v2-check-grid button svg { flex: none; }
+.v2-check-actions .v2-btn-soft, .v2-check-actions .v2-btn-primary { min-height: 46px; padding: 0 18px; font-size: 16px; }
+@media (max-width: 480px) { .v2-check-grid { grid-template-columns: minmax(0, 1fr); } }
