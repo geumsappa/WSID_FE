@@ -128,6 +128,11 @@ export function useSimulation(
         if (lastAi) lastAi.mockPage = d.mockPage
       }
     }
+    if (d.mockTransferDone) {
+      sim.forEach((line) => {
+        if (line.from === "ai" && /\[모의\s*계좌\]/.test(line.text)) line.transferDone = true
+      })
+    }
     if (d.mockAppClicked) {
       sim.forEach((line) => {
         if (line.from === "ai" && /\[모의\s*앱\]/.test(line.text)) line.appClicked = true
@@ -341,11 +346,13 @@ export function useSimulation(
     } else {
       const content = input.text.trim().slice(0, 500)
       if (!content) return false
-      // 훈련에서는 "개인정보를 넘겼는지"를 서버가 판정해야 하므로 입력 그대로 보냅니다.
-      // 대신 화면에는 값을 가린 글만 남겨요(서버도 값은 저장하지 않고 종류만 기록).
-      const shown = scrubPersonalInfo(content)
-      mine = { key: lineKey(), from: "user", text: shown.text, note: shown.types.length ? `입력한 ${shown.types.join(", ")}은(는) 화면에 남기지 않고 가렸어요.` : undefined }
-      body = { inputKind: "TEXT", content }
+      // 1차 가림: 개인정보는 브라우저에서 [전화번호]·[이름] 같은 표시로 바꾼 뒤에 보내요 (원문은 이 기기를 떠나지 않아요).
+      // 서버는 이 표시를 보고 "어떤 정보를 넘겼는지"를 판정하고, 한 번 더 가려요 (백엔드·AI 서버 2·3차 가림).
+      const lastAi = [...chatLines].reverse().find((l) => l.from === "ai")?.text ?? ""
+      const prevUser = [...chatLines].reverse().find((l) => l.from === "user")?.text ?? ""
+      const shown = scrubPersonalInfo(content, /인증번호|OTP|보안카드|비밀번호/.test(lastAi), { lastAi, prevUser })
+      mine = { key: lineKey(), from: "user", text: shown.text, note: shown.types.length ? `입력한 ${shown.types.join(", ")}은(는) 가린 뒤 보냈어요.` : undefined }
+      body = { inputKind: "TEXT", content: shown.text }
     }
     setError("")
     setChatLines((lines) => [...lines.map((l) => ({ ...l, options: undefined })), mine])
@@ -399,6 +406,35 @@ export function useSimulation(
       }
       setError("앱 링크를 누른 기록을 남기지 못했어요. 잠시 후 다시 눌러 주세요.")
       setChatLines((lines) => lines.map((l) => l.key === key ? { ...l, appClicked: false, note: undefined } : l))
+    }
+  }
+
+  /**
+   * 대화 속 훈련용 계좌([모의계좌])의 "송금하기"를 눌렀을 때. 실제로 돈은 나가지 않고,
+   * 눌렀다는 사실(MOCK_TRANSFER)만 서버에 남겨 사기범의 다음 말과 리포트에 반영해요.
+   */
+  const clickMockTransfer = async (key: string) => {
+    const id = idRef.current
+    if (id === null || stage !== "chat") return
+    setChatLines((lines) => lines.map((l) => l.key === key
+      ? { ...l, transferDone: true, note: "훈련용 계좌라 실제로 돈이 나가지 않았어요." } : l))
+    const record = async () => {
+      const res = await inOrder(() => trainingApi.action(id, { stateVersion: versionRef.current, actionCode: "MOCK_TRANSFER" }))
+      versionRef.current = res.stateVersion
+    }
+    try {
+      await record()
+    } catch (err) {
+      if (isStateConflict(err)) {
+        try {
+          const detail = await trainingApi.detail(id)
+          versionRef.current = detail.stateVersion
+          await record()
+          return
+        } catch { /* 아래 안내로 넘어가요 */ }
+      }
+      setError("송금 버튼을 누른 기록을 남기지 못했어요. 잠시 후 다시 눌러 주세요.")
+      setChatLines((lines) => lines.map((l) => l.key === key ? { ...l, transferDone: false, note: undefined } : l))
     }
   }
 
@@ -495,7 +531,7 @@ export function useSimulation(
     stage, trainingId, discoveryLines, canGenerate, scenario, chatLines, turnCount, shouldFinish, typing, error,
     usedImages, endConfirm, setEndConfirm, report, reportState, saveNotice, saving, resumeInfo,
     startNew, retry, sendDiscovery, pendingPreset, clearPreset: () => setPendingPreset(null), uploadDiscoveryImages, generateScenario, startTraining, sendTraining,
-    showMockPage, closeMockPage, checkOpen, clickMockApp, finish, leave, saveReport, downloadPdf, resetForLogout,
+    showMockPage, closeMockPage, checkOpen, clickMockApp, clickMockTransfer, finish, leave, saveReport, downloadPdf, resetForLogout,
     clearError: () => setError(""),
   }
 }
