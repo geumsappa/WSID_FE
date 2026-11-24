@@ -88,6 +88,8 @@ export type TrainingDetail = {
   /** 훈련 중 훈련용 계좌로 송금 버튼을 누른 적이 있는지 (새로고침 후 카드 상태 복원용) */
   mockTransferDone?: boolean
   mockPage: MockPage | null
+  /** 상황 대화에서 시나리오를 만들 만큼 정보가 모였는지 (서버 기준). 이어서 하기 때 '시나리오 만들기' 버튼을 이 값으로 보여 줘요 */
+  canGenerateScenario?: boolean
   /** 가안(노션에 없음): 복원 때 시나리오 제목·설명을 다시 보여 주려면 필요해요 */
   scenario?: TrainingScenarioSummary | null
 }
@@ -201,21 +203,28 @@ export type StartSolutionResponse = {
  */
 export type MessagePurpose = "FACT_UPDATE" | "QUESTION" | "CLARIFICATION_ANSWER"
 /**
- * - NEED_USER_INPUT: AI 추가 질문을 띄워요. 질문 문장은 nextQuestion.content에 와요(질문은 항상 하나)
+ * - NEED_USER_INPUT: AI 추가 질문을 띄워요. 질문은 assistant.question에 와요(질문은 항상 하나)
  * - ANSWERED: answer(AI 답변)를 보여 줘요
  * - UNABLE_TO_ANSWER: "답변하기 어려워요" 안내
  */
 export type AssistantStatus = "NEED_USER_INPUT" | "ANSWERED" | "UNABLE_TO_ANSWER"
 /** AI 처리 결과. referenceCodes: 답변 근거가 된 대응 카드 코드(GUIDE-03로 제목을 불러 표시) */
-export type AssistantReply = { status: AssistantStatus; questionId: string | null; answer: string | null; referenceCodes: string[] }
+/** AI 추가 질문(백엔드 SolutionAssistant.Question). factKey는 네 사실 질문일 때만, 조건 질문이면 null */
+export type AssistantQuestion = { questionId: string; factKey?: FactKey | null; content: string; options: YesNoUnknown[] }
+/**
+ * AI 처리 결과. referenceCodes: 답변 근거가 된 대응 카드 코드(GUIDE-03로 제목을 불러 표시)
+ * question: NEED_USER_INPUT일 때 되묻는 질문 (실제 백엔드 형식). questionId는 예전 mock 형식이라 남겨 둬요.
+ */
+export type AssistantReply = { status: AssistantStatus; questionId?: string | null; question?: AssistantQuestion | null; answer: string | null; referenceCodes: string[]; reasonCode?: string | null }
 
 /** SOL-02. assistant: 마지막 AI 처리 결과. NEED_USER_INPUT이면 새로고침 후에도 nextQuestion을 AI 질문으로 다시 띄워요 */
 export type SolutionDetail = StartSolutionResponse & { messages: ChatMessage[]; assistant?: AssistantReply | null }
-/** TEXT면 content(+purpose), CHOICE면 selectedCode + factKey */
+/** TEXT면 content(+purpose), CHOICE면 selectedCode + factKey(사실 질문) 또는 questionId(AI 추가 질문) */
 export type SolutionMessageRequest = Versioned & (
   | { inputKind: "TEXT"; content: string; purpose?: "FACT_UPDATE" | "QUESTION" }
-  | { inputKind: "TEXT"; content: string; purpose: "CLARIFICATION_ANSWER"; questionId: string }
   | { inputKind: "CHOICE"; selectedCode: YesNoUnknown; factKey: FactKey }
+  /** AI 추가 질문에 대한 답. 백엔드는 글이 아니라 예/아니오/모름 선택으로만 받아요 (factKey 없이 questionId) */
+  | { inputKind: "CHOICE"; selectedCode: YesNoUnknown; purpose: "CLARIFICATION_ANSWER"; questionId: string }
 )
 /**
  * assistant: AI 질문·답변 결과. 상황 설명(FACT_UPDATE)·선택지 답변이면 null, 아직 구현 안 된 서버면 아예 없을 수 있어요

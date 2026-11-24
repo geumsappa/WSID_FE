@@ -15,7 +15,7 @@ export function TextSizeToggle() {
   return (
     <button type="button" className="v2-text-size" aria-pressed={large} onClick={() => setLarge((v) => !v)}
       title={large ? "글자 원래 크기로" : "글자 크게 보기"}>
-      <span aria-hidden="true" style={{ fontSize: 14 }}>가</span><span aria-hidden="true" style={{ fontSize: 20 }}>가</span>
+      <span className="v2-text-size-glyph" aria-hidden="true"><span style={{ fontSize: 14 }}>가</span><span style={{ fontSize: 20 }}>가</span></span>
       <span className="v2-sr">{large ? "글자 원래 크기로" : "글자 크게 보기"}</span>
     </button>
   )

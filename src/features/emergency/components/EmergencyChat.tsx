@@ -56,7 +56,6 @@ export function MessageText({ text, className, structured }: { text: string; cla
 /** 사실 확인을 [예/아니오/모름] 네 번 대신 '있었던 일 모두 고르기' 한 번으로 물어요. false면 예전 방식 */
 const USE_CHECKLIST = true
 
-const CHECK_ICON: Record<FactKey, DuoIconName> = { transferredMoney: "loan", sharedInformation: "shield", installedApp: "appcheck", contactContinues: "acquaintance" }
 /** 대응 단계 제목으로 고른 아이콘 (고정 안내 단계는 아이콘 정보가 없어서) */
 const stepIcon = (title: string): DuoIconName =>
   /지급정지|입금|송금/.test(title) ? "stop" : /앱|휴대폰|악성/.test(title) ? "appcheck" : /명의|등록된|확인/.test(title) ? "idcheck"
@@ -80,7 +79,6 @@ function FactChecklist({ facts, onSubmit }: { facts: SolutionFacts | null; onSub
           const on = picked.includes(k)
           return (
             <button key={k} type="button" aria-pressed={on} className={on ? "on" : ""} onClick={() => toggle(k)}>
-              <DuoIcon name={CHECK_ICON[k]} size={32} tone={on ? "blue" : "gray"} />
               <span>{CHECK_LABEL[k]}</span>
               {on && <Icon name="check" size={20} />}
             </button>
@@ -380,7 +378,7 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
             {em.error && <p className="upload-error" role="alert">{em.error}{em.failed && <> <button type="button" className="assist-retry" disabled={em.typing} onClick={em.retry}>다시 보내기</button></>}</p>}
             {em.clarification &&
               <div className="assist-mode answering"><span><Icon name="chat" size={14} /> 도우미 질문에 답하는 중: <strong>{em.clarification.content}</strong></span>
-                {em.clarification.options.length > 0 && <div className="assist-quick">{em.clarification.options.map((v) => <button key={v} type="button" disabled={em.typing} onClick={() => void em.send(ANSWER_LABEL[v], [], "answer")}>{ANSWER_LABEL[v]}</button>)}</div>}</div>}
+                {em.clarification.options.length > 0 && <div className="assist-quick">{em.clarification.options.map((v) => <button key={v} type="button" disabled={em.typing} onClick={() => void em.answerClarification(v)}>{ANSWER_LABEL[v]}</button>)}</div>}</div>}
             <div className="chat-input-row">
               <button type="button" className="chat-attach-button" title="사진 첨부" aria-label="사진 첨부" onClick={() => fileRef.current?.click()}><Icon name="image" size={20} /></button>
               <textarea rows={1} value={input} disabled={em.typing} onChange={(e) => setInput(e.target.value)}
