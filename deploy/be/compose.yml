@@ -1,0 +1,36 @@
+# BE 서버(EC2 wsid-be)에서 실행: Spring · Redis  (화면과 HTTPS는 FE 서버 wsid-fe 담당)
+# 사용법은 deploy/README.md 참고. 서버 폴더 구조: /opt/wsid/{WSID_FE,WSID_BE,WSID_AI}
+name: wsid-be
+
+services:
+  be:
+    build:
+      context: ../../../WSID_BE
+      dockerfile: ../WSID_FE/deploy/docker/be.Dockerfile
+    env_file: .env
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      REDIS_HOST: redis
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+      WSID_CORS_ALLOWED_ORIGINS: https://${DOMAIN:?DOMAIN을 .env에 적어 주세요}
+    ports:
+      - "8080:8080"   # 보안그룹 wsid-be-sg 가 FE 서버에서 오는 요청만 허용해요
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  redis-data:

@@ -1,0 +1,25 @@
+# AI 서버(EC2 wsid-ai)에서 실행: FastAPI · PaddleOCR · RAG
+name: wsid-ai
+
+services:
+  ai:
+    build:
+      context: ../../../WSID_AI
+      dockerfile: ../WSID_FE/deploy/docker/ai.Dockerfile
+      additional_contexts:
+        kit: ../docker
+    env_file: .env
+    ports:
+      - "8000:8000"   # 보안그룹 wsid-ai-sg 가 BE 서버에서 오는 요청만 허용해요
+    volumes:
+      - rag-index:/app/data/index
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 180s
+      retries: 3
+    restart: unless-stopped
+
+volumes:
+  rag-index:
