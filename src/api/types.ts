@@ -88,6 +88,8 @@ export type TrainingDetail = {
   /** 훈련 중 훈련용 계좌로 송금 버튼을 누른 적이 있는지 (새로고침 후 카드 상태 복원용) */
   mockTransferDone?: boolean
   mockPage: MockPage | null
+  /** 상황 대화에서 시나리오를 만들 만큼 정보가 모였는지 (서버 기준). 이어서 하기 때 '시나리오 만들기' 버튼을 이 값으로 보여 줘요 */
+  canGenerateScenario?: boolean
   /** 가안(노션에 없음): 복원 때 시나리오 제목·설명을 다시 보여 주려면 필요해요 */
   scenario?: TrainingScenarioSummary | null
 }

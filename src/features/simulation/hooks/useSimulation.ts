@@ -168,8 +168,9 @@ export function useSimulation(
     setTurnCount(d.turnCount ?? 0)
     setShouldFinish(false)
     setScenario(d.scenario ?? readScenarioInfo(d.trainingId))
-    // 복원 응답에는 "시나리오를 만들어도 되는지"가 없어서, 한 번이라도 답했다면 버튼을 보여 줍니다(부족하면 서버가 알려 줘요).
-    setCanGenerate(d.phase === "DISCOVERY" && disc.some((l) => l.from === "user"))
+    // 서버가 '시나리오를 만들어도 된다'고 알려 주면 그 값을 따라요. 예전엔 답이 하나라도 있으면 버튼을 보여 줘서,
+    // 정보가 부족한데 누르면 "현재 훈련 단계에서 사용할 수 없는 요청이에요" 오류가 났어요
+    setCanGenerate(d.phase === "DISCOVERY" && (d.canGenerateScenario ?? disc.some((l) => l.from === "user")))
     setStage(d.phase === "DISCOVERY" ? "discovery" : d.phase === "SCENARIO_READY" ? "ready" : d.phase === "SIMULATION" ? "chat" : "done")
   }
   /** stateVersion이 어긋났을 때: 서버의 최신 상태를 다시 불러옵니다. */
@@ -329,6 +330,12 @@ export function useSimulation(
       setStage("ready")
     } catch (err) {
       setStage("discovery")
+      // 서버가 아직 시나리오를 만들 만큼 정보가 없다고 하면: 버튼을 숨기고 대화를 더 이어 가게 안내해요
+      if (err instanceof ApiError && err.code === "INVALID_TRAINING_PHASE") {
+        setCanGenerate(false)
+        setError("아직 시나리오를 만들 만큼 이야기가 모이지 않았어요. 질문에 조금 더 답해 주세요.")
+        return
+      }
       if (err instanceof ApiError && (err.status === 503 || err.status === 0)) {
         setError("시나리오를 받지 못했어요. 대화와 선택은 유지했으니 잠시 후 다시 만들어 주세요.")
         return
@@ -380,7 +387,8 @@ export function useSimulation(
       const lastAi = [...chatLines].reverse().find((l) => l.from === "ai" && !l.local)?.text ?? ""
       const prevUser = [...chatLines].reverse().find((l) => l.from === "user")?.text ?? ""
       const shown = scrubPersonalInfo(content, /인증번호|OTP|보안카드|비밀번호/.test(lastAi), { lastAi, prevUser })
-      mine = { key: lineKey(), from: "user", text: shown.text, note: shown.types.length ? `입력한 ${shown.types.join(", ")}은(는) 가린 뒤 보냈어요.` : undefined }
+      // 내 말풍선에는 내가 쓴 그대로 보여 줘요 (이 화면 안에서만). 서버·AI로는 가린 글(shown.text)만 보내요
+      mine = { key: lineKey(), from: "user", text: content, note: shown.types.length ? `${shown.types.join(", ")}은(는) 가린 뒤 보냈어요.` : undefined }
       body = { inputKind: "TEXT", content: shown.text }
     }
     setError("")
@@ -389,16 +397,10 @@ export function useSimulation(
     try {
       const res = await inOrder(() => trainingApi.message(id, { stateVersion: versionRef.current, ...body }))
       versionRef.current = res.stateVersion
-      // 서버(AI)가 이름·주소 등을 찾아 가린 문장을 주면, 내 말풍선을 그 문장으로 바꿔요 (원문은 화면에 남기지 않음)
-      const masked = res.maskedInput?.trim()
+      // 서버(AI)가 한 번 더 가린 문장(maskedInput)은 서버 저장용이에요. 내 말풍선은 쓴 그대로 둬요
       const reply = { ...toLine(res.reply), mockPage: res.mockPage ?? undefined }
       const many = bubbleCount(reply.text) > 1
-      setChatLines((lines) => [
-        ...lines.map((l) => l.key === mine.key && masked
-          ? { ...l, text: masked, note: "입력한 개인정보는 화면에 남기지 않고 가렸어요." }
-          : l),
-        many ? { ...reply, reveal: 1 } : reply,
-      ])
+      setChatLines((lines) => [...lines, many ? { ...reply, reveal: 1 } : reply])
       setTurnCount(res.turnCount)
       if (many) await revealInTurn(reply.key, reply.text)
       setShouldFinish(res.shouldFinish)
