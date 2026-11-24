@@ -69,6 +69,5 @@ export function DiscoveryChat({ sim }: { sim: Simulation }) {
       <button type="submit" disabled={!draft.trim() || sim.typing}><Icon name="arrow" size={17}/> 답변</button>
     </form>
     {sim.canGenerate && <button type="button" className="primary-button full" disabled={sim.typing} onClick={() => void sim.generateScenario()}>훈련 시나리오 만들기 <Icon name="arrow" size={18}/></button>}
-    <div className="privacy"><Icon name="lock" size={16}/><span>입력한 번호·계좌 등 개인정보는 값을 가리고 종류만 남겨요.</span></div>
   </div>
 }
