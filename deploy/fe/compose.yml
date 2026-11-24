@@ -1,0 +1,49 @@
+# FE 서버(EC2 wsid-fe)에서 실행: Nginx(FE 화면 + HTTPS + /api → BE 전달) · certbot(인증서)
+name: wsid-fe
+
+services:
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/fe.Dockerfile
+      args:
+        VITE_API_BASE_URL: https://${DOMAIN:?DOMAIN을 .env에 적어 주세요}
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+      BACKEND_URL: ${BACKEND_URL:?BACKEND_URL을 .env에 적어 주세요}
+    volumes:
+      - certbot-conf:/etc/letsencrypt:ro
+      - certbot-www:/var/www/certbot:ro
+    restart: unless-stopped
+
+  # Let's Encrypt 인증서 발급·갱신. 실패하면 1분 뒤 재시도, 성공하면 12시간마다 갱신 확인
+  certbot:
+    image: certbot/certbot:v2.11.0
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        trap exit TERM
+        while :; do
+          if [ -n "$$ACME_EMAIL" ]; then EMAIL="--email $$ACME_EMAIL"; else EMAIL="--register-unsafely-without-email"; fi
+          if certbot certonly --webroot -w /var/www/certbot -d "$$DOMAIN" $$EMAIL --agree-tos -n --keep-until-expiring; then
+            sleep 12h & wait $$!
+          else
+            sleep 60 & wait $$!
+          fi
+        done
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - certbot-conf:/etc/letsencrypt
+      - certbot-www:/var/www/certbot
+    depends_on:
+      - web
+    restart: unless-stopped
+
+volumes:
+  certbot-conf:
+  certbot-www:

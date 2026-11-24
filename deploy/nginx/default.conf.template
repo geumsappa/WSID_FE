@@ -1,4 +1,4 @@
-# ${DOMAIN} 만 컨테이너 시작 때 실제 주소로 바뀌어요. ($host 같은 nginx 변수는 그대로)
+# ${DOMAIN}, ${BACKEND_URL} 은 컨테이너 시작 때 실제 값으로 바뀌어요. ($host 같은 nginx 변수는 그대로)
 resolver 127.0.0.11 valid=30s ipv6=off;
 
 server {
@@ -32,7 +32,7 @@ server {
 
     # API → Spring. 시나리오 생성은 160초까지 걸려서 응답 대기를 200초로 둬요.
     location /api/ {
-        set $backend http://be:8080;
+        set $backend ${BACKEND_URL};
         proxy_pass $backend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;

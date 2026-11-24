@@ -1,4 +1,5 @@
-# WSID_FE: new-main에 push → 빌드 확인 → BE 서버의 web(Nginx + FE)만 다시 빌드
+# WSID_FE: new-main에 push → 빌드 확인 → FE_ENV 시크릿을 Parameter Store에 저장 → FE 서버의 web(Nginx + FE) 다시 빌드
+# 필요한 GitHub Secret (레포 Settings > Secrets and variables > Actions > Repository secret): FE_ENV = deploy/fe/.env 전체 내용
 name: Deploy FE
 
 on:
@@ -9,7 +10,8 @@ on:
 env:
   AWS_REGION: ap-southeast-2
   AWS_ROLE_ARN: arn:aws:iam::609546557988:role/wsid-github-deploy
-  BE_INSTANCE: i-0c765a9b9741a54fd   # wsid-be (Nginx + FE + Spring + Redis)
+  FE_INSTANCE: i-FE_INSTANCE_ID     # wsid-fe (Nginx + FE). 인스턴스를 만든 뒤 실제 ID로 바꿔요
+  BE_INSTANCE: i-0c765a9b9741a54fd   # wsid-be (Spring + Redis)
   AI_INSTANCE: i-0ae5dcac7c5d45bcd   # wsid-ai
   KIT_BRANCH: new-main               # 배포 키트(deploy/)가 있는 WSID_FE 브랜치
 
@@ -45,9 +47,17 @@ jobs:
         with:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
+      - name: FE_ENV → Parameter Store (/wsid/fe/env)
+        env:
+          ENV_CONTENT: ${{ secrets.FE_ENV }}
+        run: |
+          test -n "$ENV_CONTENT" || { echo "::error::FE_ENV 시크릿이 비어 있어요"; exit 1; }
+          aws ssm put-parameter --name /wsid/fe/env --type SecureString --tier Intelligent-Tiering \
+            --overwrite --value "$ENV_CONTENT" > /dev/null
+          echo "저장 완료 (값은 출력하지 않아요)"
       - name: 서버에 배포 명령 (SSM)
         env:
-          INSTANCE: ${{ env.BE_INSTANCE }}
+          INSTANCE: ${{ env.FE_INSTANCE }}
           BRANCH: ${{ github.ref_name }}
         run: |
           CMD="cd /opt/wsid/WSID_FE && git fetch -q origin $KIT_BRANCH && git reset -q --hard FETCH_HEAD && bash deploy/scripts/deploy.sh fe $BRANCH"

@@ -14,7 +14,7 @@ KIT="$ROOT/WSID_FE/deploy"
 
 case "$SERVICE" in
   be) REPO=WSID_BE; STACK=be; PARAM=/wsid/be/env; TARGET=be ;;
-  fe) REPO=WSID_FE; STACK=be; PARAM=/wsid/be/env; TARGET=web ;;
+  fe) REPO=WSID_FE; STACK=fe; PARAM=/wsid/fe/env; TARGET=web ;;
   ai) REPO=WSID_AI; STACK=ai; PARAM=/wsid/ai/env; TARGET=ai ;;
   *) echo "알 수 없는 서비스: $SERVICE" >&2; exit 2 ;;
 esac
