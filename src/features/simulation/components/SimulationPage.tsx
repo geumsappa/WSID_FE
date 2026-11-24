@@ -10,15 +10,17 @@ import { SimulationChat } from "./SimulationChat"
 
 // AI 처리(해외 전송) 동의는 계정에 기록해요(서버 users.ai_consent_version·ai_consent_at).
 // 안내 문구를 바꾸면 이 버전을 올려요. 그러면 모든 사용자에게 새 문구로 다시 동의를 받아요.
-const CONSENT_VERSION = "v1"
+// v2: 처리 AI를 Claude로 바꾸고, 이름을 가리지 않는다는 안내를 넣었어요 → v1에 동의한 사람도 다시 동의해요
+const CONSENT_VERSION = "v2"
 type ConsentState = "checking" | "needed" | "ok"
 
 /** 상황 대화를 시작하기 전에 받는 AI 처리 안내·동의. 입력 내용이 외부 AI로 가기 전에 보여 줘요 */
-const CONSENT_ITEMS: { icon: "send" | "lock" | "shield" | "user"; title: string; body: string }[] = [
-  { icon: "send", title: "외부 AI로 처리돼요", body: "답변과 훈련 시나리오를 만들기 위해 입력 내용이 OpenAI(해외 서버)로 전송돼요." },
-  { icon: "lock", title: "개인정보는 가려서 보내요", body: "주민번호·계좌·카드·전화번호·이메일, 이름·주소는 가린 뒤 보내요." },
+const CONSENT_ITEMS: { icon: "send" | "lock" | "shield" | "user" | "check"; title: string; body: string }[] = [
+  { icon: "send", title: "외부 AI로 처리돼요", body: "대화와 시나리오를 만들기 위해 입력 내용이 Anthropic의 Claude(해외 서버)로 전송돼요." },
+  { icon: "user", title: "이름은 그대로 사용될 수 있어요", body: "알려 주신 이름은 가리지 않고 AI에 전달돼요. 맞춤 시나리오와 대화에서 상대가 그 이름으로 부를 수 있어요." },
+  { icon: "lock", title: "번호·주소는 가려서 보내요", body: "주민번호·계좌·카드·전화번호·이메일·비밀번호·주소·생년월일은 가린 뒤 보내요." },
   { icon: "shield", title: "원문은 남기지 않아요", body: "서버에는 가린 내용만 저장하고, 리포트를 저장하면 대화 원문은 삭제해요." },
-  { icon: "user", title: "지어낸 정보로 해도 괜찮아요", body: "개인정보를 넘기는지 보는 훈련이라, 지어낸 값을 입력해도 결과는 같아요." },
+  { icon: "check", title: "지어낸 정보로 해도 괜찮아요", body: "정보를 넘기는 행동을 보는 훈련이라, 지어낸 이름·번호를 입력해도 결과는 같아요." },
 ]
 
 function AiConsent({ onAgree }: { onAgree: () => void }) {
@@ -52,7 +54,7 @@ function AiConsent({ onAgree }: { onAgree: () => void }) {
       {/* 기본 체크박스는 전역 입력창 스타일이 섞여 어색해서, 숨기고 직접 그린 상자로 보여 줘요 (키보드·화면낭독은 그대로) */}
       <input type="checkbox" checked={checked} onChange={(e) => setChecked(e.target.checked)} />
       <span className="ai-consent-box" aria-hidden="true"><Icon name="check" size={14} /></span>
-      <span>위 내용을 확인했고, 입력 내용의 AI 처리(해외 전송)에 동의해요.</span>
+      <span>위 내용을 확인했고, 이름 사용을 포함한 입력 내용의 AI 처리(해외 전송)에 동의해요.</span>
     </label>
     {error && <p className="upload-error" role="alert">{error}</p>}
     <button className="primary-button full" disabled={!checked || saving} onClick={() => void agree()}>
@@ -98,7 +100,7 @@ export function SimulationPage({ sim }: { sim: Simulation }) {
           <strong>시작하기 전에 확인해 주세요</strong>
           <ul>
             <li><Icon name="check" size={18}/><span><b>교육용 훈련 상황이에요.</b> 실제 금융기관이나 업체가 보낸 연락이 아니에요.</span></li>
-            <li><Icon name="check" size={18}/><span><b>입력한 내용은 개인정보를 가린 뒤 처리돼요.</b> 외부 AI(해외 서버)가 대화를 만들어요.</span></li>
+            <li><Icon name="check" size={18}/><span><b>번호·주소 같은 개인정보는 가린 뒤 처리돼요.</b> 이름은 대화에 그대로 쓰일 수 있어요.</span></li>
           </ul>
         </div>
       </div>

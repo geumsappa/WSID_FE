@@ -50,7 +50,7 @@ export function TrainingMessageContent({ text, page, disabled, onOpen, appClicke
         <span className="simulation-app-icon"><Icon name="app" size={20} /></span>
         <span className="simulation-app-text">
           <strong>설치 파일 받기</strong>
-          <small>{appClicked ? "눌렀어요 · 훈련용이라 실제로 설치되지 않았어요" : "앱 설치 링크"}</small>
+          <small>{appClicked ? "다운로드를 눌렀어요" : "앱 설치 링크"}</small>
         </span>
         <Icon name="download" size={17} />
       </button>
@@ -64,7 +64,7 @@ export function TrainingMessageContent({ text, page, disabled, onOpen, appClicke
         <strong>한빛은행 ●●●-●●●●-●●●●</strong>
         <small>예금주 {holder || "상대방"}</small>
         <span className="simulation-account-action">
-          {transferDone ? "보냈어요 · 훈련용이라 실제로 돈이 나가지 않았어요" : "눌러서 송금하기"}
+          {transferDone ? "송금했어요" : "눌러서 송금하기"}
         </span>
       </button>
     }

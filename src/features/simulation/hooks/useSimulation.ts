@@ -341,7 +341,7 @@ export function useSimulation(
     if ("option" in input) {
       mine = { key: lineKey(), from: "user", text: input.option.label,
         mockAttachment: input.option.mockAttachment ?? undefined,
-        note: input.option.mockAttachment ? "준비된 가상 자료를 보냈어요. 실제 사진은 사용하지 않았어요." : undefined }
+        note: undefined }
       body = { inputKind: "CHOICE", selectedCode: input.option.code }
     } else {
       const content = input.text.trim().slice(0, 500)
@@ -388,7 +388,7 @@ export function useSimulation(
     const id = idRef.current
     if (id === null || stage !== "chat") return
     setChatLines((lines) => lines.map((l) => l.key === key
-      ? { ...l, appClicked: true, note: "훈련용 앱이라 실제로는 아무것도 설치되지 않았어요." } : l))
+      ? { ...l, appClicked: true } : l))
     const record = async () => {
       const res = await inOrder(() => trainingApi.action(id, { stateVersion: versionRef.current, actionCode: "MOCK_APP_CLICK" }))
       versionRef.current = res.stateVersion
@@ -417,7 +417,7 @@ export function useSimulation(
     const id = idRef.current
     if (id === null || stage !== "chat") return
     setChatLines((lines) => lines.map((l) => l.key === key
-      ? { ...l, transferDone: true, note: "훈련용 계좌라 실제로 돈이 나가지 않았어요." } : l))
+      ? { ...l, transferDone: true } : l))
     const record = async () => {
       const res = await inOrder(() => trainingApi.action(id, { stateVersion: versionRef.current, actionCode: "MOCK_TRANSFER" }))
       versionRef.current = res.stateVersion

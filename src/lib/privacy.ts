@@ -31,13 +31,15 @@ const ADDRESS_PATTERNS = [
   /[가-힣]+(?:동|읍|면|리)\s?\d{1,4}(?:-\d{1,4})?\s?번지/g,
 ]
 const SURNAMES = "김이박최정강조윤장임한오서신권황안송류전홍고문양손배백허유남심노하곽성차주우구민진나지엄채원천방공현함변염여추도소석선설마길연위표명기반왕금옥육인맹제모탁국어은편용"
-const COMMON_WORDS = new Set(["지금", "이거", "이건", "이게", "이제", "정말", "진짜", "조금", "오늘", "고객", "주소", "문자", "성함", "이름",
+const COMMON_WORDS = new Set(["성만", "성은", "성이", "성씨", "모르겠", "알겠", "괜찮", "좋아", "싫어", "그건", "그거", "지금",
+  "나중", "다음", "내일", "어제", "이따", "혹시", "아직", "먼저", "우선", "나도", "저도", "그렇", "이거", "이건", "이게", "이제", "정말", "진짜", "조금", "오늘", "고객", "주소", "문자", "성함", "이름",
   "계좌", "송금", "우리", "제가", "저는", "전화", "번호", "은행", "확인", "하나", "한번", "안녕", "감사", "고마워", "연락", "인증", "카드",
   "주민", "장난", "정도", "이상", "조심", "임시", "신한", "국민", "농협", "기업", "구매", "판매", "거래", "배송", "택배", "문의", "전에",
   "이미", "이번", "오후", "오전", "남편", "아내", "엄마", "아빠", "친구", "동생", "형님", "누나", "언니", "오빠", "선생", "사장", "기사",
   "직원", "아니요", "아니오", "정말요", "이상해", "안돼", "알겠어", "괜찮아", "모르겠어", "잠시만", "글쎄", "그래", "네네", "고민"])
+const MASK_NAMES = false
 const NAME_ASK = /성함|이름|예금주|본명|실명/
-const REFUSAL = /\?|왜|싫|안\s?돼|안\s?할|안\s?드|못\s|못해|아니|사기|누구|뭐|무슨|어디|의심|그만/
+const REFUSAL = /\?|왜|싫|안\s?돼|안\s?할|안\s?드|못\s|못해|아니|사기|누구|뭐|무슨|어디|의심|그만|나중|다음에|이따|좀\s?그렇|좀\s?그래|생각해|고민|물어보|확인하고|확인되면|검색/
 const MARKER_TYPES = ["주민등록번호", "카드번호", "전화번호", "계좌번호", "이메일", "비밀번호", "인증번호", "인증정보", "이름", "주소", "생년월일"]
 
 /** 번호를 두 메시지로 나눠 보낸 경우("010-1234" 다음 "5678"): 이어 붙여 번호가 되면 이번 조각을 가려요 */
@@ -63,8 +65,11 @@ function maskNames(text: string, lastAi: string, types: Set<string>): string {
     })
   if (!NAME_ASK.test(lastAi) || REFUSAL.test(text)) return text
   const tokens = text.match(/[가-힣]+/g) ?? []
-  return text.replace(/(?<![가-힣[])([가-힣]{2,3})(입니다|이에요|예요|이요|요|이고|고)?(?![가-힣\]])/g,
+  return text.replace(/(?<![가-힣[\]\d])([가-힣]{2,3})(입니다|이에요|예요|이요|요|이고|고)?(?![가-힣\]])/g,
     (m: string, word: string, tail?: string) => {
+      const base = word.endsWith("이요") ? word.slice(0, -2) : word.endsWith("요") ? word.slice(0, -1) : word
+      if (base.length < 2) return m // "김이요" = 성만 말함 (팀 합의: 중립)
+      if ([...COMMON_WORDS].some((common) => word.startsWith(common))) return m // "이름은", "정말요"
       if (!SURNAMES.includes(word[0]) || COMMON_WORDS.has(word) || (word.length === 2 && tokens.length > 3)) return m
       types.add("이름")
       return "[이름]" + (tail ?? "")
@@ -76,7 +81,8 @@ export function scrubPersonalInfo(input: string, askedForCode = false,
   const types = new Set<string>()
   // 이미 가려진 표시가 있으면 그 종류도 셈 (서버·mock 모두 같은 표시를 씀)
   for (const kind of MARKER_TYPES) if (input.includes(`[${kind}]`)) types.add(kind)
-  let text = koreanDigitsToArabic(input.normalize("NFKC"))
+  // 전각 숫자·문자만 반각으로 (전체 NFKC 는 "ㅋㅋ" 같은 자모까지 바꿔 버려요)
+  let text = koreanDigitsToArabic(input.replace(/[\uFF01-\uFF5E]/g, (ch) => ch.normalize("NFKC")))
   const split = maskSplitNumber(text, context.prevUser ?? "")
   text = split.text
   if (split.kind) types.add(split.kind)
@@ -99,7 +105,8 @@ export function scrubPersonalInfo(input: string, askedForCode = false,
     text = text.replace(/(?:[가-힣]+(?:특별시|광역시|특별자치시|특별자치도|시|도|구|군)\s*)+(?=\[주소\])/g, "")
       .replace(/(?:\[주소\]\s*){2,}/g, "[주소] ")
   }
-  text = maskNames(text, context.lastAi ?? "", types)
+  // 이름은 가리지 않아요 (팀 결정: 시나리오·대화에 이름을 쓸 수 있음, 동의창 v2에 안내). 다시 가리려면 true
+  if (MASK_NAMES) text = maskNames(text, context.lastAi ?? "", types)
   if (askedForCode) text = text.replace(/(^|\D)(\d{4,8})(?!\d)/g, (_m, head: string) => { types.add("인증번호"); return `${head}[인증번호]` })
   // 안전망: 남은 6자리 이상 숫자 (금액 "300000원"은 제외)
   text = text.replace(/(?<!\d)\d(?:[-\s]?\d){5,}(?!\d)(?!\s*원)/g, () => { types.add("숫자정보"); return "[숫자정보]" })
