@@ -10,12 +10,13 @@ export function Header({ page, go, mobileMenu, setMobileMenu, loggedIn, openSimu
   loggedIn: boolean
   openSimulation: () => void
 }) {
+  // 모든 페이지에서 같은 메뉴바 (홈도 같은 모양)
   return (
-    <header className={`nav-shell ${page === "home" ? "home-nav" : ""}`}>
+    <header className="nav-shell">
     <nav className="nav" aria-label="주요 메뉴">
       <Logo onClick={() => go("home")} />
       <div className="v2-nav-tools"><TextSizeToggle /></div>
-      {page !== "home" && (
+      {(
         <button
           className="menu-button"
           onClick={() => setMobileMenu(!mobileMenu)}
@@ -27,9 +28,9 @@ export function Header({ page, go, mobileMenu, setMobileMenu, loggedIn, openSimu
           <span />
         </button>
       )}
-      {page !== "home" && (
+      {(
         <div className={`nav-links ${mobileMenu ? "open" : ""}`}>
-          <button onClick={() => go("home")}>홈</button>
+          <button className={page === "home" ? "active" : ""} onClick={() => go("home")}>홈</button>
           <button
             className={
               page === "simulation" || page === "report" ? "active" : ""
@@ -52,7 +53,6 @@ export function Header({ page, go, mobileMenu, setMobileMenu, loggedIn, openSimu
           {loggedIn && <button className={page === "mypage" ? "active" : ""} onClick={() => go("mypage")}>마이페이지</button>}
         </div>
       )}
-      {page === "home" && <div className="nav-account-home">{loggedIn ? <button onClick={() => go("mypage")}>마이페이지</button> : <button onClick={() => go("login")}>로그인 / 회원가입</button>}</div>}
     </nav>
     </header>
   )

@@ -50,6 +50,11 @@ export function EmergencyPage(p: EmergencyProps) {
         </div>
       )}
       <div className="container">
+        {/* 가장 급한 안내: 제목 바로 위 빨간 한 줄 (상자 없이, 제목과 같은 왼쪽 선) */}
+        <p className="v2-urgent-top" role="note">
+          <Icon name="alert" size={20} />
+          이미 돈을 보냈다면 지금 바로 112 · 1394에 지급정지를 요청하세요
+        </p>
         <div className="v2-intro">
           <h1>어떤 일이 있었나요?</h1>
           <p>비슷한 상황을 고르면 지금 해야 할 일을 순서대로 알려 드려요.</p>
@@ -69,11 +74,6 @@ export function EmergencyPage(p: EmergencyProps) {
             </button>
           ))}
         </div>
-        <p className="v2-urgent-line">
-          이미 돈을 보냈다면 바로 전화해 지급정지를 요청하세요
-          <b>112</b>·<b>1394</b>
-          <small>(중고거래 사기는 경찰 신고가 먼저예요)</small>
-        </p>
         <div className="direct-input">
           <div>
             <span className="direct-icon">
