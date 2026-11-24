@@ -4,7 +4,7 @@ import type React from "react"
  * 어떡하지 아이콘 세트 (48px 격자, 두 가지 색). 디자인 시안의 아이콘과 같아요.
  * - 사기 유형: institution loan acquaintance smishing trade investment
  * - 할 일·기능: call stop appcheck idcheck report photo shield chat
- * tone으로 색을 바꿔 써요: blue(기본) · gray(비활성) · white(파란 버튼 위)
+ * tone으로 색을 바꿔 써요: blue(기본) · gray(비활성) · white(파란 버튼 위) · red(긴급)
  */
 export type DuoIconName =
   | "institution" | "loan" | "acquaintance" | "smishing" | "trade" | "investment"
@@ -14,6 +14,7 @@ const TONES = {
   blue: ["#1B64DA", "#A9C6F7", "#FFFFFF"],
   gray: ["#6B7684", "#D1D6DB", "#FFFFFF"],
   white: ["#FFFFFF", "#8DB3F2", "#1B64DA"],
+  red: ["#C0261D", "#F4A49C", "#FFFFFF"],
 } as const
 
 const ICONS: Record<DuoIconName, (p: string, l: string, w: string) => React.ReactNode> = {
