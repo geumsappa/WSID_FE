@@ -33,7 +33,7 @@ const toDay = (iso?: string) => {
 type Tone = "good" | "warn" | "risk"
 type Fact = { label: string; value: string; tone: Tone }
 
-/** 핵심 3칸: 모의 페이지 행동(mockPageEvaluation)과 개인정보 제공 여부(infoDisclosure)로 만들어요 */
+/** 핵심 칸: 링크·앱·송금 행동(mockPageEvaluation)과 개인정보 제공 여부(infoDisclosure)로 만들어요 */
 function keyFacts(e: Evaluation): Fact[] {
   const m = e.mockPageEvaluation
   const info = e.infoDisclosure
@@ -119,7 +119,7 @@ export function ReportSheet({ title, fraudTypeCode, completedAt, evaluation }: {
       <ReportSources sources={evaluation.sources} />
 
       <footer className="rs-foot">
-        <span>가상 훈련 대화를 바탕으로 한 분석이며, 실제 피해가 있다면 112 · 1332에 신고하세요.</span>
+        <span>대화 기록을 바탕으로 한 분석이에요. 피해가 있다면 바로 112 · 1332에 신고하세요.</span>
         <strong>어떡하지</strong>
       </footer>
     </article>
