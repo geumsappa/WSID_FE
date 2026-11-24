@@ -380,7 +380,8 @@ export function useSimulation(
       const lastAi = [...chatLines].reverse().find((l) => l.from === "ai" && !l.local)?.text ?? ""
       const prevUser = [...chatLines].reverse().find((l) => l.from === "user")?.text ?? ""
       const shown = scrubPersonalInfo(content, /인증번호|OTP|보안카드|비밀번호/.test(lastAi), { lastAi, prevUser })
-      mine = { key: lineKey(), from: "user", text: shown.text, note: shown.types.length ? `입력한 ${shown.types.join(", ")}은(는) 가린 뒤 보냈어요.` : undefined }
+      // 내 말풍선에는 내가 쓴 그대로 보여 줘요 (이 화면 안에서만). 서버·AI로는 가린 글(shown.text)만 보내요
+      mine = { key: lineKey(), from: "user", text: content, note: shown.types.length ? `${shown.types.join(", ")}은(는) 가린 뒤 보냈어요.` : undefined }
       body = { inputKind: "TEXT", content: shown.text }
     }
     setError("")
@@ -389,16 +390,10 @@ export function useSimulation(
     try {
       const res = await inOrder(() => trainingApi.message(id, { stateVersion: versionRef.current, ...body }))
       versionRef.current = res.stateVersion
-      // 서버(AI)가 이름·주소 등을 찾아 가린 문장을 주면, 내 말풍선을 그 문장으로 바꿔요 (원문은 화면에 남기지 않음)
-      const masked = res.maskedInput?.trim()
+      // 서버(AI)가 한 번 더 가린 문장(maskedInput)은 서버 저장용이에요. 내 말풍선은 쓴 그대로 둬요
       const reply = { ...toLine(res.reply), mockPage: res.mockPage ?? undefined }
       const many = bubbleCount(reply.text) > 1
-      setChatLines((lines) => [
-        ...lines.map((l) => l.key === mine.key && masked
-          ? { ...l, text: masked, note: "입력한 개인정보는 화면에 남기지 않고 가렸어요." }
-          : l),
-        many ? { ...reply, reveal: 1 } : reply,
-      ])
+      setChatLines((lines) => [...lines, many ? { ...reply, reveal: 1 } : reply])
       setTurnCount(res.turnCount)
       if (many) await revealInTurn(reply.key, reply.text)
       setShouldFinish(res.shouldFinish)
