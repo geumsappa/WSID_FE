@@ -36,7 +36,7 @@ function splitAnswer(text: string): { lead: string; items: string[] } {
   return { lead: flat, items: [] }
 }
 
-function MessageText({ text, className, structured }: { text: string; className?: string; structured: boolean }) {
+export function MessageText({ text, className, structured }: { text: string; className?: string; structured: boolean }) {
   // 말풍선 모양은 <p>에 걸려 있어서, 목록도 <p> 안에서 줄을 나눠 보여 줘요
   const { lead, items } = structured ? splitAnswer(text) : { lead: text, items: [] as string[] }
   if (!items.length) return <p className={className}>{text}</p>
@@ -312,7 +312,8 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
                       <Tag key={k} href={tel ? undefined : o.href} target={tel ? undefined : "_blank"} rel={tel ? undefined : "noreferrer"}>
                         <span className="org-mark"><DuoIcon name={ORG_ICON[k] ?? "shield"} size={32} /></span>
                         <div><h4>{o.name}</h4><p>{o.desc}</p></div>
-                        {tel ? <span className="v2-phone-label">전화 {o.mark}</span> : <strong>바로가기 <Icon name="arrow" size={16} /></strong>}
+                        {/* 전화 기관은 이름에 번호가 있어서(경찰청 112) 따로 표시하지 않아요 */}
+                        {!tel && <strong>바로가기 <Icon name="arrow" size={16} /></strong>}
                       </Tag>
                     )
                   })}
