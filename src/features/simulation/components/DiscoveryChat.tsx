@@ -20,12 +20,14 @@ const QUICK_STARTS: { label: string; icon: DuoIconName; text: string }[] = [
 export function DiscoveryChat({ sim }: { sim: Simulation }) {
   const [draft, setDraft] = useState("")
   const endRef = useRef<HTMLDivElement>(null)
+  const threadRef = useRef<HTMLDivElement>(null)
   const lines = sim.discoveryLines
   const current = lines[lines.length - 1]
   const options = current?.from === "ai" ? current.options ?? [] : []
   const answered = lines.filter((l) => l.from === "user").length
 
-  useEffect(() => { endRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" }) }, [lines.length, sim.typing])
+  // 대화는 채팅 상자 안에서만 스크롤돼요 (페이지 전체가 움직이지 않게)
+  useEffect(() => { const t = threadRef.current; if (t) t.scrollTo({ top: t.scrollHeight, behavior: "smooth" }) }, [lines.length, sim.typing])
 
   // 홈의 유행 수법 카드로 들어왔으면, 그 상황 문장을 첫 답변으로 한 번 보내요 (이후는 평소 대화)
   useEffect(() => {
@@ -44,7 +46,7 @@ export function DiscoveryChat({ sim }: { sim: Simulation }) {
 
   return <div className="experience-interview">
     {/* v2: 위 페이지 제목과 겹치는 머리글·안내 문구는 뺐어요 (글을 줄여 어르신이 읽기 쉽게) */}
-    <div className="interview-thread" aria-live="polite">
+    <div className="interview-thread" ref={threadRef} aria-live="polite">
       {lines.map((l) => l.from === "ai"
         ? <div className="interview-assistant" key={l.key}><span className="interview-avatar v2-avatar"><HelperAvatar size={36}/></span><div className="interview-bubble">{l.text}</div></div>
         : <div key={l.key}><div className="interview-user"><span>{l.text}</span></div>{l.note && <small style={{ display: "block", textAlign: "right", opacity: 0.7, marginTop: 4 }}>{l.note}</small>}</div>)}
