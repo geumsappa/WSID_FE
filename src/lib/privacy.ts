@@ -37,6 +37,7 @@ const COMMON_WORDS = new Set(["성만", "성은", "성이", "성씨", "모르겠
   "주민", "장난", "정도", "이상", "조심", "임시", "신한", "국민", "농협", "기업", "구매", "판매", "거래", "배송", "택배", "문의", "전에",
   "이미", "이번", "오후", "오전", "남편", "아내", "엄마", "아빠", "친구", "동생", "형님", "누나", "언니", "오빠", "선생", "사장", "기사",
   "직원", "아니요", "아니오", "정말요", "이상해", "안돼", "알겠어", "괜찮아", "모르겠어", "잠시만", "글쎄", "그래", "네네", "고민"])
+const MASK_NAMES = false
 const NAME_ASK = /성함|이름|예금주|본명|실명/
 const REFUSAL = /\?|왜|싫|안\s?돼|안\s?할|안\s?드|못\s|못해|아니|사기|누구|뭐|무슨|어디|의심|그만|나중|다음에|이따|좀\s?그렇|좀\s?그래|생각해|고민|물어보|확인하고|확인되면|검색/
 const MARKER_TYPES = ["주민등록번호", "카드번호", "전화번호", "계좌번호", "이메일", "비밀번호", "인증번호", "인증정보", "이름", "주소", "생년월일"]
@@ -104,7 +105,8 @@ export function scrubPersonalInfo(input: string, askedForCode = false,
     text = text.replace(/(?:[가-힣]+(?:특별시|광역시|특별자치시|특별자치도|시|도|구|군)\s*)+(?=\[주소\])/g, "")
       .replace(/(?:\[주소\]\s*){2,}/g, "[주소] ")
   }
-  text = maskNames(text, context.lastAi ?? "", types)
+  // 이름은 가리지 않아요 (팀 결정: 시나리오·대화에 이름을 쓸 수 있음, 동의창 v2에 안내). 다시 가리려면 true
+  if (MASK_NAMES) text = maskNames(text, context.lastAi ?? "", types)
   if (askedForCode) text = text.replace(/(^|\D)(\d{4,8})(?!\d)/g, (_m, head: string) => { types.add("인증번호"); return `${head}[인증번호]` })
   // 안전망: 남은 6자리 이상 숫자 (금액 "300000원"은 제외)
   text = text.replace(/(?<!\d)\d(?:[-\s]?\d){5,}(?!\d)(?!\s*원)/g, () => { types.add("숫자정보"); return "[숫자정보]" })

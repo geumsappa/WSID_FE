@@ -29,7 +29,8 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
   // 사기범 쪽 담당자가 중간에 바뀌면([화자: ...]) 그 뒤 말풍선의 보낸 사람 이름도 바꿔요
   let speaker = senderName
   const rows = lines.map((m) => {
-    if (m.from !== "ai") return { m, name: "나", text: m.text, left: false }
+    // 사진 보내기 선택지는 서버에 "[가상 신분증 사진 제공]"처럼 기록돼요 → 대화창에는 자연스럽게 보여 줘요
+    if (m.from !== "ai") return { m, name: "나", text: m.text.replace(/^\[가상\s*(.+?)\s*제공\]$/, "$1을 보냈어요"), left: false }
     const split = splitSpeaker(m.text)
     if (split.speaker) speaker = split.speaker
     const left = /\[퇴장\]/.test(split.body)
@@ -38,9 +39,8 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
   // 상대방이 나갔으면 더 보낼 수 없어요 (입력창을 닫고 결과 보기로 안내)
   const hasLeft = rows.some((r) => r.left)
   const currentSpeaker = speaker
-  const disclaimer = sim.scenario?.organizationName
-    ? `${sim.scenario.organizationName} 측이 운영하거나 승인한 서비스가 아닙니다. 실제 해당 기관과 무관한 훈련 대화입니다.`
-    : "실제 기관이나 인물이 운영하거나 승인한 서비스가 아닌 교육용 훈련 대화입니다."
+  // 실제 기관과 무관하다는 안내는 대화창이 아니라 왼쪽 안내 칸에 둬요 (대화 몰입을 위해)
+  const orgNotice = sim.scenario?.organizationName ? ` ${sim.scenario.organizationName} 측이 운영하거나 승인한 대화가 아니에요.` : ""
 
   useEffect(() => {
     const node = scrollRef.current
@@ -58,7 +58,7 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
   return (
     <section className="chat-page">
       {sim.checkOpen && sim.trainingId !== null && (
-        <div className="training-check-modal" role="dialog" aria-modal="true" aria-label="훈련용 확인 화면"
+        <div className="training-check-modal" role="dialog" aria-modal="true" aria-label="확인 화면"
           onClick={sim.closeMockPage}>
           <div className="training-check-modal-body" onClick={(e) => e.stopPropagation()}>
             <button type="button" className="training-check-modal-close" aria-label="닫기" onClick={sim.closeMockPage}>
@@ -77,7 +77,7 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
           <p>{sim.scenario?.description ?? "오늘 알려 주신 상황을 바탕으로 만든 훈련 대화예요."}</p>
           <div className="education-notice">
             <Icon name="lock" size={18} />
-            <p>이 대화는 금융사기 예방을 위한 훈련용 시뮬레이션입니다. 실제 금융기관이나 개인과 연결되지 않으며, 입력한 개인정보 값은 저장하지 않고 종류만 기록해요.</p>
+            <p>이 대화는 금융사기 예방을 위한 훈련용 시뮬레이션이에요. 실제 금융기관이나 개인과 연결되지 않아요.{orgNotice} 지어낸 정보로 답해도 결과는 같아요. 번호·주소 같은 개인정보는 가린 뒤 처리하고 종류만 기록해요.</p>
           </div>
           {!finished && <button className="outline-button" disabled={sim.typing} onClick={() => sim.setEndConfirm(true)}>훈련 마치고 결과 보기</button>}
         </aside>
@@ -89,11 +89,6 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
               <p><span className={USE_MOCK ? "mock" : undefined} title={USE_MOCK ? "mock 모드 (서버 없음)" : "AI 연결됨"}
                 aria-label={USE_MOCK ? "mock 모드" : "AI 연결됨"} /> {CHANNEL_LABEL[channel] ?? "메신저"}</p>
             </div>
-            <span className="header-shield v2-badge">훈련용</span>
-          </div>
-          <div className="training-disclaimer" role="note">
-            <Icon name="shield" size={18} />
-            <div><strong>사기 예방을 위한 훈련입니다.</strong><p>{disclaimer}</p></div>
           </div>
           <div className="messages" ref={scrollRef} aria-live="polite">
             {rows.map(({ m, name, text, left }) => (
@@ -151,10 +146,9 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
                 <textarea rows={1} maxLength={500} value={input} disabled={sim.typing}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void submit() } }}
-                  placeholder="상대방에게 보낼 답변을 입력해 주세요. 실제 정보 대신 지어낸 정보로 답해도 돼요." />
+                  placeholder="메시지를 입력하세요" />
                 <button disabled={!input.trim() || sim.typing} onClick={() => void submit()}><Icon name="send" size={17} /> 전송</button>
               </div>
-              <p className="chat-input-hint"><Icon name="lock" size={13} /> 지어낸 정보를 입력해도 훈련 결과는 같아요. 개인정보는 가린 뒤 AI로 보내요.</p>
             </div>
           )}
         </div>

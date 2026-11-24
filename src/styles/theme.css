@@ -413,3 +413,60 @@ html.text-large .app { zoom: 1.15; }
   text-align: center;
   width: fit-content;
 }
+
+/* ===== 나머지 화면도 v2 모양으로 (로그인·회원가입·동의창·생성 중·확인창) ===== */
+/* 로그인 / 회원가입 / 로그인 필요 화면 */
+.account-page { background: #fff; }
+.account-intro h1, .mypage-top h1 { color: var(--v2-text); letter-spacing: -.03em; }
+.account-intro p { color: var(--v2-sub); font-size: 17px; }
+.account-kicker { color: var(--v2-blue); font-size: 15px; }
+.account-card { border: 0; box-shadow: none; border-radius: 28px; background: var(--v2-fill); padding: 36px 32px; gap: 22px; }
+.account-card > label, .auth-verification > label, .gender-set legend { font-size: 16px; font-weight: 700; color: var(--v2-text); }
+.account-card input:not([type="radio"]), .auth-verification input { height: 56px; border: 0; border-radius: 16px; background: #fff; font-size: 17px; color: var(--v2-text); padding: 0 18px; }
+.account-card input:focus { box-shadow: 0 0 0 2px var(--v2-blue); }
+.auth-code-button { min-height: 56px; border: 0; border-radius: 16px; background: var(--v2-blue-soft); color: var(--v2-blue); font-size: 15px; padding: 0 16px; }
+.password-toggle { color: var(--v2-blue); font-size: 15px; }
+.demo-code-note { border: 0; border-radius: 16px; background: #fff; color: var(--v2-sub); font-size: 15px; padding: 14px 16px; }
+.demo-code-note strong { color: var(--v2-blue); }
+.gender-set label { border: 0; border-radius: 14px; background: #fff; color: var(--v2-sub); font-size: 16px; padding: 12px 16px; }
+.gender-set label.selected { background: var(--v2-blue-soft); color: var(--v2-blue); box-shadow: 0 0 0 2px var(--v2-blue) inset; }
+.auth-error { border-radius: 14px; font-size: 15px; padding: 14px 16px; }
+.auth-submit { min-height: 56px; border-radius: 16px; font-size: 18px; }
+.auth-switch, .auth-switch button { font-size: 16px; color: var(--v2-sub); }
+.auth-switch button { color: var(--v2-blue); text-decoration: none; }
+.auth-prototype { font-size: 14px; color: var(--v2-mute); border-top: 1px solid var(--v2-line); }
+.gate-card h1 { color: var(--v2-text); font-size: 26px; }
+.gate-card p { color: var(--v2-sub); font-size: 17px; }
+.account-icon { background: var(--v2-blue-soft); color: var(--v2-blue); border-radius: 20px; }
+
+/* 시작 전 동의창 */
+.ai-consent { gap: 18px; }
+.ai-consent-head strong { font-size: 24px; color: var(--v2-text); }
+.ai-consent-head p { font-size: 17px; color: var(--v2-sub); }
+.ai-consent-items li { border: 0; border-radius: 24px; background: var(--v2-fill); padding: 20px; }
+.ai-consent-icon { width: 40px; height: 40px; border-radius: 14px; background: #fff; color: var(--v2-blue); }
+.ai-consent-items strong { font-size: 17px; color: var(--v2-text); }
+.ai-consent-items p { font-size: 15px; color: var(--v2-sub); line-height: 1.6; }
+.ai-consent .ai-consent-check { border: 0; border-radius: 20px; background: var(--v2-fill); padding: 18px 20px; font-size: 16px; color: var(--v2-text); }
+.ai-consent-check:hover { background: #eceff2; }
+.ai-consent-check.checked { background: var(--v2-blue-soft); box-shadow: 0 0 0 2px var(--v2-blue) inset; }
+.ai-consent-box { width: 26px; height: 26px; border-radius: 8px; border-color: #c4cad3; }
+.ai-consent-check.checked .ai-consent-box { border-color: var(--v2-blue); background: var(--v2-blue); }
+.ai-consent .primary-button { min-height: 56px; border-radius: 16px; font-size: 18px; }
+
+/* 시나리오 생성 중·불러오는 중 */
+.loader-visual { width: 96px; height: 96px; color: var(--v2-blue); background: #fff; }
+.loader-visual span { border-top-color: var(--v2-blue); inset: -8px; border-width: 3px; }
+.loading-card .demo-note { border-radius: 14px; background: #fff; color: var(--v2-sub); font-size: 15px; }
+
+/* 확인창 (대화 끝내기·삭제 등, components/ConfirmModal) */
+.v2-modal-backdrop { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 20px; background: rgba(25, 31, 40, .45); }
+.v2-modal { width: 100%; max-width: 400px; padding: 32px 24px 24px; border-radius: 28px; background: #fff; text-align: center; }
+.v2-modal h2 { margin: 0 0 10px; font-size: 22px; font-weight: 800; line-height: 1.4; color: var(--v2-text); }
+.v2-modal p { margin: 0 0 26px; font-size: 17px; line-height: 1.6; color: var(--v2-sub); word-break: keep-all; }
+.v2-modal-actions { display: flex; gap: 10px; }
+.v2-modal-actions button { flex: 1; height: 56px; padding: 0 16px; border: 0; border-radius: 16px; font-size: 17px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+.v2-modal-cancel { background: var(--v2-fill); color: var(--v2-text); }
+.v2-modal-confirm { background: var(--v2-blue); color: #fff; }
+.v2-modal-confirm:hover { background: var(--v2-blue-dark); }
+.v2-modal-extra { margin-top: 16px; border: 0; background: none; color: #b42318; font-size: 16px; font-weight: 600; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
