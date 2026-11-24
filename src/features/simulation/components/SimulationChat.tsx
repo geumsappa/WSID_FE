@@ -98,7 +98,8 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
                   {text && (m.from === "ai"
                     ? <TrainingMessageContent text={text} page={m.mockPage} disabled={finished || sim.typing}
                         onOpen={(page) => void sim.showMockPage(page)}
-                        appClicked={m.appClicked} onAppClick={() => void sim.clickMockApp(m.key)} />
+                        appClicked={m.appClicked} onAppClick={() => void sim.clickMockApp(m.key)}
+                        transferDone={m.transferDone} onTransfer={() => void sim.clickMockTransfer(m.key)} holder={name} />
                     : <p>{text}</p>)}
                   {m.mockAttachment && <MockPhotoPreview attachment={m.mockAttachment} />}
                   {m.mockPage && !containsMockLink(m.text) && (

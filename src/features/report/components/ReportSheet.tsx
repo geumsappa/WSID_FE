@@ -36,6 +36,7 @@ function keyFacts(e: Evaluation): Fact[] {
     facts.push(m.checkedOfficialChannel ? { label: "공식 채널 확인", value: "확인했어요", tone: "good" } : { label: "공식 채널 확인", value: "확인하지 않았어요", tone: "warn" })
     // 앱 설치 링크를 누른 경우에만 칸을 보여 줘요 (앱 설치를 요구하지 않은 훈련도 많아서)
     if (m.clickedAppLink) facts.push({ label: "앱 설치 링크", value: "눌렀어요", tone: "risk" })
+    if (m.attemptedTransfer) facts.push({ label: "송금 시도", value: "안내받은 계좌로 보냈어요", tone: "risk" })
   }
   const given = [...(info?.provided ?? []), ...(m?.attemptedMockLogin ? ["로그인 정보"] : [])]
   if (info || m) facts.push(given.length ? { label: "넘긴 개인정보", value: given.join(" · "), tone: "risk" } : { label: "넘긴 개인정보", value: "없어요", tone: "good" })
