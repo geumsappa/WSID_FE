@@ -6,6 +6,10 @@ set -euo pipefail
 
 read -rp "DuckDNS 서브도메인 이름 (예: wsid): " SUB
 read -rsp "DuckDNS 토큰: " TOKEN; echo
+# 웹 터미널에서 붙여 넣을 때 섞이는 보이지 않는 문자(붙여넣기 제어 문자, \r 등)를 지워요
+SUB=$(printf '%s' "$SUB" | tr -cd 'A-Za-z0-9-' | tr 'A-Z' 'a-z')
+TOKEN=$(printf '%s' "$TOKEN" | tr -cd 'A-Za-z0-9-')
+[ -n "$SUB" ] && [ -n "$TOKEN" ] || { echo "이름 또는 토큰이 비어 있어요"; exit 1; }
 
 install -m 600 /dev/null /etc/duckdns.env
 printf 'DUCKDNS_SUB=%s\nDUCKDNS_TOKEN=%s\n' "$SUB" "$TOKEN" > /etc/duckdns.env
