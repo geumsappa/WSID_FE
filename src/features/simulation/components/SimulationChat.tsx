@@ -6,7 +6,8 @@ import { Stepper } from "@/components/Stepper"
 import type { Simulation } from "../hooks/useSimulation"
 import { MockPhotoPreview } from "./MockPhotoPreview"
 import { TrainingCheckPage } from "./TrainingCheckPage"
-import { containsMockLink, splitSpeaker, TrainingMessageContent } from "./TrainingMessageContent"
+import { containsMockLink, firstItem, splitSpeaker, TrainingMessageContent } from "./TrainingMessageContent"
+import { ItemThumb } from "./ScamImageCard"
 
 // 사기범이 대화방을 나갈 때 AI 서버가 마지막 대사 끝에 붙이는 표시 (돈을 받았거나 사용자가 끊었을 때)
 const LEFT_MARK = /\s*\[퇴장\]\s*/g
@@ -16,6 +17,17 @@ const CHANNEL_LABEL: Record<string, string> = {
 }
 
 const CHANNEL_ICON: Record<string, DuoIconName> = { SMS: "smishing", MESSENGER: "acquaintance", MARKET: "trade", EMAIL: "chat", SNS: "chat" }
+// 가족·지인 사칭인지 (낯선 번호 안내, 반말 재촉에 써요)
+const FAMILY = /엄마|아빠|어머니|아버지|딸|아들|자녀|언니|오빠|누나|형님|동생|이모|삼촌|고모|며느리|사위|손주|손녀|손자|지인|친구|가족/
+// 답이 없을 때 상대가 재촉하는 말 (실제 사기범은 답이 없으면 바로 다시 연락해요)
+const NUDGE_AFTER_MS = 60_000
+function nudgeLines(channel: string, family: boolean): string[] {
+  if (family) return ["바빠? 급해서 그래 ㅠㅠ", "답장 좀 해 줘. 지금 꼭 해야 돼"]
+  if (channel === "MARKET") return ["혹시 거래 안 하실 건가요? 다른 분도 연락 와서요", "확인하시면 답 주세요! 오늘 안에 정리하려고요"]
+  return ["고객님, 확인되셨을까요?", "오늘 중 처리되지 않으면 진행이 어려워서요. 답변 부탁드립니다."]
+}
+// 대사에서 처음 나온 금액 (중고거래 상품 카드의 가격으로 써요)
+const PRICE = /(\d{1,3}(?:,\d{3})+\s?원|\d+\s?만\s?원|\d+\s?천\s?원)/
 
 // 가상 훈련 대화(TRN-07~11): 가상 사기범과 대화하며 대응을 연습하는 단계.
 export function SimulationChat({ sim }: { sim: Simulation }) {
@@ -26,15 +38,29 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
   const finished = sim.stage === "done" || sim.stage === "finishing"
   const senderName = sim.scenario?.senderName || "상대방"
   const channel = sim.scenario?.channel ?? "MESSENGER"
-  // 사기범 쪽 담당자가 중간에 바뀌면([화자: ...]) 그 뒤 말풍선의 보낸 사람 이름도 바꿔요
+  // 사기범 쪽 담당자가 중간에 바뀌면([화자: ...]) 그 뒤 말풍선의 보낸 사람 이름도 바꾸고, "○○님이 대화에 참여했어요"를 보여 줘요
   let speaker = senderName
   const rows = lines.map((m) => {
     // 사진 보내기 선택지는 서버에 "[가상 신분증 사진 제공]"처럼 기록돼요 → 대화창에는 자연스럽게 보여 줘요
-    if (m.from !== "ai") return { m, name: "나", text: m.text.replace(/^\[가상\s*(.+?)\s*제공\]$/, "$1을 보냈어요"), left: false }
+    if (m.from !== "ai") return { m, name: "나", text: m.text.replace(/^\[가상\s*(.+?)\s*제공\]$/, "$1을 보냈어요"), left: false, joined: null as string | null }
     const split = splitSpeaker(m.text)
+    const joined = split.speaker && split.speaker !== speaker ? split.speaker : null
     if (split.speaker) speaker = split.speaker
     const left = /\[퇴장\]/.test(split.body)
-    return { m, name: speaker, text: split.body.replace(LEFT_MARK, " ").trim(), left }
+    return { m, name: speaker, text: split.body.replace(LEFT_MARK, " ").trim(), left, joined }
+  })
+  const family = FAMILY.test(`${senderName} ${sim.scenario?.title ?? ""} ${sim.scenario?.description ?? ""}`)
+  // 중고거래: 사기범이 보낸 물건 사진에서 물건 이름을, 대사에서 가격을 찾아 화면 위 상품 카드로 보여 줘요
+  const aiTexts = lines.filter((l) => l.from === "ai").map((l) => l.text)
+  const item = channel === "MARKET" ? firstItem(aiTexts) : null
+  const price = channel === "MARKET" ? aiTexts.map((t) => t.match(PRICE)?.[1]).find(Boolean) ?? null : null
+  // 상대가 사진을 달라고 하면 보낼 수 있는 자료 (서버가 준 선택지 중 사진만. 빠른 답변 버튼은 보여 주지 않아요)
+  const lastAiLine = [...lines].reverse().find((l) => l.from === "ai" && !l.local)
+  const photoOptions = (last?.from === "ai" ? lastAiLine?.options ?? [] : []).filter((o) => o.mockAttachment)
+  // 대화를 연 시각 (메신저 맨 위 날짜 줄)
+  const [openedAt] = useState(() => {
+    const d = new Date()
+    return `오늘 ${d.getHours() < 12 ? "오전" : "오후"} ${((d.getHours() + 11) % 12) + 1}:${String(d.getMinutes()).padStart(2, "0")}`
   })
   // 상대방이 나갔으면 더 보낼 수 없어요 (입력창을 닫고 결과 보기로 안내)
   const hasLeft = rows.some((r) => r.left)
@@ -46,6 +72,16 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
     const node = scrollRef.current
     if (node) node.scrollTo({ top: node.scrollHeight, behavior: "smooth" })
   }, [lines, sim.typing, sim.stage])
+
+  // 사용자가 1분 동안 답이 없으면 상대가 한 번 재촉해요 (입력 중이면 기다려요)
+  const nudgeCount = lines.filter((l) => l.local).length
+  useEffect(() => {
+    if (sim.stage !== "chat" || sim.typing || hasLeft || sim.shouldFinish || input.trim()) return
+    if (!last || last.from !== "ai" || last.local || nudgeCount >= 2) return
+    const text = nudgeLines(channel, family)[nudgeCount]
+    const timer = window.setTimeout(() => sim.nudge(text), NUDGE_AFTER_MS)
+    return () => window.clearTimeout(timer)
+  }, [sim.stage, sim.typing, hasLeft, sim.shouldFinish, input, last, nudgeCount, channel, family]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = async () => {
     if (!input.trim() || sim.typing) return
@@ -90,19 +126,38 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
                 aria-label={USE_MOCK ? "mock 모드" : "AI 연결됨"} /> {CHANNEL_LABEL[channel] ?? "메신저"}</p>
             </div>
           </div>
+          {item && (
+            <div className="market-item-bar">
+              <span className="market-item-thumb" aria-hidden="true">
+                <ItemThumb item={item} />
+              </span>
+              <div><strong>{item}</strong><span>{price ?? "가격 협의"}</span></div>
+              <em>거래 중</em>
+            </div>
+          )}
           <div className="messages" ref={scrollRef} aria-live="polite">
-            {rows.map(({ m, name, text, left }) => (
+            <div className="chat-date-chip">{openedAt}</div>
+            {family && (channel === "SMS" || channel === "MESSENGER") && (
+              <div className="chat-unknown-banner" role="note">
+                <Icon name="user" size={16} />
+                {channel === "SMS" ? "저장되지 않은 번호에서 온 메시지예요" : "친구 목록에 없는 사용자예요. 프로필 사진이 없어요."}
+              </div>
+            )}
+            {rows.map(({ m, name, text, left, joined }) => (
               <Fragment key={m.key}>
+              {joined && <div className="chat-left-notice chat-join-notice" role="status">{joined}님이 대화에 참여했어요</div>}
               <div className={`message-row ${m.from === "ai" ? "contact" : "user"}`}>
                 {m.from === "ai" && <span className="avatar"><DuoIcon name={CHANNEL_ICON[channel] ?? "chat"} size={26} tone="gray" /></span>}
                 <div>
                   <span className="sender">{name}</span>
                   {text && (m.from === "ai"
-                    ? <TrainingMessageContent text={text} page={m.mockPage} disabled={finished || sim.typing}
+                    ? <TrainingMessageContent text={text} page={m.mockPage} disabled={finished || sim.typing} limit={m.reveal}
                         onOpen={(page) => void sim.showMockPage(page)}
                         appClicked={m.appClicked} onAppClick={() => void sim.clickMockApp(m.key)}
                         transferDone={m.transferDone} onTransfer={() => void sim.clickMockTransfer(m.key)} holder={name} />
                     : <p>{text}</p>)}
+                  {/* 말풍선을 하나씩 보여 주는 중이면 같은 자리 아래에 '입력 중…' 점을 보여 줘요 */}
+                  {m.reveal !== undefined && sim.typing && <div className="typing-dots" style={{ marginTop: 6 }}><i /><i /><i /></div>}
                   {m.mockAttachment && <MockPhotoPreview attachment={m.mockAttachment} />}
                   {m.mockPage && !containsMockLink(m.text) && (
                     <button type="button" className="outline-button" style={{ marginTop: 8, padding: "9px 13px", fontSize: 12 }} disabled={finished || sim.typing} onClick={() => void sim.showMockPage(m.mockPage!)}>
@@ -112,11 +167,11 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
                   {m.note && <small style={{ display: "block", opacity: 0.7 }}>{m.note}</small>}
                 </div>
               </div>
-              {left && <div className="chat-left-notice" role="status">{name}님이 대화방을 나갔어요</div>}
+              {left && m.reveal === undefined && <div className="chat-left-notice" role="status">{name}님이 대화방을 나갔어요</div>}
               </Fragment>
             ))}
             {/* 답장 기다리는 중: 상대방 말풍선과 같은 자리·모양(아바타, 이름, 말풍선)으로 점 세 개를 보여 줘요 */}
-            {sim.typing && (
+            {sim.typing && last?.reveal === undefined && (
               <div className="message-row contact" role="status" aria-label={`${currentSpeaker}이(가) 답장을 쓰고 있어요`}>
                 <span className="avatar"><DuoIcon name={CHANNEL_ICON[channel] ?? "chat"} size={26} tone="gray" /></span>
                 <div>
@@ -142,7 +197,18 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
           {sim.error && sim.stage !== "finishing" && <p className="upload-error" role="alert" style={{ margin: "8px 16px" }}>{sim.error}</p>}
           {sim.stage === "chat" && !hasLeft && (
             <div className="simulation-chat-input">
-              {/* 서버가 주는 빠른 답변 버튼(availableOptions)은 보여 주지 않아요: 사용자가 직접 판단해 입력하게 */}
+              {/* 서버가 주는 빠른 답변 버튼(availableOptions)은 보여 주지 않아요: 사용자가 직접 판단해 입력하게.
+                  다만 상대가 사진을 달라고 하면 '사진 보내기'만 첨부 버튼처럼 보여 줘요 (실제 사진은 쓰지 않아요) */}
+              {photoOptions.length > 0 && !sim.typing && (
+                <div className="photo-tray">
+                  <span><Icon name="image" size={16} /> 사진 보내기</span>
+                  {photoOptions.map((option) => (
+                    <button key={option.code} type="button" onClick={() => void sim.sendTraining({ option })}>
+                      {option.mockAttachment?.title ?? option.label}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="chat-input-row">
                 <textarea rows={1} maxLength={500} value={input} disabled={sim.typing}
                   onChange={(e) => setInput(e.target.value)}
