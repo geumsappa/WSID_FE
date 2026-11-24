@@ -29,6 +29,6 @@ export function ReportSources({ sources }: { sources?: ReportSource[] }) {
         </li>
       })}
     </ul>
-    <p className="text-sm text-slate-500" style={{ marginTop: 20, lineHeight: 1.8 }}>공공누리 제1유형 자료의 수법을 참고해 요약·재구성했습니다. 등장인물과 대화는 가상이며, 원기관이 제작·후원한 훈련이 아닙니다.</p>
+    <p className="text-sm text-slate-500" style={{ marginTop: 20, lineHeight: 1.8 }}>공공누리 제1유형 자료의 수법을 참고해 요약·재구성했으며, 원기관이 제작·후원한 자료가 아닙니다.</p>
   </section>
 }
