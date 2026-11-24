@@ -400,3 +400,16 @@ html.text-large .app { zoom: 1.15; }
 .home-page { min-height: calc(100vh - 80px); display: flex; flex-direction: column; justify-content: center; }
 .home-page .hero { width: 100%; }
 .home-page .hero-inner { padding: 40px 0 56px; }
+
+/* 상대방(사기범)이 대화방을 나갔을 때 메신저 안내 줄 */
+.chat-left-notice {
+  align-self: center;
+  margin: 10px auto 4px;
+  padding: 7px 16px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #5b6577;
+  font-size: 0.9em;
+  text-align: center;
+  width: fit-content;
+}
