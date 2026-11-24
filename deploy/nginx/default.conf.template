@@ -1,0 +1,58 @@
+# ${DOMAIN} 만 컨테이너 시작 때 실제 주소로 바뀌어요. ($host 같은 nginx 변수는 그대로)
+resolver 127.0.0.11 valid=30s ipv6=off;
+
+server {
+    listen 80;
+    server_name ${DOMAIN};
+
+    # Let's Encrypt 인증서 발급 확인용
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name ${DOMAIN};
+
+    ssl_certificate     /etc/nginx/ssl/fullchain.pem;
+    ssl_certificate_key /etc/nginx/ssl/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:SSL:10m;
+
+    client_max_body_size 20m;
+    gzip on;
+    gzip_types text/css application/javascript application/json image/svg+xml;
+
+    root /usr/share/nginx/html;
+
+    # API → Spring. 시나리오 생성은 160초까지 걸려서 응답 대기를 200초로 둬요.
+    location /api/ {
+        set $backend http://be:8080;
+        proxy_pass $backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_read_timeout 200s;
+        proxy_send_timeout 200s;
+    }
+
+    # 빌드할 때마다 파일 이름이 바뀌는 JS/CSS는 오래 캐시
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+        try_files $uri =404;
+    }
+
+    # 나머지는 React 화면 (새로고침해도 index.html)
+    location / {
+        add_header Cache-Control "no-cache";
+        try_files $uri /index.html;
+    }
+}

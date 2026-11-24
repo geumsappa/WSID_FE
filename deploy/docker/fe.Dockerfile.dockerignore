@@ -2,6 +2,7 @@
 node_modules
 dist
 deploy
+!deploy/nginx
 .env
 .env.*
 !.env.example
