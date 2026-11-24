@@ -10,6 +10,13 @@ const FRAUD_LABEL: Record<string, string> = {
   INSTITUTION_IMPERSONATION: "기관 사칭",
 }
 
+/** AI 서버가 훈련 기록으로 정한 등급("결과: 위험. …")을 떼어 칩으로 보여 줘요. 예전 리포트에는 없어요 */
+const GRADE_TONE: Record<string, string> = { 안전: "good", 주의: "warn", 위험: "risk" }
+function splitGrade(text: string): [string | null, string] {
+  const m = (text ?? "").trim().match(/^결과:\s*(안전|주의|위험)\.\s*([\s\S]*)$/)
+  return m ? [m[1], m[2]] : [null, text ?? ""]
+}
+
 /** 종합 평가 글을 첫 문장(핵심)과 나머지로 나눠요. 첫 문장만 굵게 보여 주려고 */
 function splitLead(text: string): [string, string] {
   const t = (text ?? "").trim()
@@ -48,7 +55,8 @@ function keyFacts(e: Evaluation): Fact[] {
  * 인쇄(PDF로 저장)하면 이 종이 부분만 A4 한 장으로 나와요. 스타일은 index.css의 .rs- 클래스.
  */
 export function ReportSheet({ title, fraudTypeCode, completedAt, evaluation }: { title: string; fraudTypeCode?: string; completedAt?: string; evaluation: Evaluation }) {
-  const [lead, rest] = splitLead(evaluation.overallFeedback)
+  const [grade, overall] = splitGrade(evaluation.overallFeedback)
+  const [lead, rest] = splitLead(overall)
   const facts = keyFacts(evaluation)
   const strengths = evaluation.strengths ?? []
   const improvements = evaluation.improvements ?? []
@@ -66,6 +74,7 @@ export function ReportSheet({ title, fraudTypeCode, completedAt, evaluation }: {
         <small>TRAINING REPORT</small>
         <h1>{title}</h1>
         <div className="rs-chips">
+          {grade && <span className={`rs-chip grade-${GRADE_TONE[grade]}`}>대응 결과 · {grade}</span>}
           {type && <span className="rs-chip blue">유형 · {type}</span>}
           <span className="rs-chip">완료 · {day}</span>
         </div>

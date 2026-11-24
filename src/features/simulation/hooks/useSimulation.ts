@@ -7,11 +7,14 @@ import { scrubPersonalInfo } from "@/lib/privacy"
 import type { Account } from "@/features/auth/types"
 import { readLastFinished, readScenarioInfo, saveLastFinished, saveScenarioInfo } from "../lib/progressStorage"
 import type { ChatLine, ScenarioInfo, SimStage } from "../types"
-import { containsMockLink } from "../components/TrainingMessageContent"
+import { bubbleCount, containsMockLink, messageSegments, splitSpeaker } from "../components/TrainingMessageContent"
 import { trainingChannel } from "../lib/mockPageSession"
 
 let lineSeq = 0
 const lineKey = () => `line-${++lineSeq}`
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+/** 말풍선 하나를 '입력 중…' 뒤에 보여 주기까지 기다리는 시간 (글이 길수록 조금 더) */
+const typingDelay = (segment: string) => 650 + Math.min(segment.length * 30, 1500)
 const toLine = (m: ChatMessage): ChatLine => ({
   key: lineKey(),
   from: m.sender === "AI" ? "ai" : "user",
@@ -89,6 +92,28 @@ export function useSimulation(
   const fail = (err: unknown) => {
     if (onUnauthorized(err, "simulation")) return
     setError(errorMessage(err))
+  }
+
+  /**
+   * 사기범 대사가 말풍선 여러 개면 실제 메신저처럼 '입력 중…'을 사이에 두고 하나씩 보여 줘요.
+   * 이미 화면에 넣은 줄(key)의 reveal 값을 늘려 가요. 그동안은 typing 이 켜져 있어 입력이 막혀요.
+   */
+  const revealInTurn = async (key: string, raw: string) => {
+    const segments = messageSegments(splitSpeaker(raw).body.replace(/\[퇴장\]/g, " "))
+    for (let shown = 2; shown <= segments.length; shown++) {
+      await sleep(typingDelay(segments[shown - 1]))
+      setChatLines((lines) => lines.map((l) => l.key === key ? { ...l, reveal: shown } : l))
+    }
+    setChatLines((lines) => lines.map((l) => l.key === key ? { ...l, reveal: undefined } : l))
+  }
+
+  /** 답이 없을 때 상대가 재촉하는 말 (화면 연출만, 서버로 보내지 않아요). 대사마다 한 번, 대화 전체 2번까지 */
+  const nudge = (text: string) => {
+    setChatLines((lines) => {
+      const last = lines[lines.length - 1]
+      if (stage !== "chat" || !last || last.from !== "ai" || last.local || lines.filter((l) => l.local).length >= 2) return lines
+      return [...lines, { key: lineKey(), from: "ai", text, local: true }]
+    })
   }
 
   const resetLocal = () => {
@@ -321,10 +346,13 @@ export function useSimulation(
     try {
       const res = await inOrder(() => trainingApi.start(id, { stateVersion: versionRef.current }))
       versionRef.current = res.stateVersion
-      setChatLines([{ ...toLine(res.firstMessage), options: res.availableOptions ?? res.firstMessage.options, mockPage: res.mockPage ?? undefined }])
+      const first = { ...toLine(res.firstMessage), options: res.availableOptions ?? res.firstMessage.options, mockPage: res.mockPage ?? undefined }
+      const many = bubbleCount(first.text) > 1
+      setChatLines([many ? { ...first, reveal: 1 } : first])
       setTurnCount(0)
       setShouldFinish(false)
       setStage("chat")
+      if (many) await revealInTurn(first.key, first.text)
     } catch (err) {
       await recover(err)
     } finally {
@@ -339,7 +367,8 @@ export function useSimulation(
     let mine: ChatLine
     let body: { inputKind: "TEXT"; content: string } | { inputKind: "CHOICE"; selectedCode: string }
     if ("option" in input) {
-      mine = { key: lineKey(), from: "user", text: input.option.label,
+      // 사진 보내기는 말풍선 글 없이 사진만 보여 줘요 (실제 메신저처럼)
+      mine = { key: lineKey(), from: "user", text: input.option.mockAttachment ? "" : input.option.label,
         mockAttachment: input.option.mockAttachment ?? undefined,
         note: undefined }
       body = { inputKind: "CHOICE", selectedCode: input.option.code }
@@ -348,7 +377,7 @@ export function useSimulation(
       if (!content) return false
       // 1차 가림: 개인정보는 브라우저에서 [전화번호]·[이름] 같은 표시로 바꾼 뒤에 보내요 (원문은 이 기기를 떠나지 않아요).
       // 서버는 이 표시를 보고 "어떤 정보를 넘겼는지"를 판정하고, 한 번 더 가려요 (백엔드·AI 서버 2·3차 가림).
-      const lastAi = [...chatLines].reverse().find((l) => l.from === "ai")?.text ?? ""
+      const lastAi = [...chatLines].reverse().find((l) => l.from === "ai" && !l.local)?.text ?? ""
       const prevUser = [...chatLines].reverse().find((l) => l.from === "user")?.text ?? ""
       const shown = scrubPersonalInfo(content, /인증번호|OTP|보안카드|비밀번호/.test(lastAi), { lastAi, prevUser })
       mine = { key: lineKey(), from: "user", text: shown.text, note: shown.types.length ? `입력한 ${shown.types.join(", ")}은(는) 가린 뒤 보냈어요.` : undefined }
@@ -362,13 +391,16 @@ export function useSimulation(
       versionRef.current = res.stateVersion
       // 서버(AI)가 이름·주소 등을 찾아 가린 문장을 주면, 내 말풍선을 그 문장으로 바꿔요 (원문은 화면에 남기지 않음)
       const masked = res.maskedInput?.trim()
+      const reply = { ...toLine(res.reply), mockPage: res.mockPage ?? undefined }
+      const many = bubbleCount(reply.text) > 1
       setChatLines((lines) => [
         ...lines.map((l) => l.key === mine.key && masked
           ? { ...l, text: masked, note: "입력한 개인정보는 화면에 남기지 않고 가렸어요." }
           : l),
-        { ...toLine(res.reply), mockPage: res.mockPage ?? undefined },
+        many ? { ...reply, reveal: 1 } : reply,
       ])
       setTurnCount(res.turnCount)
+      if (many) await revealInTurn(reply.key, reply.text)
       setShouldFinish(res.shouldFinish)
       return true
     } catch (err) {
@@ -543,7 +575,7 @@ export function useSimulation(
     stage, trainingId, discoveryLines, canGenerate, scenario, chatLines, turnCount, shouldFinish, typing, error,
     usedImages, endConfirm, setEndConfirm, report, reportState, saveNotice, saving, resumeInfo,
     startNew, retry, sendDiscovery, pendingPreset, clearPreset: () => setPendingPreset(null), uploadDiscoveryImages, generateScenario, startTraining, sendTraining,
-    showMockPage, closeMockPage, checkOpen, clickMockApp, clickMockTransfer, finish, leave, saveReport, downloadPdf, resetForLogout,
+    showMockPage, closeMockPage, checkOpen, clickMockApp, clickMockTransfer, finish, leave, saveReport, downloadPdf, resetForLogout, nudge,
     clearError: () => setError(""),
   }
 }
