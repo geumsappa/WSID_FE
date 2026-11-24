@@ -659,3 +659,10 @@ html.text-large .app { zoom: 1.15; }
 /* 회색 대화 상자 높이 1.5배, 고르는 버튼은 상자 안 맨 아래에 */
 .experience-interview .interview-thread { display: flex; flex-direction: column; min-height: 420px; max-height: min(640px, 70vh); }
 .experience-interview .interview-thread > .quick-start, .experience-interview .interview-thread > .interview-choices { margin-top: auto; padding-top: 12px; }
+
+/* ── 직접 입력 상담의 대응 카드(백엔드 카드)를 상황 카드 안내와 같은 모양으로 ── */
+.action-result .v2-steps .v2-step-body, .action-result > div > .v2-step-body { margin: 2px 0 0; color: var(--v2-text); font-size: 18px; line-height: 1.6; }
+.action-result .v2-first + .v2-steps { margin-top: 0; }
+.v2-materials { margin-top: 18px; padding: 18px 22px; border-radius: 20px; background: var(--v2-fill); }
+.v2-materials h5 { margin: 0 0 8px; color: var(--v2-text); font-size: 17px; font-weight: 800; }
+.v2-materials ul { margin: 0; padding-left: 20px; color: var(--v2-sub); font-size: 17px; line-height: 1.7; }
