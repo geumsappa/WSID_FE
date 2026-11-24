@@ -1,5 +1,6 @@
 import type { Page } from "@/types/common"
 import { Logo } from "@/components/Logo"
+import { TextSizeToggle } from "@/components/TextSizeToggle"
 
 export function Header({ page, go, mobileMenu, setMobileMenu, loggedIn, openSimulation }: {
   page: Page
@@ -13,6 +14,7 @@ export function Header({ page, go, mobileMenu, setMobileMenu, loggedIn, openSimu
     <header className={`nav-shell ${page === "home" ? "home-nav" : ""}`}>
     <nav className="nav" aria-label="주요 메뉴">
       <Logo onClick={() => go("home")} />
+      <div className="v2-nav-tools"><TextSizeToggle /></div>
       {page !== "home" && (
         <button
           className="menu-button"
@@ -46,7 +48,8 @@ export function Header({ page, go, mobileMenu, setMobileMenu, loggedIn, openSimu
           >
             긴급 대응
           </button>
-          {loggedIn ? <button className={page === "mypage" ? "active" : ""} onClick={() => go("mypage")}>마이페이지</button> : <button className={page === "login" || page === "signup" ? "active" : ""} onClick={() => go("login")}>로그인</button>}
+          {/* 로그인 탭은 두지 않아요: 시뮬레이션은 시작할 때, 긴급 대응은 화면 위 안내 띠에서 로그인해요. 로그인하면 마이페이지가 생겨요 */}
+          {loggedIn && <button className={page === "mypage" ? "active" : ""} onClick={() => go("mypage")}>마이페이지</button>}
         </div>
       )}
       {page === "home" && <div className="nav-account-home">{loggedIn ? <button onClick={() => go("mypage")}>마이페이지</button> : <button onClick={() => go("login")}>로그인 / 회원가입</button>}</div>}
