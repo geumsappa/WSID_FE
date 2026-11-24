@@ -138,10 +138,11 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
                   : <><h3>여기서 훈련을 마칠 수 있어요.</h3><p>대응을 충분히 보여 주셨어요. 계속 대화하거나 지금 결과를 확인하세요.</p></>}<button className="primary-button" onClick={() => void sim.finish()}>결과 분석 리포트 보기 <Icon name="arrow" size={18} /></button></div>
             )}
           </div>
+          {/* 오류는 입력창과 따로 보여 줘요 (상대가 나가 입력창이 닫혀도, 종료 후에도 보이게) */}
+          {sim.error && sim.stage !== "finishing" && <p className="upload-error" role="alert" style={{ margin: "8px 16px" }}>{sim.error}</p>}
           {sim.stage === "chat" && !hasLeft && (
             <div className="simulation-chat-input">
               {/* 서버가 주는 빠른 답변 버튼(availableOptions)은 보여 주지 않아요: 사용자가 직접 판단해 입력하게 */}
-              {sim.error && <p className="upload-error" role="alert">{sim.error}</p>}
               <div className="chat-input-row">
                 <textarea rows={1} maxLength={500} value={input} disabled={sim.typing}
                   onChange={(e) => setInput(e.target.value)}

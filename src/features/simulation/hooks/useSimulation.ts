@@ -463,19 +463,31 @@ export function useSimulation(
   /** TRN-11 훈련 종료 → RPT-01 결과 조회 → 리포트 화면으로 */
   const finish = async () => {
     const id = idRef.current
-    if (id === null || stage !== "chat") return
+    if (id === null || (stage !== "chat" && stage !== "done")) return
     setEndConfirm(false)
     setError("")
+    // 이미 끝난 훈련(새로고침·다른 탭에서 종료, 또는 종료는 됐는데 리포트 조회만 실패)이면 종료 요청 없이 리포트만 다시 불러와요
+    const alreadyFinished = stage === "done"
     setStage("finishing")
+    let finished = alreadyFinished
     try {
-      await inOrder(() => trainingApi.finish(id, { stateVersion: versionRef.current, reason: "USER_FINISH" }))
-      saveLastFinished(id)
+      if (!alreadyFinished) {
+        await inOrder(() => trainingApi.finish(id, { stateVersion: versionRef.current, reason: "USER_FINISH" }))
+        finished = true
+        saveLastFinished(id)
+      }
       setSaveNotice("")
       setReport(await trainingApi.report(id))
       setReportState("idle")
       setStage("done")
       go("report")
     } catch (err) {
+      if (finished) {
+        // 훈련은 서버에서 끝났어요 → 대화로 되돌리지 않고, 버튼으로 리포트만 다시 불러오게 해요
+        setStage("done")
+        fail(err)
+        return
+      }
       setStage("chat")
       await recover(err)
     }
