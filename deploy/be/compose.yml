@@ -1,0 +1,58 @@
+# BE 서버(EC2 wsid-be)에서 실행: Caddy(FE 파일 + HTTPS + /api 전달) · Spring · Redis
+# 사용법은 deploy/README.md 참고. 서버 폴더 구조: /opt/wsid/{WSID_FE,WSID_BE,WSID_AI}
+name: wsid-be
+
+services:
+  web:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/fe.Dockerfile
+      args:
+        VITE_API_BASE_URL: https://${DOMAIN:?DOMAIN을 .env에 적어 주세요}
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - be
+    restart: unless-stopped
+
+  be:
+    build:
+      context: ../../../WSID_BE
+      dockerfile: ../WSID_FE/deploy/docker/be.Dockerfile
+    env_file: .env
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      REDIS_HOST: redis
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+      WSID_CORS_ALLOWED_ORIGINS: https://${DOMAIN}
+    expose:
+      - "8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  redis:
+    image: redis:7.4
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  caddy-data:
+  caddy-config:
+  redis-data:
