@@ -9,6 +9,9 @@ set -euo pipefail
 SERVICE="${1:?be, fe, ai 중 하나}"
 BRANCH="${2:?브랜치 이름}"
 export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-ap-southeast-2}"
+# SSM(자동 실행)에는 HOME과 /snap/bin 경로가 없어서 직접 맞춰 줘요
+export HOME="${HOME:-/root}"
+export PATH="$PATH:/snap/bin:/usr/local/bin"
 ROOT=/opt/wsid
 KIT="$ROOT/WSID_FE/deploy"
 
@@ -27,10 +30,16 @@ git -C "$ROOT/$REPO" log --oneline -1
 
 echo "== [2/3] .env ← Parameter Store $PARAM"
 command -v aws >/dev/null 2>&1 || snap install aws-cli --classic >/dev/null
+echo "   aws: $(command -v aws) / $(aws --version 2>&1 | cut -d' ' -f1)"
 umask 077
 aws ssm get-parameter --name "$PARAM" --with-decryption --query Parameter.Value --output text > "$KIT/$STACK/.env.new"
+LINES=$(grep -c '=' "$KIT/$STACK/.env.new" || true)
+if [ "$LINES" -eq 0 ]; then
+  echo "!! Parameter Store에서 받은 .env가 비어 있어요 ($PARAM). 기존 .env를 그대로 두고 멈춰요." >&2
+  rm -f "$KIT/$STACK/.env.new"; exit 1
+fi
 mv "$KIT/$STACK/.env.new" "$KIT/$STACK/.env"
-echo "   .env $(grep -c '=' "$KIT/$STACK/.env") 줄 반영 (값은 출력하지 않아요)"
+echo "   .env ${LINES}줄 반영 (값은 출력하지 않아요)"
 
 echo "== [3/3] docker compose: $TARGET 다시 빌드"
 cd "$KIT/$STACK"
