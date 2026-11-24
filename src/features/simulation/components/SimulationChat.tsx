@@ -65,8 +65,27 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
   // 상대방이 나갔으면 더 보낼 수 없어요 (입력창을 닫고 결과 보기로 안내)
   const hasLeft = rows.some((r) => r.left)
   const currentSpeaker = speaker
-  // 실제 기관과 무관하다는 안내는 대화창이 아니라 왼쪽 안내 칸에 둬요 (대화 몰입을 위해)
-  const orgNotice = sim.scenario?.organizationName ? ` ${sim.scenario.organizationName} 측이 운영하거나 승인한 대화가 아니에요.` : ""
+  // 상황 설명·훈련 안내는 시작 전 화면(시나리오 확인)에서 이미 보여 줘서, 여기서는 대화창만 크게 보여 줘요
+  const pageRef = useRef<HTMLElement>(null)
+  // 화면 전체는 스크롤되지 않게 하고, 대화창이 남은 높이를 꽉 채워요 (대화 안에서만 스크롤)
+  useEffect(() => {
+    const root = document.documentElement
+    const prev = root.style.overflow
+    root.style.overflow = "hidden"
+    const fit = () => {
+      const el = pageRef.current
+      if (!el) return
+      // 글자 크게(가가) 모드는 .app에 zoom이 걸려 있어서, 화면 픽셀을 CSS 픽셀로 바꿔요
+      const zoom = parseFloat(getComputedStyle(el.closest(".app") ?? el).zoom || "1") || 1
+      const top = el.getBoundingClientRect().top
+      el.style.height = `${Math.max(420, (window.innerHeight - top) / zoom)}px`
+    }
+    fit()
+    window.addEventListener("resize", fit)
+    const watch = new MutationObserver(fit) // 글자 크기 바꾸기(html class) 반영
+    watch.observe(root, { attributes: true, attributeFilter: ["class"] })
+    return () => { root.style.overflow = prev; window.removeEventListener("resize", fit); watch.disconnect() }
+  }, [])
 
   useEffect(() => {
     const node = scrollRef.current
@@ -92,7 +111,7 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
   }
 
   return (
-    <section className="chat-page">
+    <section className="chat-page v2-sim-fixed" ref={pageRef}>
       {sim.checkOpen && sim.trainingId !== null && (
         <div className="training-check-modal" role="dialog" aria-modal="true" aria-label="확인 화면"
           onClick={sim.closeMockPage}>
@@ -106,17 +125,6 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
       )}
       <div className="container v2-stepper-wrap"><Stepper current={3} /></div>
       <div className="container chat-layout">
-        <aside className="scenario-sidebar">
-          <span className="sidebar-kicker">지금 연습 중인 상황</span>
-          <div className="sidebar-icon"><DuoIcon name={CHANNEL_ICON[channel] ?? "chat"} size={52} /></div>
-          <h1>{sim.scenario?.title ?? "맞춤 훈련 시나리오"}</h1>
-          <p>{sim.scenario?.description ?? "오늘 알려 주신 상황을 바탕으로 만든 훈련 대화예요."}</p>
-          <div className="education-notice">
-            <Icon name="lock" size={18} />
-            <p>이 대화는 금융사기 예방을 위한 훈련용 시뮬레이션이에요. 실제 금융기관이나 개인과 연결되지 않아요.{orgNotice} 지어낸 정보로 답해도 결과는 같아요. 번호·주소 같은 개인정보는 가린 뒤 처리하고 종류만 기록해요.</p>
-          </div>
-          {!finished && <button className="outline-button" disabled={sim.typing} onClick={() => sim.setEndConfirm(true)}>훈련 마치고 결과 보기</button>}
-        </aside>
         <div className={`messenger channel-${channel.toLowerCase()}`}>
           <div className="messenger-header">
             <div>
@@ -125,6 +133,7 @@ export function SimulationChat({ sim }: { sim: Simulation }) {
               <p><span className={USE_MOCK ? "mock" : undefined} title={USE_MOCK ? "mock 모드 (서버 없음)" : "AI 연결됨"}
                 aria-label={USE_MOCK ? "mock 모드" : "AI 연결됨"} /> {CHANNEL_LABEL[channel] ?? "메신저"}</p>
             </div>
+            {!finished && <button type="button" className="v2-sim-end" disabled={sim.typing} onClick={() => sim.setEndConfirm(true)}>훈련 마치고 결과 보기</button>}
           </div>
           {item && (
             <div className="market-item-bar">

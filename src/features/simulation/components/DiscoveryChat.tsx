@@ -51,18 +51,19 @@ export function DiscoveryChat({ sim }: { sim: Simulation }) {
         ? <div className="interview-assistant" key={l.key}><span className="interview-avatar v2-avatar"><HelperAvatar size={36}/></span><div className="interview-bubble">{l.text}</div></div>
         : <div key={l.key}><div className="interview-user"><span>{l.text}</span></div>{l.note && <small style={{ display: "block", textAlign: "right", opacity: 0.7, marginTop: 4 }}>{l.note}</small>}</div>)}
       {sim.typing && <Typing />}
+      {/* 고르는 버튼도 대화 상자 안, 마지막 질문 바로 아래에 보여 줘요 */}
+      {answered === 0 && !sim.typing && (
+        <div className="quick-start">
+          <strong>비슷한 상황 고르기</strong>
+          <div className="interview-choices">
+            {QUICK_STARTS.map((q) => <button key={q.label} type="button" onClick={() => void send(q.text)}><DuoIcon name={q.icon} size={32}/><span>{q.label}</span></button>)}
+          </div>
+        </div>
+      )}
+      {/* 첫 질문은 위 '비슷한 상황 고르기'와 겹쳐서 서버·mock이 주는 선택지를 숨겨요. 두 번째 질문부터 보여요 */}
+      {answered > 0 && options.length > 0 && !sim.typing && <div className="interview-choices">{options.map((o) => <button key={o.code} type="button" onClick={() => void send(o.label)}>{o.label}</button>)}</div>}
       <div ref={endRef}/>
     </div>
-    {answered === 0 && !sim.typing && (
-      <div className="quick-start">
-        <strong>비슷한 상황 고르기</strong>
-        <div className="interview-choices">
-          {QUICK_STARTS.map((q) => <button key={q.label} type="button" onClick={() => void send(q.text)}><DuoIcon name={q.icon} size={32}/><span>{q.label}</span></button>)}
-        </div>
-      </div>
-    )}
-    {/* 첫 질문은 위 '비슷한 상황 고르기'와 겹쳐서 서버·mock이 주는 선택지를 숨겨요. 두 번째 질문부터 보여요 */}
-    {answered > 0 && options.length > 0 && !sim.typing && <div className="interview-choices">{options.map((o) => <button key={o.code} type="button" onClick={() => void send(o.label)}>{o.label}</button>)}</div>}
     {sim.error && <p className="upload-error" role="alert">{sim.error}</p>}
     <form className="interview-compose" onSubmit={(e) => { e.preventDefault(); void send(draft) }}>
       <input aria-label="상황 답변" placeholder="직접 답변하기..." maxLength={500} value={draft} disabled={sim.typing} onChange={(e) => setDraft(e.target.value)}/>
