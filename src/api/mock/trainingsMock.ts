@@ -144,6 +144,13 @@ export const trainingsMock = withSave({
     return { phase: t.phase, firstMessage: first, stateVersion: bump(t) }
   },
   async message(id: number, body: TrainingMessageRequest): Promise<TrainingMessageResponse> {
+    // mock 시연용: 상황별로 사기범이 사진·화면을 보내는 흉내 (실제 AI 서버는 장면에 맞게 직접 골라요)
+    const MOCK_MEDIA: Partial<Record<string, string[]>> = {
+      trade: ["네 아직 있어요!\n작년에 산 거라 거의 새거예요\n이름 써서 찍었어요 [사진:상품|전자레인지|김민수]",
+        "입금 확인되면 바로 보내 드려요\n이미 포장도 해 뒀어요 [사진:송장|한결택배|전자레인지]"],
+      institution: ["", "본인 명의 계좌가 사건에 연루돼 조회 결과가 나왔습니다.\n문서 확인해 보세요 [공문|수사기관|사건 조회 결과]"],
+      loan: ["", "심사 결과 승인 나셨어요!\n다만 기존 대출 상환 확인이 먼저 필요합니다 [대출승인|한빛캐피탈|최대 3천만원]"],
+    }
     await delay(700)
     const t = get(id)
     requirePhase(t, "SIMULATION")
@@ -160,7 +167,7 @@ export const trainingsMock = withSave({
       ? `${types.join(", ")} 확인 감사하다며, 처리를 마치려면 추가 확인이 필요하다고 다른 정보도 요구합니다.`
       : turn === 3 // 네 번째 답장에는 담당자가 바뀌며 가상 앱 설치 링크를 보내는 흉내
         ? "[화자: 박서연/보안관리팀] 방금 연결받은 보안관리팀입니다. 확인용 앱을 설치하셔야 다음 처리가 돼요. [모의앱]"
-        : createDemoReply(text, turn, t.scenario!)
+        : MOCK_MEDIA[t.scenario!.key]?.[turn] || createDemoReply(text, turn, t.scenario!)
     t.messages.push({ from: "contact", text: content })
     const reply = ai(content, "SIMULATION")
     t.log.push(reply)

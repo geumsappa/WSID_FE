@@ -55,7 +55,7 @@ export type Institution = { code: string; name: string; role: string; phone: str
 export type TrainingPhase = "DISCOVERY" | "SCENARIO_READY" | "SIMULATION" | "RESULT"
 export type TrainingStatus = "ACTIVE" | "COMPLETED"
 /** 선택지. 노션 예시가 빈 배열이라 형식 미정 — 가안: { code, label } */
-export type MockAttachment = { type: "ID_CARD" | "BANKBOOK" | "PHOTO"; title: string }
+export type MockAttachment = { type: "ID_CARD" | "BANKBOOK" | "PHOTO" | "GIFT_CARD"; title: string }
 export type ChoiceOption = { code: string; label: string; mockAttachment?: MockAttachment | null }
 export type ChatMessage = {
   id?: number
