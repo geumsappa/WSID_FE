@@ -35,7 +35,8 @@ html.text-large .app { zoom: 1.15; }
 .nav-links button:hover { color: var(--v2-text); }
 .nav-links button.active { color: var(--v2-text); font-weight: 800; }
 .nav-links button.active::after { left: 16px; right: 16px; background: var(--v2-text); }
-.v2-text-size { height: 44px; padding: 0 14px; display: inline-flex; align-items: baseline; gap: 2px; border-radius: 12px; background: var(--v2-fill); color: var(--v2-text); font-weight: 700; }
+.v2-text-size { height: 44px; padding: 0 14px; display: inline-flex; align-items: center; justify-content: center; gap: 2px; border-radius: 12px; background: var(--v2-fill); color: var(--v2-text); font-weight: 700; }
+.v2-text-size-glyph { display: inline-flex; align-items: baseline; gap: 2px; line-height: 1; }
 .v2-text-size[aria-pressed="true"] { background: var(--v2-blue-soft); color: var(--v2-blue); }
 
 /* ---------- 공통: 버튼 ---------- */

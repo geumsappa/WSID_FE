@@ -31,8 +31,13 @@ export function TrainingCheckView({ page, template: t, loading, busy, error, res
             event.currentTarget.reset()
             onAction("submitted")
           }}>
-            {t.fields.map((f) => <label key={f.label}>{f.label}<input type={f.type === "password" ? "password" : "text"} inputMode={f.type === "tel" ? "numeric" : undefined}
-              placeholder={f.placeholder} required maxLength={f.maxLength ?? 50} disabled={busy} autoComplete="off" /></label>)}
+            {t.fields.map((f) => f.type === "gender"
+              ? <div key={f.label} className="training-check-field" role="radiogroup" aria-label={f.label}>{f.label}
+                <div className="training-check-choice">{["남성", "여성"].map((g) => <label key={g}>
+                  <input type="radio" name="training-check-gender" value={g} required disabled={busy} />{g}</label>)}</div>
+              </div>
+              : <label key={f.label}>{f.label}<input type="text" inputMode={f.type === "tel" ? "numeric" : undefined}
+                placeholder={f.placeholder} required maxLength={f.maxLength ?? 50} disabled={busy} autoComplete="off" /></label>)}
             <div className="training-check-data-note"><Icon name="lock" size={16} /><span>입력한 값은 어디에도 보내지 않고, 제출했는지만 기록해요.</span></div>
             <button className="training-check-submit" type="submit" disabled={busy}>{busy ? "처리 중..." : t.submit}<Icon name="arrow" size={17} /></button>
             <button className="training-check-verify" type="button" disabled={busy} onClick={() => onAction("official")}>이 요청을 공식 경로로 다시 확인하기</button>
