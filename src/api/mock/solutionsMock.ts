@@ -150,6 +150,7 @@ function assistQuestion(s: MockSolution, text: string): AssistantReply {
   }
   return situationAnswer(s, text)
 }
+const CLARIFY_ANSWER_TEXT: Record<YesNoUnknown, string> = { YES: "네", NO: "아니요", UNKNOWN: "모르겠어요" }
 /** 추가 질문에 대한 답(CLARIFICATION_ANSWER) 처리: 답으로 사실을 채운 뒤, 원래 질문에 상황에 맞게 답해요 */
 function assistAnswer(s: MockSolution, questionId: string, text: string): AssistantReply {
   const p = s.pending
@@ -251,7 +252,7 @@ export const solutionsMock = withSave({
     await delay(600)
     const s = get(id)
     checkVersion(s.stateVersion, body.stateVersion)
-    if (body.inputKind === "CHOICE") {
+    if (body.inputKind === "CHOICE" && !("purpose" in body)) {
       s.facts[body.factKey] = body.selectedCode
       settle(s, body.factKey)
       s.messages.push({ sender: "USER", inputKind: "CHOICE", content: `${QUESTIONS[body.factKey]} → ${body.selectedCode}` })
@@ -259,7 +260,8 @@ export const solutionsMock = withSave({
       s.lastAssistant = null
       return { facts: { ...s.facts }, responseCards: cards(s), nextQuestion: questionOf(s), stateVersion: s.stateVersion, assistant: null }
     }
-    const masked = maskSensitive(body.content.trim())
+    // AI 추가 질문의 답은 백엔드처럼 예/아니오/모름 선택으로 와요. 기존 규칙 답변이 쓰도록 짧은 말로 바꿔요
+    const masked = body.inputKind === "CHOICE" ? CLARIFY_ANSWER_TEXT[body.selectedCode] : maskSensitive(body.content.trim())
     if (/실패 ?테스트/.test(masked)) throw errorFromCode(503, "AI_SERVICE_UNAVAILABLE") // 재시도 흐름 확인용
     let assistant: AssistantReply | null = null
     if (body.purpose === "CLARIFICATION_ANSWER") {
@@ -275,6 +277,9 @@ export const solutionsMock = withSave({
     s.messages.push({ sender: "USER", inputKind: "TEXT", content: masked })
     const aiText = assistant?.status === "NEED_USER_INPUT" ? s.pending?.content : assistant?.answer
     if (aiText) s.messages.push({ sender: "AI", inputKind: "TEXT", content: aiText })
+    // 백엔드와 같은 모양: 되묻기면 assistant.question에 질문을 담아요
+    if (assistant?.status === "NEED_USER_INPUT" && s.pending)
+      assistant = { ...assistant, question: { questionId: s.pending.questionId, factKey: null, content: s.pending.content, options: ["YES", "NO", "UNKNOWN"] } }
     s.lastAssistant = assistant
     s.stateVersion += 1
     return { facts: { ...s.facts }, responseCards: cards(s), nextQuestion: questionOf(s), stateVersion: s.stateVersion, assistant }
