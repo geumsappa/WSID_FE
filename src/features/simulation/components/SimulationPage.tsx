@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react"
 import { authApi, errorMessage } from "@/api"
 import { Icon } from "@/components/Icon"
-import { PageIntro } from "@/components/PageIntro"
+import { Stepper } from "@/components/Stepper"
+import { DuoIcon } from "@/components/DuoIcon"
 import type { Simulation } from "../hooks/useSimulation"
 import { DiscoveryChat } from "./DiscoveryChat"
 import { SimulationChat } from "./SimulationChat"
@@ -73,12 +74,14 @@ export function SimulationPage({ sim }: { sim: Simulation }) {
   }, [])
   if (sim.stage === "chat" || sim.stage === "finishing" || sim.stage === "done") return <SimulationChat sim={sim} />
   return <section className="subpage"><div className="container preparation-container">
-    <PageIntro kicker="일상에서 시작하는 금융사기 대응 훈련" title={"오늘 겪은 상황을 알려 주시면\n맞춤 훈련을 만들어 드려요"}
-      subtitle="짧은 대화로 상황을 파악한 뒤, 그 상황에 맞는 사기범 역할 AI와 실제처럼 대화하며 대응 방법을 연습해요." />
+    <Stepper current={sim.stage === "ready" ? 2 : 1} />
+    {sim.stage !== "ready" && <div className="v2-intro">
+      <h1>오늘 겪은 일을 알려 주세요</h1>
+      <p>짧게 이야기하면, 그 상황에 맞춘 대화 훈련을 만들어 드려요.</p>
+    </div>}
     {(sim.stage === "idle" || sim.stage === "loading") && <div className="loading-card" aria-live="polite"><div className="loader-visual"><Icon name="shield" size={34}/><span/></div><h2>훈련을 준비하고 있어요.</h2><p>진행 중인 훈련이 있으면 이어서 보여 드려요.</p></div>}
     {sim.stage === "failed" && <div className="loading-card" role="alert"><div className="loader-visual"><Icon name="alert" size={34}/></div><h2>훈련을 불러오지 못했어요.</h2><p>{sim.error || "서버에 연결할 수 없어요."}</p><div className="button-row" style={{ justifyContent: "center" }}><button className="primary-button" onClick={sim.retry}><Icon name="refresh" size={16}/> 다시 시도</button><button className="text-button" onClick={sim.leave}>홈으로</button></div></div>}
     {sim.stage === "discovery" && <div className="input-card simulation-setup simulation-new-flow">
-      <div className="step-label"><span>1</span> 상황 파악</div>
       {consent === "ok" ? <DiscoveryChat sim={sim} />
         : consent === "needed" ? <AiConsent onAgree={() => setConsent("ok")} />
         : <p className="interview-help" aria-live="polite">확인 중이에요...</p>}
@@ -86,21 +89,21 @@ export function SimulationPage({ sim }: { sim: Simulation }) {
     </div>}
     {sim.stage === "generating" && <div className="loading-card" aria-live="polite"><div className="loader-visual"><Icon name="shield" size={34}/><span/></div><h2>맞춤 시나리오를 만들고 있어요.</h2><p>알려 주신 상황을 분석해 훈련 시나리오를 준비하고 있습니다. 최대 1분 정도 걸릴 수 있어요.</p></div>}
     {sim.stage === "ready" && sim.scenario && <div className="input-card scenario-options-wrap">
-      <div className="step-label"><span>2</span> 훈련 시나리오</div>
+      <DuoIcon name="shield" size={60} />
+      <span className="v2-kicker">맞춤 훈련 시나리오</span>
       <h2>{sim.scenario.title}</h2>
       <p>{sim.scenario.description}</p>
       <div className="demo-disclosure" role="note">
-        <span className="demo-disclosure-icon"><Icon name="alert" size={20}/></span>
         <div>
-          <strong>훈련 시작 전에 꼭 확인하세요</strong>
+          <strong>시작하기 전에 확인해 주세요</strong>
           <ul>
-            <li>이 시나리오는 <b>교육용 훈련 상황</b>이에요. 실제 금융기관이나 업체에서 보낸 연락이 아니에요.</li>
-            <li>입력 내용은 개인정보를 가린 뒤 외부 AI(해외 서버)로 처리돼요.</li>
+            <li><Icon name="check" size={18}/><span><b>교육용 훈련 상황이에요.</b> 실제 금융기관이나 업체가 보낸 연락이 아니에요.</span></li>
+            <li><Icon name="check" size={18}/><span><b>입력한 내용은 개인정보를 가린 뒤 처리돼요.</b> 외부 AI(해외 서버)가 대화를 만들어요.</span></li>
           </ul>
         </div>
       </div>
       {sim.error && <p className="upload-error" role="alert">{sim.error}</p>}
-      <button className="primary-button full" disabled={sim.typing} onClick={() => void sim.startTraining()}>{sim.typing ? "훈련을 시작하는 중..." : "대화 훈련 시작"} <Icon name="arrow" size={18}/></button>
+      <button className="primary-button full" disabled={sim.typing} onClick={() => void sim.startTraining()}>{sim.typing ? "훈련을 시작하는 중..." : "대화 훈련 시작하기"} <Icon name="arrow" size={18}/></button>
       <button className="outline-button sim-later-button" onClick={sim.leave}>나중에 이어서 하기</button>
     </div>}
   </div></section>

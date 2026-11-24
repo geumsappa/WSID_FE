@@ -1,5 +1,6 @@
 import { Icon } from "@/components/Icon"
 import { PageIntro } from "@/components/PageIntro"
+import { Stepper } from "@/components/Stepper"
 import type { Simulation } from "@/features/simulation/hooks/useSimulation"
 import { printAsPdf } from "@/lib/print"
 import { ReportSheet } from "./ReportSheet"
@@ -13,6 +14,7 @@ export function ReportPage({ sim, onEmergency }: { sim: Simulation; onEmergency:
     <section className="subpage report-page">
       <div className="container report-container">
         <div className="no-print">
+          <Stepper current={4} />
           <PageIntro kicker="나의 예방 훈련 결과" title="나의 금융사기 대응 분석 리포트"
             subtitle="시뮬레이션에서 직접 나눈 대화를 바탕으로 대응을 분석하고, 더 안전한 대응 방법을 알려드립니다." />
         </div>
