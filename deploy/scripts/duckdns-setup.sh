@@ -11,8 +11,16 @@ SUB=$(printf '%s' "$SUB" | tr -cd 'A-Za-z0-9-' | tr 'A-Z' 'a-z')
 TOKEN=$(printf '%s' "$TOKEN" | tr -cd 'A-Za-z0-9-')
 [ -n "$SUB" ] && [ -n "$TOKEN" ] || { echo "이름 또는 토큰이 비어 있어요"; exit 1; }
 
-install -m 600 /dev/null /etc/duckdns.env
+umask 077
 printf 'DUCKDNS_SUB=%s\nDUCKDNS_TOKEN=%s\n' "$SUB" "$TOKEN" > /etc/duckdns.env
+
+# systemd EnvironmentFile 대신 셸이 읽게 해요 (웹 터미널 붙여넣기 문자에 덜 민감)
+cat > /usr/local/bin/duckdns-update <<'SH'
+#!/bin/sh
+. /etc/duckdns.env
+curl -fsS "https://www.duckdns.org/update?domains=${DUCKDNS_SUB}&token=${DUCKDNS_TOKEN}&ip=" | grep -q OK
+SH
+chmod 700 /usr/local/bin/duckdns-update
 
 cat > /etc/systemd/system/duckdns.service <<'UNIT'
 [Unit]
@@ -22,8 +30,7 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-EnvironmentFile=/etc/duckdns.env
-ExecStart=/bin/sh -c 'curl -fsS "https://www.duckdns.org/update?domains=${DUCKDNS_SUB}&token=${DUCKDNS_TOKEN}&ip=" | grep -q OK'
+ExecStart=/usr/local/bin/duckdns-update
 UNIT
 
 cat > /etc/systemd/system/duckdns.timer <<'UNIT'
