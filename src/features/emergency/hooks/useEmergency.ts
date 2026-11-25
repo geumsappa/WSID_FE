@@ -367,6 +367,7 @@ export function useEmergency(go: (next: Page) => void) {
     if (q) { say(q.content, "clarification"); return }
     if (a.referenceCodes?.length) void fetchCards(a.referenceCodes) // 근거 카드 제목을 보여 주려고
     if (a.status === "ANSWERED" && a.answer) say(a.answer, "answer", a.referenceCodes)
+    else if (a.status === "UNABLE_TO_ANSWER" && a.answer?.trim()) say(a.answer, "unable")
     else setMessages((m) => {
       const last = [...m].reverse().find((x) => x.from === "user")?.text ?? ""
       return [...m, { key: key(), from: "assistant", text: REFERENTIAL_ASK.test(last.trim()) ? AMBIGUOUS_TEXT : UNABLE_TEXT, kind: "unable" }]
