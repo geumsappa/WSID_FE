@@ -1,3 +1,4 @@
+import "./TrainingCheckView.css"
 import type { CSSProperties } from "react"
 import type { MockPage } from "@/api"
 import type { MockFieldKind, MockTemplate } from "../data/mockPageTemplates"
