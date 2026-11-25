@@ -27,6 +27,15 @@ git config --global --add safe.directory "$ROOT/$REPO" 2>/dev/null || true
 git -C "$ROOT/$REPO" fetch -q origin "$BRANCH"
 git -C "$ROOT/$REPO" reset -q --hard FETCH_HEAD
 git -C "$ROOT/$REPO" log --oneline -1
+# 이미지 등을 Git LFS로 관리하는 레포(WSID_FE)는 실제 파일을 따로 받아야 해요. 안 받으면 로고가 깨져요
+if grep -qs "filter=lfs" "$ROOT/$REPO/.gitattributes"; then
+  command -v git-lfs >/dev/null 2>&1 || { apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq git-lfs >/dev/null; }
+  git -C "$ROOT/$REPO" lfs install --local >/dev/null
+  git -C "$ROOT/$REPO" lfs pull
+  LEFT=$(git -C "$ROOT/$REPO" lfs ls-files 2>/dev/null | grep -c ' - ' || true)
+  if [ "$LEFT" -gt 0 ]; then echo "!! LFS 파일 ${LEFT}개를 받지 못했어요" >&2; exit 1; fi
+  echo "   Git LFS 파일 받기 완료"
+fi
 
 echo "== [2/3] .env ← Parameter Store $PARAM"
 command -v aws >/dev/null 2>&1 || snap install aws-cli --classic >/dev/null
