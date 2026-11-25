@@ -36,8 +36,30 @@ function splitAnswer(text: string): { lead: string; items: string[] } {
   return { lead: flat, items: [] }
 }
 
-export function MessageText({ text, className, structured }: { text: string; className?: string; structured: boolean }) {
+/** 도우미 안내(문장 여러 개)를 '첫 문장 + 할 일 줄'로 나눠요. 할 일 앞의 '먼저·그다음' 같은 말은 화살표가 대신해요 */
+function splitSteps(text: string): { lead: string; steps: string[] } {
+  const sentences = text.split(/(?<=[.!?])\s+/).map((t) => t.trim()).filter(Boolean)
+  if (sentences.length < 3) return { lead: text, steps: [] }
+  const steps = sentences.slice(1).map((t) => t.replace(/^(먼저|우선|그다음(에는|에)?|다음으로|그리고|또한?|마지막으로)[,\s]+/, ""))
+  return { lead: sentences[0], steps }
+}
+
+export function MessageText({ text, className, structured, arrows = false }: { text: string; className?: string; structured: boolean; arrows?: boolean }) {
   // 말풍선 모양은 <p>에 걸려 있어서, 목록도 <p> 안에서 줄을 나눠 보여 줘요
+  if (arrows && !structured) {
+    const { lead, steps } = splitSteps(text)
+    if (steps.length) return (
+      <p className={className}>
+        <span style={{ display: "block" }}>{lead}</span>
+        {steps.map((step, i) => (
+          <span key={i} className="v2-arrow-step">
+            <span className="v2-step-label">{i === 0 ? "먼저" : "그다음"}</span>
+            <span>{step}</span>
+          </span>
+        ))}
+      </p>
+    )
+  }
   const { lead, items } = structured ? splitAnswer(text) : { lead: text, items: [] as string[] }
   if (!items.length) return <p className={className}>{text}</p>
   return (
@@ -76,27 +98,29 @@ function FactChecklist({ facts, onSubmit }: { facts: SolutionFacts | null; onSub
   }
   return (
     <div className="v2-checklist">
-      <div className="v2-check-grid">
+      {/* 세로 목록 + 체크박스. 여러 개 고를 수 있고, '해당 없어요'를 고르면 나머지는 풀려요 */}
+      <div className="v2-check-list" role="group" aria-label="있었던 일 고르기">
         {CHECK_ORDER.map((k) => {
           const on = picked.includes(k)
           return (
-            <button key={k} type="button" aria-pressed={on} className={on ? "on" : ""} onClick={() => toggle(k)}>
+            <label key={k} className={`v2-check-row${on ? " on" : ""}`}>
+              <input type="checkbox" checked={on} onChange={() => toggle(k)} />
+              <span className="v2-check-box" aria-hidden="true"><Icon name="check" size={16} /></span>
               <span>{CHECK_LABEL[k]}</span>
-              {on && <Icon name="check" size={20} />}
-            </button>
+            </label>
           )
         })}
+        <label className={`v2-check-row v2-check-none${none ? " on" : ""}`}>
+          <input type="checkbox" checked={none} onChange={() => { setError(""); setPicked([]); setNone((v) => !v) }} />
+          <span className="v2-check-box" aria-hidden="true"><Icon name="check" size={16} /></span>
+          <span>해당 없어요</span>
+        </label>
       </div>
       {error && <p role="alert" className="v2-check-error">{error}</p>}
-      <div className="v2-check-actions">
-        <button type="button" aria-pressed={none} className={`v2-btn-soft ${none ? "on" : ""}`} onClick={() => { setError(""); setPicked([]); setNone((v) => !v) }}>
-          {none && <Icon name="check" size={18} />}해당 없어요
-        </button>
-        <button type="button" className="v2-btn-primary"
-          onClick={() => (picked.length || none ? onSubmit(picked) : setError("해당하는 것을 고르거나 '해당 없어요'를 눌러 주세요."))}>
-          선택 완료
-        </button>
-      </div>
+      <button type="button" className="v2-btn-primary v2-check-submit"
+        onClick={() => (picked.length || none ? onSubmit(picked) : setError("해당하는 것을 고르거나 '해당 없어요'를 눌러 주세요."))}>
+        선택 완료
+      </button>
     </div>
   )
 }
@@ -186,7 +210,8 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
       <span className="v2-avatar"><HelperAvatar size={36} /></span>
       <div>
         <small>어떡하지 도우미 · 대응 방법 변경</small>
-        <div style={{ background: "#fff", border: "1px solid #d6e4fb", borderRadius: 14, padding: "12px 14px", display: "grid", gap: 10, maxWidth: 560 }}>
+        {/* 상자 전체가 버튼: 아무 데나 누르면 위쪽 대응 방법으로 이동해요 */}
+        <button type="button" className="v2-notice-box" onClick={() => document.getElementById("em-plan")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
           {m.notice.added.map((a) => (
             <div key={a.code}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -199,11 +224,8 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
           {m.notice.removed.length > 0 && (
             <div style={{ fontSize: 13, color: "#697586" }}>{m.notice.removed.map((t) => `'${t}'`).join(", ")}은(는) 지금 상황에 맞지 않아 뺐어요.</div>
           )}
-          <button type="button" onClick={() => document.getElementById("em-plan")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            style={{ justifySelf: "start", padding: "6px 12px", border: "1px solid #1769e0", borderRadius: 999, background: "#fff", color: "#1769e0", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-            위에서 전체 보기 ↑
-          </button>
-        </div>
+          <span className="v2-notice-more">위에서 전체 보기 ↑</span>
+        </button>
       </div>
     </div>
   ) : (
@@ -212,7 +234,7 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
       <div>
         <small>{m.from === "assistant" ? (m.kind ? KIND_LABEL[m.kind] : "어떡하지 도우미") : "나"}</small>
         {m.text && (m.from === "assistant"
-          ? <MessageText text={m.text} className={m.kind ? `assist-${m.kind}` : undefined} structured={m.kind === "answer" || /\n1\. /.test(m.text)} />
+          ? <MessageText text={m.text} className={m.kind ? `assist-${m.kind}` : undefined} structured={m.kind === "answer" || /\n1\. /.test(m.text)} arrows={!m.kind} />
           : <p className={m.kind ? `assist-${m.kind}` : undefined}>{m.text}</p>)}
         {/* 근거 카드 코드(m.references)는 내부 확인용이라 화면에는 보여 주지 않아요 */}
         {em.clarification && m.key === pendingClarKey && !em.completed && (
@@ -309,7 +331,7 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
                 })}
                 </>}
               </section>
-              <p className="analysis-disclaimer"><Icon name="alert" size={15} /> 분석 결과는 참고용이며, 실제 금융사기 여부를 확정하는 판단은 아닙니다. 실제 피해가 있다면 공식 기관 신고를 우선해 주세요.</p>
+              <p className="analysis-disclaimer"><Icon name="shield" size={15} /> 이 안내는 금융감독원·경찰청 등 공식 자료를 바탕으로 해요. 사기 여부의 최종 확인과 피해금 환급은 경찰·금융회사가 진행하니, 피해가 있다면 112·1394에도 꼭 신고해 주세요.</p>
             </div>
             {guide && (
               <div className="chat-organizations">
@@ -365,7 +387,7 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
                 <div>
                   <small>어떡하지 도우미 · 확인 질문</small>
                   {USE_CHECKLIST && em.firstQuestion ? <>
-                    <p className="assist-clarification" style={{ margin: 0 }}>지금까지 있었던 일을 모두 골라 주세요.<br /><small style={{ fontSize: 13, color: "#697586", fontWeight: 400 }}>고르신 것에 따라 지금 할 일이 달라져요.</small></p>
+                    <p className="assist-clarification" style={{ margin: 0 }}>지금까지 있었던 일을 모두 골라 주세요. 고르신 것에 따라 지금 할 일이 달라져요.</p>
                     <FactChecklist facts={em.facts} onSubmit={(s) => void em.submitChecklist(s)} />
                   </> : <>
                     {em.firstQuestion && <p style={{ margin: "0 0 6px" }}>지금 상황에 맞는 방법을 골라 드리려고 몇 가지만 여쭤볼게요.</p>}

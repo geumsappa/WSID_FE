@@ -32,6 +32,18 @@ export const solutionApi = {
     USE_MOCK ? solutionsMock.message(solutionId, body)
       : request(E.messages(solutionId), { method: "POST", body: { requestId, ...body }, timeoutMs: TIMEOUT.aiTurn, csrf: E.csrf }),
 
+  /**
+   * SOL-06 사진 첨부 (실서버 전용). 서버가 사진 속 글자를 읽어(OCR) 상황 설명처럼 반영하고, 응답 모양은 SOL-03과 같아요.
+   * multipart: images(PNG·JPEG 1~3장, 장당 5MB), requestId, stateVersion. mock 모드는 devOcr로 따로 처리해요.
+   */
+  images: (solutionId: number, files: File[], stateVersion: number, requestId = newRequestId()): Promise<SolutionMessageResponse> => {
+    const form = new FormData()
+    files.forEach((f) => form.append("images", f))
+    form.append("requestId", requestId)
+    form.append("stateVersion", String(stateVersion))
+    return request(E.images(solutionId), { method: "POST", body: form, timeoutMs: TIMEOUT.aiTurn, csrf: E.csrf })
+  },
+
   /** SOL-04 피해 사실 정정. 바꿀 항목만 changes에 */
   /** 응답에 다음 질문(nextQuestion)과 전체 사실 기준 카드가 함께 와요. 409면 자동 재전송하지 말고 detail로 다시 불러오세요 */
   updateFacts: (solutionId: number, body: UpdateFactsRequest): Promise<UpdateFactsResponse> =>
