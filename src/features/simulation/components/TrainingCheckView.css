@@ -1,0 +1,61 @@
+/* Scoped styles for both the embedded check page and its standalone route. */
+.msite { display: flex; flex-direction: column; width: 100%; min-width: 0; height: min(800px, calc(100dvh - 32px)); overflow: hidden; background: #fff; color: #202b3c; font-size: 15px; line-height: 1.6; }
+.msite *, .msite *::before, .msite *::after { box-sizing: border-box; }
+.msite button, .msite input { font: inherit; }
+.msite button { cursor: pointer; }
+.msite button:disabled { cursor: wait; opacity: .6; }
+.msite-chrome { flex: none; display: flex; align-items: center; gap: 12px; padding: 13px 58px 13px 18px; background: #f0f3f6; border-bottom: 1px solid #e1e6ec; }
+.msite-urlbar { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; padding: 7px 12px; border-radius: 9px; background: #fff; color: #566273; font-size: 13px; }
+.msite-urlbar svg { flex: none; }
+.msite-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.msite-chrome-close { flex: none; display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border: 0; border-radius: 50%; background: #fff; color: #566273; }
+.msite-scroll { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.msite-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 28px; border-bottom: 1px solid #e6eaf0; }
+.msite-logo { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 18px; }
+.msite-logo-mark { flex: none; display: grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--ms-theme, #1769e0); color: #fff; font-weight: 800; }
+.msite-hero { padding: 28px; background: #f7f9fc; }
+.msite-badge { display: inline-block; padding: 3px 10px; border-radius: 5px; background: #e7edf5; color: #40526b; font-size: 12px; font-weight: 700; }
+.msite-badge.alert { color: #a33219; background: #fce9e2; }
+.msite-hero h1 { margin: 12px 0 8px; font-size: 26px; line-height: 1.35; font-weight: 800; }
+.msite-hero p { margin: 0; color: #566273; overflow-wrap: anywhere; }
+.msite-status { display: grid; gap: 8px; margin: 22px 0 0; padding: 16px; border: 1px solid #dfe5ec; border-radius: 10px; background: #fff; }
+.msite-status > div { display: flex; justify-content: space-between; gap: 16px; }
+.msite-status dt { color: #697586; }
+.msite-status dd { margin: 0; text-align: right; font-weight: 700; }
+.msite-body { padding: 28px; }
+.msite-section { margin: 0 0 4px; font-size: 20px; font-weight: 800; }
+.msite-section-desc { margin: 0 0 22px; color: #697586; }
+.msite form { display: grid; gap: 18px; }
+.msite-field { display: grid; gap: 7px; min-width: 0; font-weight: 700; }
+.msite-field > input { display: block; width: 100%; min-width: 0; padding: 12px 14px; border: 1px solid #cdd5df; border-radius: 8px; background: #fff; color: #202b3c; font-weight: 400; }
+.msite-field > input:focus { outline: 2px solid var(--ms-theme, #1769e0); outline-offset: 2px; }
+.msite-choice { display: flex; gap: 20px; }
+.msite-choice label, .msite-agree { display: flex; align-items: flex-start; gap: 8px; }
+.msite-choice input, .msite-agree input { flex: none; width: 18px; height: 18px; margin-top: 3px; accent-color: var(--ms-theme, #1769e0); }
+.msite-agree { padding-top: 14px; border-top: 1px solid #e6eaf0; color: #566273; font-size: 13px; }
+.msite-submit { width: 100%; min-height: 48px; padding: 12px 18px; border: 0; border-radius: 8px; background: var(--ms-theme, #1769e0); color: #fff; font-weight: 800; }
+.msite-error { margin: 0; color: #b42318; overflow-wrap: anywhere; }
+.msite-footer { padding: 22px 28px; border-top: 1px solid #e6eaf0; color: #7b8795; font-size: 12px; }
+.msite-footer nav { display: flex; flex-wrap: wrap; gap: 14px; }
+.msite-footer p { margin: 10px 0 0; }
+.msite-appbar { flex: none; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; padding: 12px 20px; border-top: 1px solid #dfe5ec; background: #f7f9fc; font-size: 13px; }
+.msite-appbar button { padding: 7px 10px; border: 1px solid #d7dfe8; border-radius: 7px; background: #fff; color: #40526b; }
+.msite-appbar-note { align-self: center; color: #40526b; }
+.msite-loading { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 240px; color: #697586; }
+.msite-spinner { width: 20px; height: 20px; border: 2px solid #dfe5ec; border-top-color: var(--ms-theme, #1769e0); border-radius: 50%; animation: msite-spin 1s linear infinite; }
+@keyframes msite-spin { to { transform: rotate(360deg); } }
+.msite-done { display: grid; justify-items: center; gap: 18px; padding-top: 48px; padding-bottom: 48px; text-align: center; }
+.msite-done h2, .msite-done p { margin: 0; }
+.msite-done h2 { font-size: 22px; font-weight: 800; }
+.msite-done p { color: #697586; }
+.msite-done-icon { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: var(--ms-theme, #1769e0); color: #fff; }
+.msite-standalone { min-height: 100dvh; display: grid; place-items: center; padding: 16px; background: #edf1f5; }
+.msite-standalone > .msite { max-width: 680px; border-radius: 16px; box-shadow: 0 12px 40px #1b2c421a; }
+@media (max-width: 480px) {
+  .msite-header, .msite-hero, .msite-body, .msite-footer { padding: 20px; }
+  .msite-hero h1 { font-size: 23px; }
+  .msite-appbar { padding: 10px 14px; }
+  .msite-standalone { padding: 0; }
+  .msite-standalone > .msite { height: 100dvh; border-radius: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .msite-spinner { animation: none; } }
