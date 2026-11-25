@@ -10,7 +10,9 @@ import type { MockPage } from "@/api"
  * - 인증번호·OTP 칸도 만들지 않아요 (훈련에서는 실제 문자를 받을 수 없어서).
  * - 입력값은 서버·AI로 보내지 않고 "제출했다"는 행동만 기록해요 (TrainingCheckPage).
  */
-export type MockField = { label: string; placeholder: string; type?: "text" | "tel" | "gender"; maxLength?: number }
+/** 입력칸이 어떤 개인정보인지. 제출할 때 값은 보내지 않고 채운 칸의 종류만 기록해요 (리포트용) */
+export type MockFieldKind = "이름" | "휴대폰 번호" | "주소" | "생년월일" | "성별"
+export type MockField = { label: string; kind: MockFieldKind; placeholder: string; type?: "text" | "tel" | "gender"; maxLength?: number }
 export type MockTemplate = {
   /** 로고 아래 영문 부제 */
   service: string
@@ -29,6 +31,14 @@ export type MockTemplate = {
   steps: [{ title: string; desc: string }, { title: string; desc: string }]
   /** 제출 뒤 결과 문구 */
   submitted: string
+  /** 사이트 대표 색 */
+  theme: string
+  /** 주소창에 보이는 주소 (실제 기관처럼 보이게 꾸민 수상한 주소. 실제 사이트로 연결되지 않아요) */
+  domain: string
+  /** 머리 카드에 보이는 상태 줄 (항목, 값) */
+  status: [string, string][]
+  /** 경고 느낌(빨간 알림)으로 보여 줄지 */
+  alert?: boolean
 }
 
 const NEXT_STEP = { title: "다음 절차 안내", desc: "훈련 대화에서 이어서 진행" }
@@ -38,11 +48,11 @@ const NEXT_STEP = { title: "다음 절차 안내", desc: "훈련 대화에서 �
  * (아이디·비밀번호·계좌번호·사건번호 같은 칸은 만들지 않아요)
  */
 const F = {
-  name: (label = "이름"): MockField => ({ label, placeholder: "이름을 입력해 주세요" }),
-  phone: (label = "휴대폰 번호"): MockField => ({ label, placeholder: "- 없이 숫자만 입력해 주세요", type: "tel", maxLength: 13 }),
-  address: (label = "주소", placeholder = "도로명 주소를 입력해 주세요"): MockField => ({ label, placeholder, maxLength: 150 }),
-  birth: (label = "생년월일"): MockField => ({ label, placeholder: "생년월일 6자리 (예: 990101)", type: "tel", maxLength: 6 }),
-  gender: (): MockField => ({ label: "성별", placeholder: "", type: "gender" }),
+  name: (label = "이름"): MockField => ({ label, kind: "이름", placeholder: "이름을 입력해 주세요" }),
+  phone: (label = "휴대폰 번호"): MockField => ({ label, kind: "휴대폰 번호", placeholder: "- 없이 숫자만 입력해 주세요", type: "tel", maxLength: 13 }),
+  address: (label = "주소", placeholder = "도로명 주소를 입력해 주세요"): MockField => ({ label, kind: "주소", placeholder, maxLength: 150 }),
+  birth: (label = "생년월일"): MockField => ({ label, kind: "생년월일", placeholder: "생년월일 6자리 (예: 990101)", type: "tel", maxLength: 6 }),
+  gender: (): MockField => ({ label: "성별", kind: "성별", placeholder: "", type: "gender" }),
 }
 
 export const MOCK_TEMPLATES: Record<string, MockTemplate> = {
@@ -55,6 +65,8 @@ export const MOCK_TEMPLATES: Record<string, MockTemplate> = {
     submit: "주소 확인 후 재배송 신청",
     steps: [{ title: "배송지 확인", desc: "주소·연락처 확인" }, { title: "재배송 접수", desc: "훈련 대화에서 이어서 진행" }],
     submitted: "재배송 신청이 접수되었습니다.",
+    theme: "#f05a28", domain: "parcel-recheck.co/r/K8x2Q", alert: false,
+    status: [["운송장 상태", "배송 보류 (주소 불일치)"], ["보관 기한", "오늘 자정까지"]],
   },
   // 은행·카드사 보안 안내: 명의자 확인이라며 이름·생년월일·번호를 받아요
   BANK_LOGIN: {
@@ -65,6 +77,8 @@ export const MOCK_TEMPLATES: Record<string, MockTemplate> = {
     submit: "본인 확인하기",
     steps: [{ title: "본인 확인", desc: "명의자 정보 확인" }, NEXT_STEP],
     submitted: "본인 확인 요청이 접수되었습니다.",
+    theme: "#1f3c88", domain: "secure-verify-center.com/auth", alert: true,
+    status: [["감지 시각", "방금 전"], ["조치", "본인 확인 전까지 이체 제한"]],
   },
   // 피해 보상금·환급금 안내: 지급 대상자 확인이라며 인적 사항을 받아요
   REFUND_CLAIM: {
@@ -75,6 +89,8 @@ export const MOCK_TEMPLATES: Record<string, MockTemplate> = {
     submit: "지급 신청하기",
     steps: [{ title: "대상자 확인", desc: "인적 사항 확인" }, { title: "지급 신청", desc: "훈련 대화에서 이어서 진행" }],
     submitted: "지급 신청이 접수되었습니다.",
+    theme: "#0f8a6c", domain: "refund-claim24.com/apply", alert: false,
+    status: [["지급 상태", "대상자 확인 대기"], ["신청 마감", "오늘 18:00"]],
   },
   // 채용·알바: 지원서처럼 인적 사항과 거주지를 받아요
   RECRUIT_APPLICANT: {
@@ -85,6 +101,8 @@ export const MOCK_TEMPLATES: Record<string, MockTemplate> = {
     submit: "지원 정보 등록",
     steps: [{ title: "지원자 등록", desc: "기본 정보 확인" }, NEXT_STEP],
     submitted: "지원 정보가 등록되었습니다.",
+    theme: "#5046e5", domain: "apply-now-hr.site/form", alert: false,
+    status: [["전형 단계", "서류 합격 · 정보 등록 대기"], ["등록 마감", "오늘까지"]],
   },
   // 저금리 대출: 한도 조회라며 신청자 정보와 거주지를 받아요
   LOAN_APPLY: {
@@ -95,6 +113,8 @@ export const MOCK_TEMPLATES: Record<string, MockTemplate> = {
     submit: "한도 조회하기",
     steps: [{ title: "한도 조회", desc: "신청자 정보 확인" }, NEXT_STEP],
     submitted: "한도 조회 요청이 접수되었습니다.",
+    theme: "#0b6fb8", domain: "fastloan-limit.co/check", alert: false,
+    status: [["예상 금리", "연 3.9% ~"], ["한도 조회", "신용점수 영향 없음"]],
   },
   // 중고거래 안전결제: 거래자·배송지 확인이라며 받아요
   SECONDHAND_SAFE_PAY: {
@@ -105,6 +125,8 @@ export const MOCK_TEMPLATES: Record<string, MockTemplate> = {
     submit: "안전결제 진행",
     steps: [{ title: "거래자 확인", desc: "결제·배송 정보 확인" }, NEXT_STEP],
     submitted: "안전결제 요청이 접수되었습니다.",
+    theme: "#12a150", domain: "safe-payment-mk.shop/order", alert: false,
+    status: [["결제 상태", "판매자 확인 완료"], ["다음 단계", "구매자 정보 입력"]],
   },
   // 수사기관 사칭: 본인 명의 사건 조회라며 인적 사항과 주소를 받아요
   CASE_LOOKUP: {
@@ -115,6 +137,8 @@ export const MOCK_TEMPLATES: Record<string, MockTemplate> = {
     submit: "사건 조회하기",
     steps: [{ title: "사건 조회", desc: "명의자 확인" }, NEXT_STEP],
     submitted: "사건 조회 요청이 접수되었습니다.",
+    theme: "#2b3a55", domain: "case-inquiry-center.net/lookup", alert: true,
+    status: [["사건 상태", "명의자 확인 필요"], ["조회 기한", "금일 중"]],
   },
   GENERIC: {
     service: "VERIFICATION SERVICE", nav: "본인 확인", kicker: "VERIFICATION",
@@ -124,6 +148,8 @@ export const MOCK_TEMPLATES: Record<string, MockTemplate> = {
     submit: "본인 확인 진행",
     steps: [{ title: "본인 확인", desc: "확인 정보 검토 및 요청" }, NEXT_STEP],
     submitted: "확인 요청이 접수되었습니다.",
+    theme: "#2563eb", domain: "verify-service.net/auth", alert: false,
+    status: [["상태", "본인 확인 필요"]],
   },
 }
 

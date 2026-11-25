@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
-import { errorMessage, guidesApi, isStateConflict, newRequestId, solutionApi } from "@/api"
-import type { AssistantReply, FactKey, Institution, NextQuestion, ResponseCard, SolutionCard, SolutionDetail, SolutionFacts, SolutionMessageRequest, YesNoUnknown } from "@/api"
+import { errorMessage, guidesApi, isStateConflict, newRequestId, solutionApi, USE_MOCK } from "@/api"
+import type { AssistantReply, FactKey, Institution, NextQuestion, ResponseCard, SolutionCard, SolutionDetail, SolutionFacts, SolutionMessageRequest, SolutionMessageResponse, YesNoUnknown } from "@/api"
 import type { Page, UploadedImage } from "@/types/common"
 import { maskSensitive } from "@/lib/privacy"
 import { devOcr } from "@/api/mock/devOcr"
@@ -45,6 +45,19 @@ async function readPhotos(attachments: UploadedImage[]): Promise<{ text: string;
     note: `사진을 확인했어요 (${label}). ${ocr.summary ?? ""}`.trim() + " 읽은 내용으로 상황을 정리했어요. 잘못 읽은 부분이 있으면 알려 주세요.",
   }
 }
+
+/** 실서버(SOL-06)로 보낼 사진 파일. 서버 OCR이 받는 PNG·JPEG만, 최대 3장 */
+async function photoFiles(attachments: UploadedImage[]): Promise<File[]> {
+  const files: File[] = []
+  for (const a of attachments) {
+    if (files.length >= 3 || !/^data:image\/(png|jpe?g);base64,/i.test(a.preview)) continue
+    const blob = await (await fetch(a.preview)).blob()
+    files.push(new File([blob], a.name || `photo-${files.length + 1}.${blob.type.includes("png") ? "png" : "jpg"}`, { type: blob.type }))
+  }
+  return files
+}
+const PHOTO_FAIL_TEXT = "사진의 글자를 읽지 못했어요. 사진에 어떤 내용이 있는지 글로 짧게 알려 주세요."
+const PHOTO_TYPE_TEXT = "사진은 PNG나 JPG 파일만 읽을 수 있어요. 사진 내용을 글로 짧게 알려 주세요."
 
 const SESSION_KEY = "wsid-solution-id" // 새로고침 후 상담을 이어 가려고 상담 번호만 보관(탭을 닫으면 사라짐)
 const UNABLE_TEXT = "이 질문에는 정확히 답변드리기 어려워요. 위 대응 카드를 먼저 진행하시고, 아래 공식 기관에 직접 상담하시는 것이 가장 안전해요."
@@ -275,9 +288,21 @@ export function useEmergency(go: (next: Page) => void) {
     setAnalyzing(true)
     try {
       // 사진: 개발에서는 OCR로 읽은 글(가림)을, 그 밖에는 장수만 설명에 덧붙여요 (원본은 보내지 않음)
-      const photo = attachments.length ? await readPhotos(attachments) : null
-      const desc = photo ? `${masked}${masked ? "\n" : ""}${photo.text}` : masked
+      // 실서버: 사진은 상담을 시작한 뒤 SOL-06으로 따로 보내 서버가 읽어요 (설명에는 첨부 사실만)
+      const photo = attachments.length && USE_MOCK ? await readPhotos(attachments) : null
+      const desc = photo ? `${masked}${masked ? "\n" : ""}${photo.text}`
+        : masked || (attachments.length ? "사기 의심 대화 사진을 첨부했어요." : masked)
       let r = await solutionApi.start({ description: desc })
+      let photoReply: SolutionMessageResponse | null = null
+      let photoNote: string | null = photo?.note ?? null
+      if (!USE_MOCK && attachments.length) {
+        const files = await photoFiles(attachments)
+        if (!files.length) photoNote = PHOTO_TYPE_TEXT
+        else {
+          try { photoReply = await solutionApi.images(r.solutionId, files, r.stateVersion); r = { ...r, ...photoReply } }
+          catch { photoNote = PHOTO_FAIL_TEXT }
+        }
+      }
       // 직접 쓴 설명에 '송금했어요'처럼 사실이 분명히 있는데 서버가 아직 모름(UNKNOWN)으로 두면, 그 사실만 바로 반영해요 (SOL-04).
       // 서버 추출이 놓친 경우를 막는 안전장치예요. 카드로 시작했을 때는 정해진 안내를 쓰니 하지 않아요.
       if (!situation) {
@@ -295,9 +320,11 @@ export function useEmergency(go: (next: Page) => void) {
         : await reflect("start", { facts: null, cards: [], nextQuestion: null }, r) // 직접 입력: 파악한 내용에 맞춘 안내
       setMessages([
         { key: key(), from: "user", text: masked, images: attachments.length ? attachments : undefined },
-        ...(photo?.note ? [{ key: key(), from: "assistant" as const, text: photo.note }] : []),
+        ...(photoNote ? [{ key: key(), from: "assistant" as const, text: photoNote }] : []),
         { key: key(), from: "assistant", text: masked !== description.trim() ? `입력하신 내용 중 민감정보는 가려서 처리했어요. ${reply}` : reply },
       ])
+      // 사진을 읽은 뒤 AI가 만든 안내·질문이 있으면 이어서 보여 줘요 (답할 수 없다는 안내는 건너뛰어요)
+      if (photoReply?.assistant && photoReply.assistant.status !== "UNABLE_TO_ANSWER") showAssistant(photoReply)
       setText("")
       setImages([])
       go("emergencyChat")
@@ -340,6 +367,7 @@ export function useEmergency(go: (next: Page) => void) {
     if (q) { say(q.content, "clarification"); return }
     if (a.referenceCodes?.length) void fetchCards(a.referenceCodes) // 근거 카드 제목을 보여 주려고
     if (a.status === "ANSWERED" && a.answer) say(a.answer, "answer", a.referenceCodes)
+    else if (a.status === "UNABLE_TO_ANSWER" && a.answer?.trim()) say(a.answer, "unable")
     else setMessages((m) => {
       const last = [...m].reverse().find((x) => x.from === "user")?.text ?? ""
       return [...m, { key: key(), from: "assistant", text: REFERENTIAL_ASK.test(last.trim()) ? AMBIGUOUS_TEXT : UNABLE_TEXT, kind: "unable" }]
@@ -405,6 +433,17 @@ export function useEmergency(go: (next: Page) => void) {
     }
     setMessages((m) => [...m, { key: key(), from: "user", text: masked, images: attachments.length ? attachments : undefined }])
     let content = masked
+    if (attachments.length && !USE_MOCK) {
+      // 실서버: 사진을 먼저 SOL-06으로 보내 서버가 읽어 상황에 반영하고, 함께 쓴 글은 그다음에 보내요
+      // (질문이면 사진 내용까지 반영된 상태에서 AI가 답해요. 상황 설명은 사진 안내와 겹치니 조용히 저장만 해요)
+      const ok = await postPhotos(attachments)
+      if (!ok || !masked) return
+      for (const mode of modes) {
+        const sent = await postText({ inputKind: "TEXT", content: masked, purpose: mode === "fact" ? "FACT_UPDATE" : "QUESTION" }, newRequestId(), mode === "fact")
+        if (!sent) return
+      }
+      return
+    }
     if (attachments.length) {
       setTyping(true)
       const photo = await readPhotos(attachments)
@@ -417,6 +456,28 @@ export function useEmergency(go: (next: Page) => void) {
       // 고정 안내 상담에서 상황 저장(fact) 뒤에 질문이 이어지면, 상황 저장에는 따로 답하지 않아요
       const ok = await postText(body, newRequestId(), fixed && mode === "fact" && modes.length > 1)
       if (!ok) break // 앞 요청이 실패하면 뒤 요청은 보내지 않아요 ("다시 보내기"로 이어서)
+    }
+  }
+  /** 실서버 사진 첨부(SOL-06): 서버가 읽은 내용으로 사실·카드를 바꾸고, 도우미 안내를 보여 줘요 */
+  const postPhotos = async (attachments: UploadedImage[]): Promise<boolean> => {
+    const id = idRef.current
+    if (id === null) return false
+    const files = await photoFiles(attachments)
+    if (!files.length) { setMessages((m) => [...m, { key: key(), from: "assistant", text: PHOTO_TYPE_TEXT }]); return true }
+    setTyping(true)
+    setError("")
+    try {
+      const prev = view()
+      const r = await solutionApi.images(id, files, versionRef.current)
+      if (r.assistant && r.assistant.status !== "UNABLE_TO_ANSWER") { await applyResult(r); showAssistant(r) }
+      else pushReply(await reflect("text", prev, r))
+      return true
+    } catch (err) {
+      setMessages((m) => [...m, { key: key(), from: "assistant", text: PHOTO_FAIL_TEXT }])
+      await recover(err)
+      return false
+    } finally {
+      setTyping(false)
     }
   }
   /** AI 추가 질문에 예/아니오/모름으로 답해요 (SOL-03 CHOICE + purpose CLARIFICATION_ANSWER + questionId) */

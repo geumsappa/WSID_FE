@@ -19,7 +19,8 @@ export function notifyTrainingChanged(trainingId: number) {
 }
 
 /** Only action codes and fixed page metadata cross the API boundary. */
-export async function recordPageAction(trainingId: number, actionCode: MockActionCode, page: MockPage, requestId: ReturnType<typeof crypto.randomUUID>) {
+export async function recordPageAction(trainingId: number, actionCode: MockActionCode, page: MockPage, requestId: ReturnType<typeof crypto.randomUUID>,
+  filledFields?: string[]) {
   for (let attempt = 0; attempt < 2; attempt++) {
     const detail = await trainingApi.detail(trainingId)
     if (detail.phase !== "SIMULATION" || detail.status !== "ACTIVE") throw new Error("이미 종료되었거나 진행할 수 없는 훈련입니다.")
@@ -29,7 +30,7 @@ export async function recordPageAction(trainingId: number, actionCode: MockActio
     }
     try {
       const result = await trainingApi.action(trainingId, { stateVersion: detail.stateVersion, actionCode,
-        actionMeta: { templateCode: page.templateCode, screenCode: page.screenCode } }, requestId)
+        actionMeta: { templateCode: page.templateCode, screenCode: page.screenCode, ...(filledFields ? { filledFields } : {}) } }, requestId)
       notifyTrainingChanged(trainingId)
       return result
     } catch (error) {

@@ -10,7 +10,7 @@ import { ConfirmModal } from "@/components/ConfirmModal"
 import { EvidenceGallery } from "@/components/EvidenceGallery"
 import { Typing } from "@/components/Typing"
 import { loadEvidence } from "@/lib/image"
-import { toLinkItems, toTextItems } from "@/lib/normalize"
+import { toTextItems } from "@/lib/normalize"
 import type { Emergency, InputMode } from "../hooks/useEmergency"
 import { situationGuides } from "../data/situationGuides"
 import { CHECK_LABEL, CHECK_ORDER } from "../lib/composeReply"
@@ -36,8 +36,30 @@ function splitAnswer(text: string): { lead: string; items: string[] } {
   return { lead: flat, items: [] }
 }
 
-export function MessageText({ text, className, structured }: { text: string; className?: string; structured: boolean }) {
+/** 도우미 안내(문장 여러 개)를 '첫 문장 + 할 일 줄'로 나눠요. 할 일 앞의 '먼저·그다음' 같은 말은 화살표가 대신해요 */
+function splitSteps(text: string): { lead: string; steps: string[] } {
+  const sentences = text.split(/(?<=[.!?])\s+/).map((t) => t.trim()).filter(Boolean)
+  if (sentences.length < 3) return { lead: text, steps: [] }
+  const steps = sentences.slice(1).map((t) => t.replace(/^(먼저|우선|그다음(에는|에)?|다음으로|그리고|또한?|마지막으로)[,\s]+/, ""))
+  return { lead: sentences[0], steps }
+}
+
+export function MessageText({ text, className, structured, arrows = false }: { text: string; className?: string; structured: boolean; arrows?: boolean }) {
   // 말풍선 모양은 <p>에 걸려 있어서, 목록도 <p> 안에서 줄을 나눠 보여 줘요
+  if (arrows && !structured) {
+    const { lead, steps } = splitSteps(text)
+    if (steps.length) return (
+      <p className={className}>
+        <span style={{ display: "block" }}>{lead}</span>
+        {steps.map((step, i) => (
+          <span key={i} className="v2-arrow-step">
+            <span className="v2-step-label">{i === 0 ? "먼저" : "그다음"}</span>
+            <span>{step}</span>
+          </span>
+        ))}
+      </p>
+    )
+  }
   const { lead, items } = structured ? splitAnswer(text) : { lead: text, items: [] as string[] }
   if (!items.length) return <p className={className}>{text}</p>
   return (
@@ -60,6 +82,8 @@ const USE_CHECKLIST = true
 const stepIcon = (title: string): DuoIconName =>
   /지급정지|입금|송금/.test(title) ? "stop" : /앱|휴대폰|악성/.test(title) ? "appcheck" : /명의|등록된|확인/.test(title) ? "idcheck"
     : /개인정보|노출|비밀번호/.test(title) ? "shield" : /신고|경찰/.test(title) ? "report" : /전화|연락/.test(title) ? "call" : "shield"
+/** 백엔드 기관 코드 → 아이콘 (상황 카드의 ORG_ICON과 같은 그림) */
+const INSTITUTION_ICON: Record<string, DuoIconName> = { POLICE_112: "report", COUNTERSCAM_1394: "call", FSS: "institution", KISA_118: "shield", MSAFER: "idcheck", PD: "shield" }
 const ORG_ICON: Record<string, DuoIconName> = { police: "report", cyber: "report", fss: "institution", kisa: "shield", counterscam: "call", pd: "shield", payinfo: "idcheck", msafer: "idcheck" }
 
 /** 있었던 일 모두 고르기. 설명·사진에서 이미 '예'로 파악된 항목은 미리 골라 둬요 */
@@ -74,27 +98,29 @@ function FactChecklist({ facts, onSubmit }: { facts: SolutionFacts | null; onSub
   }
   return (
     <div className="v2-checklist">
-      <div className="v2-check-grid">
+      {/* 세로 목록 + 체크박스. 여러 개 고를 수 있고, '해당 없어요'를 고르면 나머지는 풀려요 */}
+      <div className="v2-check-list" role="group" aria-label="있었던 일 고르기">
         {CHECK_ORDER.map((k) => {
           const on = picked.includes(k)
           return (
-            <button key={k} type="button" aria-pressed={on} className={on ? "on" : ""} onClick={() => toggle(k)}>
+            <label key={k} className={`v2-check-row${on ? " on" : ""}`}>
+              <input type="checkbox" checked={on} onChange={() => toggle(k)} />
+              <span className="v2-check-box" aria-hidden="true"><Icon name="check" size={16} /></span>
               <span>{CHECK_LABEL[k]}</span>
-              {on && <Icon name="check" size={20} />}
-            </button>
+            </label>
           )
         })}
+        <label className={`v2-check-row v2-check-none${none ? " on" : ""}`}>
+          <input type="checkbox" checked={none} onChange={() => { setError(""); setPicked([]); setNone((v) => !v) }} />
+          <span className="v2-check-box" aria-hidden="true"><Icon name="check" size={16} /></span>
+          <span>해당 없어요</span>
+        </label>
       </div>
       {error && <p role="alert" className="v2-check-error">{error}</p>}
-      <div className="v2-check-actions">
-        <button type="button" aria-pressed={none} className={`v2-btn-soft ${none ? "on" : ""}`} onClick={() => { setError(""); setPicked([]); setNone((v) => !v) }}>
-          {none && <Icon name="check" size={18} />}해당 없어요
-        </button>
-        <button type="button" className="v2-btn-primary"
-          onClick={() => (picked.length || none ? onSubmit(picked) : setError("해당하는 것을 고르거나 '해당 없어요'를 눌러 주세요."))}>
-          선택 완료
-        </button>
-      </div>
+      <button type="button" className="v2-btn-primary v2-check-submit"
+        onClick={() => (picked.length || none ? onSubmit(picked) : setError("해당하는 것을 고르거나 '해당 없어요'를 눌러 주세요."))}>
+        선택 완료
+      </button>
     </div>
   )
 }
@@ -184,7 +210,8 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
       <span className="v2-avatar"><HelperAvatar size={36} /></span>
       <div>
         <small>어떡하지 도우미 · 대응 방법 변경</small>
-        <div style={{ background: "#fff", border: "1px solid #d6e4fb", borderRadius: 14, padding: "12px 14px", display: "grid", gap: 10, maxWidth: 560 }}>
+        {/* 상자 전체가 버튼: 아무 데나 누르면 위쪽 대응 방법으로 이동해요 */}
+        <button type="button" className="v2-notice-box" onClick={() => document.getElementById("em-plan")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
           {m.notice.added.map((a) => (
             <div key={a.code}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -197,11 +224,8 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
           {m.notice.removed.length > 0 && (
             <div style={{ fontSize: 13, color: "#697586" }}>{m.notice.removed.map((t) => `'${t}'`).join(", ")}은(는) 지금 상황에 맞지 않아 뺐어요.</div>
           )}
-          <button type="button" onClick={() => document.getElementById("em-plan")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            style={{ justifySelf: "start", padding: "6px 12px", border: "1px solid #1769e0", borderRadius: 999, background: "#fff", color: "#1769e0", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-            위에서 전체 보기 ↑
-          </button>
-        </div>
+          <span className="v2-notice-more">위에서 전체 보기 ↑</span>
+        </button>
       </div>
     </div>
   ) : (
@@ -210,7 +234,7 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
       <div>
         <small>{m.from === "assistant" ? (m.kind ? KIND_LABEL[m.kind] : "어떡하지 도우미") : "나"}</small>
         {m.text && (m.from === "assistant"
-          ? <MessageText text={m.text} className={m.kind ? `assist-${m.kind}` : undefined} structured={m.kind === "answer" || /\n1\. /.test(m.text)} />
+          ? <MessageText text={m.text} className={m.kind ? `assist-${m.kind}` : undefined} structured={m.kind === "answer" || /\n1\. /.test(m.text)} arrows={!m.kind} />
           : <p className={m.kind ? `assist-${m.kind}` : undefined}>{m.text}</p>)}
         {/* 근거 카드 코드(m.references)는 내부 확인용이라 화면에는 보여 주지 않아요 */}
         {em.clarification && m.key === pendingClarKey && !em.completed && (
@@ -285,24 +309,29 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
                   const d = em.cardDetails[c.code]
                   const actions = toTextItems(d?.actions)
                   const materials = toTextItems(d?.requiredMaterials)
-                  const sources = toLinkItems(d?.sourceReferences)
                   const urgent = (c.priority ?? d?.priority) === "URGENT" // 상담 응답의 우선순위가 먼저 (중고거래+송금이면 긴급)
+                  const title = d?.title ?? c.title ?? c.code
+                  // 상황 카드 안내와 같은 모양: 긴급 카드는 '가장 먼저' 박스, 할 일은 큰 글씨 단계, 준비물은 회색 박스 (출처 줄은 화면에 안 보여요)
                   return (
-                    <div key={c.code} style={{ marginTop: gi ? 22 : 4 }}>
-                      <h4 style={{ margin: "0 0 10px", display: "flex", alignItems: "center", gap: 8 }}>
-                        <span className="badge" style={urgent ? { background: "#fff2f1", color: "#b43b38" } : undefined}>{urgent ? "긴급" : `상황 ${gi + 1}`}</span>
-                        {d?.title ?? c.title ?? c.code}
-                      </h4>
-                      {actions.length > 0 ? <div className="action-steps">{actions.map((a, i) => <div key={i}><span>{i + 1}</span><div>{a.title && <h4>{a.title}</h4>}<p>{a.body}</p></div></div>)}</div>
-                        : <p style={{ fontSize: 12, color: "#697586" }}>{d ? "세부 조치가 아직 등록되지 않았어요. 아래 공식 기관에 문의해 주세요." : "카드 내용을 불러오는 중이에요."}</p>}
-                      {materials.length > 0 && <p style={{ margin: "10px 0 0", fontSize: 12, color: "#526174" }}><strong>준비할 것:</strong> {materials.map((m) => m.body).join(", ")}</p>}
-                      {sources.length > 0 && <p style={{ margin: "6px 0 0", fontSize: 11, color: "#7a8798" }}>근거: {sources.map((s, i) => <span key={i}>{i ? " · " : ""}{s.url ? <a href={s.url} target="_blank" rel="noreferrer">{s.label}</a> : s.label}</span>)}{d?.reviewedAt && ` (검토 ${d.reviewedAt.slice(0, 10)})`}</p>}
+                    <div key={c.code} style={{ marginTop: gi ? 32 : 4 }}>
+                      {urgent
+                        ? <div className="v2-first"><strong>{gi === 0 ? "가장 먼저" : "긴급"}</strong><h4>{title}</h4></div>
+                        : <h4 className="v2-section-title">{title}</h4>}
+                      {actions.length > 0
+                        ? <div className="action-steps v2-steps">{actions.map((a, i) => <div key={i}><DuoIcon name={stepIcon(`${a.title ?? ""} ${a.body}`)} size={44} /><div><small>{i + 1}단계</small>{a.title && <h4>{a.title}</h4>}<p className="v2-step-body">{a.body}</p></div></div>)}</div>
+                        : <p className="v2-step-body">{d ? "세부 조치가 아직 등록되지 않았어요. 아래 도움받을 곳에 문의해 주세요." : "카드 내용을 불러오는 중이에요."}</p>}
+                      {materials.length > 0 && (
+                        <div className="v2-materials">
+                          <h5>미리 준비해 두세요</h5>
+                          <ul>{materials.map((m, i) => <li key={i}>{m.body}</li>)}</ul>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
                 </>}
               </section>
-              <p className="analysis-disclaimer"><Icon name="alert" size={15} /> 분석 결과는 참고용이며, 실제 금융사기 여부를 확정하는 판단은 아닙니다. 실제 피해가 있다면 공식 기관 신고를 우선해 주세요.</p>
+              <p className="analysis-disclaimer"><Icon name="shield" size={15} /> 이 안내는 금융감독원·경찰청 등 공식 자료를 바탕으로 해요. 사기 여부의 최종 확인과 피해금 환급은 경찰·금융회사가 진행하니, 피해가 있다면 112·1394에도 꼭 신고해 주세요.</p>
             </div>
             {guide && (
               <div className="chat-organizations">
@@ -331,16 +360,18 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
                 <div className="organization-grid">
                   {institutionCodes.map((code) => {
                     const it = institutionOf(code)
-                    const href = it?.phone ? undefined : it?.officialUrl ?? undefined // 전화번호는 안내만
+                    // 상황 카드의 기관 박스와 같게: 이름에 번호가 있으면(경찰청 112) 안내만, 웹사이트가 있으면 바로가기, 둘 다 아니면 번호 표시
+                    const phoneInName = !!it?.phone && it.name.includes(it.phone)
+                    const href = !phoneInName && it?.officialUrl ? it.officialUrl : undefined
                     const Tag = href ? "a" : "div"
                     return (
-                      <Tag key={code} href={href} target={href?.startsWith("http") ? "_blank" : undefined} rel="noreferrer">
-                        <span className="org-mark"><DuoIcon name={it?.phone ? "call" : "institution"} size={32} /></span>
+                      <Tag key={code} href={href} target={href ? "_blank" : undefined} rel={href ? "noreferrer" : undefined}>
+                        <span className="org-mark"><DuoIcon name={INSTITUTION_ICON[code] ?? (it?.phone ? "call" : "institution")} size={32} /></span>
                         <div>
                           <h4>{it?.name ?? code}</h4>
                           <p>{it?.role ?? "기관 정보를 불러오는 중"}</p>
                         </div>
-                        {it?.phone ? <span className="v2-phone-label">전화 {it.phone}</span> : href && <strong>바로가기 <Icon name="arrow" size={16} /></strong>}
+                        {href ? <strong>바로가기 <Icon name="arrow" size={16} /></strong> : !phoneInName && it?.phone && <span className="v2-phone-label">전화 {it.phone}</span>}
                       </Tag>
                     )
                   })}
@@ -356,7 +387,7 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
                 <div>
                   <small>어떡하지 도우미 · 확인 질문</small>
                   {USE_CHECKLIST && em.firstQuestion ? <>
-                    <p className="assist-clarification" style={{ margin: 0 }}>지금까지 있었던 일을 모두 골라 주세요.<br /><small style={{ fontSize: 13, color: "#697586", fontWeight: 400 }}>고르신 것에 따라 지금 할 일이 달라져요.</small></p>
+                    <p className="assist-clarification" style={{ margin: 0 }}>지금까지 있었던 일을 모두 골라 주세요. 고르신 것에 따라 지금 할 일이 달라져요.</p>
                     <FactChecklist facts={em.facts} onSubmit={(s) => void em.submitChecklist(s)} />
                   </> : <>
                     {em.firstQuestion && <p style={{ margin: "0 0 6px" }}>지금 상황에 맞는 방법을 골라 드리려고 몇 가지만 여쭤볼게요.</p>}
