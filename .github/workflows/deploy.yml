@@ -4,7 +4,7 @@ name: Deploy FE
 
 on:
   push:
-    branches: [new-main]
+    branches: [main]
   workflow_dispatch:
 
 env:
@@ -13,7 +13,7 @@ env:
   FE_INSTANCE: i-031099c85a885063f   # wsid-fe (Nginx + FE)
   BE_INSTANCE: i-0c765a9b9741a54fd   # wsid-be (Spring + Redis)
   AI_INSTANCE: i-0ae5dcac7c5d45bcd   # wsid-ai
-  KIT_BRANCH: new-main               # 배포 키트(deploy/)가 있는 WSID_FE 브랜치
+  KIT_BRANCH: main                   # 배포 키트(deploy/)가 있는 WSID_FE 브랜치
 
 permissions:
   id-token: write   # AWS OIDC 로그인
