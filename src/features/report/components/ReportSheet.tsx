@@ -10,6 +10,13 @@ const FRAUD_LABEL: Record<string, string> = {
   INSTITUTION_IMPERSONATION: "기관 사칭",
 }
 
+/** AI 서버가 훈련 기록으로 정한 등급("결과: 위험. …")을 떼어 칩으로 보여 줘요. 예전 리포트에는 없어요 */
+const GRADE_TONE: Record<string, string> = { 안전: "good", 주의: "warn", 위험: "risk" }
+function splitGrade(text: string): [string | null, string] {
+  const m = (text ?? "").trim().match(/^결과:\s*(안전|주의|위험)\.\s*([\s\S]*)$/)
+  return m ? [m[1], m[2]] : [null, text ?? ""]
+}
+
 /** 종합 평가 글을 첫 문장(핵심)과 나머지로 나눠요. 첫 문장만 굵게 보여 주려고 */
 function splitLead(text: string): [string, string] {
   const t = (text ?? "").trim()
@@ -26,7 +33,7 @@ const toDay = (iso?: string) => {
 type Tone = "good" | "warn" | "risk"
 type Fact = { label: string; value: string; tone: Tone }
 
-/** 핵심 3칸: 모의 페이지 행동(mockPageEvaluation)과 개인정보 제공 여부(infoDisclosure)로 만들어요 */
+/** 핵심 칸: 링크·앱·송금 행동(mockPageEvaluation)과 개인정보 제공 여부(infoDisclosure)로 만들어요 */
 function keyFacts(e: Evaluation): Fact[] {
   const m = e.mockPageEvaluation
   const info = e.infoDisclosure
@@ -36,6 +43,7 @@ function keyFacts(e: Evaluation): Fact[] {
     facts.push(m.checkedOfficialChannel ? { label: "공식 채널 확인", value: "확인했어요", tone: "good" } : { label: "공식 채널 확인", value: "확인하지 않았어요", tone: "warn" })
     // 앱 설치 링크를 누른 경우에만 칸을 보여 줘요 (앱 설치를 요구하지 않은 훈련도 많아서)
     if (m.clickedAppLink) facts.push({ label: "앱 설치 링크", value: "눌렀어요", tone: "risk" })
+    if (m.attemptedTransfer) facts.push({ label: "송금 시도", value: "안내받은 계좌로 보냈어요", tone: "risk" })
   }
   const given = [...(info?.provided ?? []), ...(m?.attemptedMockLogin ? ["로그인 정보"] : [])]
   if (info || m) facts.push(given.length ? { label: "넘긴 개인정보", value: given.join(" · "), tone: "risk" } : { label: "넘긴 개인정보", value: "없어요", tone: "good" })
@@ -47,7 +55,8 @@ function keyFacts(e: Evaluation): Fact[] {
  * 인쇄(PDF로 저장)하면 이 종이 부분만 A4 한 장으로 나와요. 스타일은 index.css의 .rs- 클래스.
  */
 export function ReportSheet({ title, fraudTypeCode, completedAt, evaluation }: { title: string; fraudTypeCode?: string; completedAt?: string; evaluation: Evaluation }) {
-  const [lead, rest] = splitLead(evaluation.overallFeedback)
+  const [grade, overall] = splitGrade(evaluation.overallFeedback)
+  const [lead, rest] = splitLead(overall)
   const facts = keyFacts(evaluation)
   const strengths = evaluation.strengths ?? []
   const improvements = evaluation.improvements ?? []
@@ -65,6 +74,7 @@ export function ReportSheet({ title, fraudTypeCode, completedAt, evaluation }: {
         <small>TRAINING REPORT</small>
         <h1>{title}</h1>
         <div className="rs-chips">
+          {grade && <span className={`rs-chip grade-${GRADE_TONE[grade]}`}>대응 결과 · {grade}</span>}
           {type && <span className="rs-chip blue">유형 · {type}</span>}
           <span className="rs-chip">완료 · {day}</span>
         </div>
@@ -109,7 +119,7 @@ export function ReportSheet({ title, fraudTypeCode, completedAt, evaluation }: {
       <ReportSources sources={evaluation.sources} />
 
       <footer className="rs-foot">
-        <span>가상 훈련 대화를 바탕으로 한 분석이며, 실제 피해가 있다면 112 · 1332에 신고하세요.</span>
+        <span>대화 기록을 바탕으로 한 분석이에요. 피해가 있다면 바로 112 · 1332에 신고하세요.</span>
         <strong>어떡하지</strong>
       </footer>
     </article>

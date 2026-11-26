@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react"
-import { errorMessage, guidesApi, isStateConflict, newRequestId, solutionApi } from "@/api"
-import type { AssistantReply, FactKey, Institution, NextQuestion, ResponseCard, SolutionCard, SolutionDetail, SolutionFacts, SolutionMessageRequest, YesNoUnknown } from "@/api"
+import { errorMessage, guidesApi, isStateConflict, newRequestId, solutionApi, USE_MOCK } from "@/api"
+import type { AssistantReply, FactKey, Institution, NextQuestion, ResponseCard, SolutionCard, SolutionDetail, SolutionFacts, SolutionMessageRequest, SolutionMessageResponse, YesNoUnknown } from "@/api"
 import type { Page, UploadedImage } from "@/types/common"
 import { maskSensitive } from "@/lib/privacy"
 import { devOcr } from "@/api/mock/devOcr"
 import type { AssistantMessage, CardNotice, SituationKey } from "../types"
 import { toTextItems } from "@/lib/normalize"
+import { factsFromText } from "../lib/detectEmergency"
 import { situationGuides } from "../data/situationGuides"
 import { dedupeMessages, situationOfText } from "../lib/historyView"
 import { CHECK_LABEL, CHECK_ORDER, checklistReply, composeReply, parseShortAnswer } from "../lib/composeReply"
@@ -45,6 +46,19 @@ async function readPhotos(attachments: UploadedImage[]): Promise<{ text: string;
   }
 }
 
+/** 실서버(SOL-06)로 보낼 사진 파일. 서버 OCR이 받는 PNG·JPEG만, 최대 3장 */
+async function photoFiles(attachments: UploadedImage[]): Promise<File[]> {
+  const files: File[] = []
+  for (const a of attachments) {
+    if (files.length >= 3 || !/^data:image\/(png|jpe?g);base64,/i.test(a.preview)) continue
+    const blob = await (await fetch(a.preview)).blob()
+    files.push(new File([blob], a.name || `photo-${files.length + 1}.${blob.type.includes("png") ? "png" : "jpg"}`, { type: blob.type }))
+  }
+  return files
+}
+const PHOTO_FAIL_TEXT = "사진의 글자를 읽지 못했어요. 사진에 어떤 내용이 있는지 글로 짧게 알려 주세요."
+const PHOTO_TYPE_TEXT = "사진은 PNG나 JPG 파일만 읽을 수 있어요. 사진 내용을 글로 짧게 알려 주세요."
+
 const SESSION_KEY = "wsid-solution-id" // 새로고침 후 상담을 이어 가려고 상담 번호만 보관(탭을 닫으면 사라짐)
 const UNABLE_TEXT = "이 질문에는 정확히 답변드리기 어려워요. 위 대응 카드를 먼저 진행하시고, 아래 공식 기관에 직접 상담하시는 것이 가장 안전해요."
 /** "둘 다", "그거"처럼 앞 답을 가리키는 짧은 질문. AI가 가리키는 대상을 못 정해 답을 못 하면, 다시 물어 달라고 안내해요 */
@@ -79,14 +93,26 @@ function decideModes(text: string, awaitingAnswer: boolean, fixedGuide = false):
 type RequestId = ReturnType<typeof newRequestId>
 type DistOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never
 /** stateVersion을 뺀 글 메시지 본문 (실패 시 같은 본문·requestId로 다시 보내려고 보관) */
-/** 답을 기다리는 AI 추가 질문. 문장은 nextQuestion에서, id는 assistant.questionId에서 와요 */
+/** 답을 기다리는 AI 추가 질문. 답은 예/아니오/모름 중 하나로 보내요 */
 export type PendingQuestion = { questionId: string; content: string; options: YesNoUnknown[] }
-/** 응답의 assistant + nextQuestion에서 AI 추가 질문을 꺼내요. 아니면 null */
-const aiQuestionOf = (r: { assistant?: AssistantReply | null; nextQuestion?: NextQuestion | null }): PendingQuestion | null =>
-  r.assistant?.status === "NEED_USER_INPUT" && r.assistant.questionId && r.nextQuestion
-    ? { questionId: r.assistant.questionId, content: r.nextQuestion.content, options: r.nextQuestion.options ?? [] }
+const ALL_OPTIONS: YesNoUnknown[] = ["YES", "NO", "UNKNOWN"]
+/**
+ * 응답에서 AI 추가 질문을 꺼내요. 아니면 null.
+ * 실제 백엔드는 assistant.question에 질문을 담아 보내고(nextQuestion은 null), 예전 mock 형식은 assistant.questionId + nextQuestion이에요.
+ */
+const aiQuestionOf = (r: { assistant?: AssistantReply | null; nextQuestion?: NextQuestion | null }): PendingQuestion | null => {
+  const a = r.assistant
+  if (a?.status !== "NEED_USER_INPUT") return null
+  if (a.question?.questionId && a.question.content)
+    return { questionId: a.question.questionId, content: a.question.content, options: a.question.options?.length ? a.question.options : ALL_OPTIONS }
+  return a.questionId && r.nextQuestion
+    ? { questionId: a.questionId, content: r.nextQuestion.content, options: r.nextQuestion.options?.length ? r.nextQuestion.options : ALL_OPTIONS }
     : null
-type TextBody = DistOmit<Extract<SolutionMessageRequest, { inputKind: "TEXT" }>, "stateVersion">
+}
+/** AI 추가 질문에 글로 답했는데 예/아니오/모름으로 읽히지 않을 때 */
+const PICK_ANSWER_TEXT = "위 질문에는 아래 '예', '아니오', '모르겠어요' 중 하나를 눌러 답해 주세요. 답해 주시면 처음 물어보신 내용에 이어서 답해 드릴게요."
+/** stateVersion을 뺀 메시지 본문: 글 입력, 또는 AI 추가 질문에 대한 선택 답 */
+type TextBody = DistOmit<Extract<SolutionMessageRequest, { inputKind: "TEXT" } | { purpose: "CLARIFICATION_ANSWER" }>, "stateVersion">
 const SITUATION_KEY = "wsid-solution-situation" // 유형 카드로 시작한 상담이면 그 유형 (새로고침 후에도 고정 안내를 보여 주려고)
 const saveSessionId = (id: number | null) => {
   try { id === null ? sessionStorage.removeItem(SESSION_KEY) : sessionStorage.setItem(SESSION_KEY, String(id)) } catch { /* 무시 */ }
@@ -262,9 +288,29 @@ export function useEmergency(go: (next: Page) => void) {
     setAnalyzing(true)
     try {
       // 사진: 개발에서는 OCR로 읽은 글(가림)을, 그 밖에는 장수만 설명에 덧붙여요 (원본은 보내지 않음)
-      const photo = attachments.length ? await readPhotos(attachments) : null
-      const desc = photo ? `${masked}${masked ? "\n" : ""}${photo.text}` : masked
-      const r = await solutionApi.start({ description: desc })
+      // 실서버: 사진은 상담을 시작한 뒤 SOL-06으로 따로 보내 서버가 읽어요 (설명에는 첨부 사실만)
+      const photo = attachments.length && USE_MOCK ? await readPhotos(attachments) : null
+      const desc = photo ? `${masked}${masked ? "\n" : ""}${photo.text}`
+        : masked || (attachments.length ? "사기 의심 대화 사진을 첨부했어요." : masked)
+      let r = await solutionApi.start({ description: desc })
+      let photoReply: SolutionMessageResponse | null = null
+      let photoNote: string | null = photo?.note ?? null
+      if (!USE_MOCK && attachments.length) {
+        const files = await photoFiles(attachments)
+        if (!files.length) photoNote = PHOTO_TYPE_TEXT
+        else {
+          try { photoReply = await solutionApi.images(r.solutionId, files, r.stateVersion); r = { ...r, ...photoReply } }
+          catch { photoNote = PHOTO_FAIL_TEXT }
+        }
+      }
+      // 직접 쓴 설명에 '송금했어요'처럼 사실이 분명히 있는데 서버가 아직 모름(UNKNOWN)으로 두면, 그 사실만 바로 반영해요 (SOL-04).
+      // 서버 추출이 놓친 경우를 막는 안전장치예요. 카드로 시작했을 때는 정해진 안내를 쓰니 하지 않아요.
+      if (!situation) {
+        const changes = factsFromText(desc, r.facts)
+        if (Object.keys(changes).length) {
+          try { r = { ...r, ...(await solutionApi.updateFacts(r.solutionId, { stateVersion: r.stateVersion, changes })) } } catch { /* 실패해도 상담은 이어가요 */ }
+        }
+      }
       idRef.current = r.solutionId
       setSolutionId(r.solutionId)
       saveSessionId(r.solutionId)
@@ -274,9 +320,11 @@ export function useEmergency(go: (next: Page) => void) {
         : await reflect("start", { facts: null, cards: [], nextQuestion: null }, r) // 직접 입력: 파악한 내용에 맞춘 안내
       setMessages([
         { key: key(), from: "user", text: masked, images: attachments.length ? attachments : undefined },
-        ...(photo?.note ? [{ key: key(), from: "assistant" as const, text: photo.note }] : []),
+        ...(photoNote ? [{ key: key(), from: "assistant" as const, text: photoNote }] : []),
         { key: key(), from: "assistant", text: masked !== description.trim() ? `입력하신 내용 중 민감정보는 가려서 처리했어요. ${reply}` : reply },
       ])
+      // 사진을 읽은 뒤 AI가 만든 안내·질문이 있으면 이어서 보여 줘요 (답할 수 없다는 안내는 건너뛰어요)
+      if (photoReply?.assistant && photoReply.assistant.status !== "UNABLE_TO_ANSWER") showAssistant(photoReply)
       setText("")
       setImages([])
       go("emergencyChat")
@@ -319,6 +367,7 @@ export function useEmergency(go: (next: Page) => void) {
     if (q) { say(q.content, "clarification"); return }
     if (a.referenceCodes?.length) void fetchCards(a.referenceCodes) // 근거 카드 제목을 보여 주려고
     if (a.status === "ANSWERED" && a.answer) say(a.answer, "answer", a.referenceCodes)
+    else if (a.status === "UNABLE_TO_ANSWER" && a.answer?.trim()) say(a.answer, "unable")
     else setMessages((m) => {
       const last = [...m].reverse().find((x) => x.from === "user")?.text ?? ""
       return [...m, { key: key(), from: "assistant", text: REFERENTIAL_ASK.test(last.trim()) ? AMBIGUOUS_TEXT : UNABLE_TEXT, kind: "unable" }]
@@ -343,7 +392,7 @@ export function useEmergency(go: (next: Page) => void) {
       } else {
         // 상황 설명이거나 assistant를 아직 안 보내는 서버(feature/emergency-reply): 규칙 기반 도우미 말
         setClarification(null)
-        const reply = await reflect("text", prev, r, body.content)
+        const reply = await reflect("text", prev, r, "content" in body ? body.content : undefined)
         pushReply(reply)
       }
       return true
@@ -363,6 +412,14 @@ export function useEmergency(go: (next: Page) => void) {
   const send = async (raw: string, attachments: UploadedImage[] = [], requested: InputMode = "auto") => {
     const masked = maskSensitive(raw.trim())
     if (idRef.current === null || typing || (!masked && !attachments.length)) return
+    // AI가 되물은 질문이 있으면 서버는 그 답(예/아니오/모름)만 받아요. 새 질문을 보내면 409가 나요
+    if (clarification) {
+      const picked = masked && !attachments.length ? parseShortAnswer(masked) : null
+      if (picked && clarification.options.includes(picked)) return answerClarification(picked, masked)
+      setMessages((m) => [...m, { key: key(), from: "user", text: masked || "(사진)", images: attachments.length ? attachments : undefined },
+        { key: key(), from: "assistant", text: PICK_ANSWER_TEXT }])
+      return
+    }
     // 사실 확인 질문에 "아뇨", "네" 처럼 짧게 글로 답하면 선택지를 누른 것과 똑같이 처리해요 (AI 질문에 답하는 중이면 제외)
     const fixed = situationRef.current !== null
     const factQ = !fixed && !clarification && nextQuestion?.factKey ? nextQuestion : null
@@ -376,6 +433,17 @@ export function useEmergency(go: (next: Page) => void) {
     }
     setMessages((m) => [...m, { key: key(), from: "user", text: masked, images: attachments.length ? attachments : undefined }])
     let content = masked
+    if (attachments.length && !USE_MOCK) {
+      // 실서버: 사진을 먼저 SOL-06으로 보내 서버가 읽어 상황에 반영하고, 함께 쓴 글은 그다음에 보내요
+      // (질문이면 사진 내용까지 반영된 상태에서 AI가 답해요. 상황 설명은 사진 안내와 겹치니 조용히 저장만 해요)
+      const ok = await postPhotos(attachments)
+      if (!ok || !masked) return
+      for (const mode of modes) {
+        const sent = await postText({ inputKind: "TEXT", content: masked, purpose: mode === "fact" ? "FACT_UPDATE" : "QUESTION" }, newRequestId(), mode === "fact")
+        if (!sent) return
+      }
+      return
+    }
     if (attachments.length) {
       setTyping(true)
       const photo = await readPhotos(attachments)
@@ -384,13 +452,40 @@ export function useEmergency(go: (next: Page) => void) {
       if (photo.note) setMessages((m) => [...m, { key: key(), from: "assistant", text: photo.note! }])
     }
     for (const mode of modes) {
-      const body: TextBody = mode === "answer" && clarification
-        ? { inputKind: "TEXT", content, purpose: "CLARIFICATION_ANSWER", questionId: clarification.questionId }
-        : { inputKind: "TEXT", content, purpose: mode === "fact" ? "FACT_UPDATE" : "QUESTION" }
+      const body: TextBody = { inputKind: "TEXT", content, purpose: mode === "fact" ? "FACT_UPDATE" : "QUESTION" }
       // 고정 안내 상담에서 상황 저장(fact) 뒤에 질문이 이어지면, 상황 저장에는 따로 답하지 않아요
       const ok = await postText(body, newRequestId(), fixed && mode === "fact" && modes.length > 1)
       if (!ok) break // 앞 요청이 실패하면 뒤 요청은 보내지 않아요 ("다시 보내기"로 이어서)
     }
+  }
+  /** 실서버 사진 첨부(SOL-06): 서버가 읽은 내용으로 사실·카드를 바꾸고, 도우미 안내를 보여 줘요 */
+  const postPhotos = async (attachments: UploadedImage[]): Promise<boolean> => {
+    const id = idRef.current
+    if (id === null) return false
+    const files = await photoFiles(attachments)
+    if (!files.length) { setMessages((m) => [...m, { key: key(), from: "assistant", text: PHOTO_TYPE_TEXT }]); return true }
+    setTyping(true)
+    setError("")
+    try {
+      const prev = view()
+      const r = await solutionApi.images(id, files, versionRef.current)
+      if (r.assistant && r.assistant.status !== "UNABLE_TO_ANSWER") { await applyResult(r); showAssistant(r) }
+      else pushReply(await reflect("text", prev, r))
+      return true
+    } catch (err) {
+      setMessages((m) => [...m, { key: key(), from: "assistant", text: PHOTO_FAIL_TEXT }])
+      await recover(err)
+      return false
+    } finally {
+      setTyping(false)
+    }
+  }
+  /** AI 추가 질문에 예/아니오/모름으로 답해요 (SOL-03 CHOICE + purpose CLARIFICATION_ANSWER + questionId) */
+  const answerClarification = async (value: YesNoUnknown, typed?: string) => {
+    const q = clarification
+    if (idRef.current === null || typing || !q) return
+    setMessages((m) => [...m, { key: key(), from: "user", text: typed ?? ANSWER_LABEL[value] }])
+    await postText({ inputKind: "CHOICE", selectedCode: value, purpose: "CLARIFICATION_ANSWER", questionId: q.questionId }, newRequestId())
   }
   /** 실패한 메시지를 같은 requestId로 다시 보내요 (말풍선은 다시 추가하지 않음) */
   const retry = () => {
@@ -467,7 +562,7 @@ export function useEmergency(go: (next: Page) => void) {
     nextQuestion: !situation && !clarification && nextQuestion?.factKey ? nextQuestion : null,
     /** 아직 확인 질문에 한 번도 답하지 않았으면 true (첫 질문 앞에 왜 묻는지 한 줄 덧붙이려고) */
     firstQuestion: !messages.some((m) => m.from === "user" && Object.values(CHOICE_TEXT).some((t) => Object.values(t).includes(m.text))), typing, completed, clarification, failed: failed !== null,
-    selectSituation, analyze, answer, send, retry, correctFact, complete, back, discard,
+    selectSituation, analyze, answer, answerClarification, send, retry, correctFact, complete, back, discard,
   }
 }
-export type Emergency = ReturnType<typeof useEmergency>
+export type Emergency = ReturnType<typeof useEmergency>

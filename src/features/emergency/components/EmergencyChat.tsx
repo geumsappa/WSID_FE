@@ -4,11 +4,13 @@ import { AI_DEV_URL } from "@/api/config"
 import type { FactKey, YesNoUnknown } from "@/api"
 import type { UploadedImage } from "@/types/common"
 import { Icon } from "@/components/Icon"
+import { DuoIcon, type DuoIconName } from "@/components/DuoIcon"
+import { HelperAvatar } from "@/components/HelperAvatar"
 import { ConfirmModal } from "@/components/ConfirmModal"
 import { EvidenceGallery } from "@/components/EvidenceGallery"
 import { Typing } from "@/components/Typing"
 import { loadEvidence } from "@/lib/image"
-import { toLinkItems, toTextItems } from "@/lib/normalize"
+import { toTextItems } from "@/lib/normalize"
 import type { Emergency, InputMode } from "../hooks/useEmergency"
 import { situationGuides } from "../data/situationGuides"
 import { CHECK_LABEL, CHECK_ORDER } from "../lib/composeReply"
@@ -34,8 +36,30 @@ function splitAnswer(text: string): { lead: string; items: string[] } {
   return { lead: flat, items: [] }
 }
 
-function MessageText({ text, className, structured }: { text: string; className?: string; structured: boolean }) {
+/** 도우미 안내(문장 여러 개)를 '첫 문장 + 할 일 줄'로 나눠요. 할 일 앞의 '먼저·그다음' 같은 말은 화살표가 대신해요 */
+function splitSteps(text: string): { lead: string; steps: string[] } {
+  const sentences = text.split(/(?<=[.!?])\s+/).map((t) => t.trim()).filter(Boolean)
+  if (sentences.length < 3) return { lead: text, steps: [] }
+  const steps = sentences.slice(1).map((t) => t.replace(/^(먼저|우선|그다음(에는|에)?|다음으로|그리고|또한?|마지막으로)[,\s]+/, ""))
+  return { lead: sentences[0], steps }
+}
+
+export function MessageText({ text, className, structured, arrows = false }: { text: string; className?: string; structured: boolean; arrows?: boolean }) {
   // 말풍선 모양은 <p>에 걸려 있어서, 목록도 <p> 안에서 줄을 나눠 보여 줘요
+  if (arrows && !structured) {
+    const { lead, steps } = splitSteps(text)
+    if (steps.length) return (
+      <p className={className}>
+        <span style={{ display: "block" }}>{lead}</span>
+        {steps.map((step, i) => (
+          <span key={i} className="v2-arrow-step">
+            <span className="v2-step-label">{i === 0 ? "먼저" : "그다음"}</span>
+            <span>{step}</span>
+          </span>
+        ))}
+      </p>
+    )
+  }
   const { lead, items } = structured ? splitAnswer(text) : { lead: text, items: [] as string[] }
   if (!items.length) return <p className={className}>{text}</p>
   return (
@@ -54,6 +78,14 @@ function MessageText({ text, className, structured }: { text: string; className?
 /** 사실 확인을 [예/아니오/모름] 네 번 대신 '있었던 일 모두 고르기' 한 번으로 물어요. false면 예전 방식 */
 const USE_CHECKLIST = true
 
+/** 대응 단계 제목으로 고른 아이콘 (고정 안내 단계는 아이콘 정보가 없어서) */
+const stepIcon = (title: string): DuoIconName =>
+  /지급정지|입금|송금/.test(title) ? "stop" : /앱|휴대폰|악성/.test(title) ? "appcheck" : /명의|등록된|확인/.test(title) ? "idcheck"
+    : /개인정보|노출|비밀번호/.test(title) ? "shield" : /신고|경찰/.test(title) ? "report" : /전화|연락/.test(title) ? "call" : "shield"
+/** 백엔드 기관 코드 → 아이콘 (상황 카드의 ORG_ICON과 같은 그림) */
+const INSTITUTION_ICON: Record<string, DuoIconName> = { POLICE_112: "report", COUNTERSCAM_1394: "call", FSS: "institution", KISA_118: "shield", MSAFER: "idcheck", PD: "shield" }
+const ORG_ICON: Record<string, DuoIconName> = { police: "report", cyber: "report", fss: "institution", kisa: "shield", counterscam: "call", pd: "shield", payinfo: "idcheck", msafer: "idcheck" }
+
 /** 있었던 일 모두 고르기. 설명·사진에서 이미 '예'로 파악된 항목은 미리 골라 둬요 */
 function FactChecklist({ facts, onSubmit }: { facts: SolutionFacts | null; onSubmit: (selected: FactKey[]) => void }) {
   const [picked, setPicked] = useState<FactKey[]>(() => CHECK_ORDER.filter((k) => facts?.[k] === "YES"))
@@ -64,26 +96,30 @@ function FactChecklist({ facts, onSubmit }: { facts: SolutionFacts | null; onSub
     setNone(false)
     setPicked((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]))
   }
-  const pill = (on: boolean) => ({
-    display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 999, cursor: "pointer", fontSize: 14,
-    border: `1px solid ${on ? "#1769e0" : "#cfd8e3"}`, background: on ? "#eaf2ff" : "#fff", color: on ? "#1769e0" : "#33415c", fontWeight: on ? 700 : 500,
-  } as const)
   return (
-    <div style={{ marginTop: 8 }}>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-        {CHECK_ORDER.map((k) => (
-          <button key={k} type="button" aria-pressed={picked.includes(k)} style={pill(picked.includes(k))} onClick={() => toggle(k)}>
-            {picked.includes(k) ? "✓ " : ""}{CHECK_LABEL[k]}
-          </button>
-        ))}
-        <button type="button" aria-pressed={none} style={pill(none)} onClick={() => { setError(""); setPicked([]); setNone((v) => !v) }}>
-          {none ? "✓ " : ""}해당 없어요
-        </button>
+    <div className="v2-checklist">
+      {/* 세로 목록 + 체크박스. 여러 개 고를 수 있고, '해당 없어요'를 고르면 나머지는 풀려요 */}
+      <div className="v2-check-list" role="group" aria-label="있었던 일 고르기">
+        {CHECK_ORDER.map((k) => {
+          const on = picked.includes(k)
+          return (
+            <label key={k} className={`v2-check-row${on ? " on" : ""}`}>
+              <input type="checkbox" checked={on} onChange={() => toggle(k)} />
+              <span className="v2-check-box" aria-hidden="true"><Icon name="check" size={16} /></span>
+              <span>{CHECK_LABEL[k]}</span>
+            </label>
+          )
+        })}
+        <label className={`v2-check-row v2-check-none${none ? " on" : ""}`}>
+          <input type="checkbox" checked={none} onChange={() => { setError(""); setPicked([]); setNone((v) => !v) }} />
+          <span className="v2-check-box" aria-hidden="true"><Icon name="check" size={16} /></span>
+          <span>해당 없어요</span>
+        </label>
       </div>
-      {error && <p role="alert" style={{ margin: "8px 0 0", fontSize: 13, color: "#c0392b" }}>{error}</p>}
-      <button type="button" className="primary-button" style={{ marginTop: 12, padding: "10px 18px", fontSize: 14 }}
+      {error && <p role="alert" className="v2-check-error">{error}</p>}
+      <button type="button" className="v2-btn-primary v2-check-submit"
         onClick={() => (picked.length || none ? onSubmit(picked) : setError("해당하는 것을 고르거나 '해당 없어요'를 눌러 주세요."))}>
-        이대로 알려 주기
+        선택 완료
       </button>
     </div>
   )
@@ -151,7 +187,8 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
   }
   useEffect(() => {
     const node = scrollRef.current
-    if (node && em.messages.length > count.current) node.scrollTo({ top: node.scrollHeight, behavior: "smooth" })
+    // v2: 대화가 페이지와 함께 스크롤돼요. 새 말풍선이 오면 그 말풍선까지 내려가요
+    if (node && em.messages.length > count.current) node.lastElementChild?.scrollIntoView({ behavior: "smooth", block: "nearest" })
     count.current = em.messages.length
   }, [em.messages, em.typing])
   const submit = () => {
@@ -165,13 +202,16 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
   const guide = em.situation ? situationGuides[em.situation] : null
   const first = em.messages.slice(0, 2)
   const rest = em.messages.slice(2)
+  /** 답을 기다리는 도우미 질문 말풍선 (그 바로 아래에 예/아니오/모름 버튼을 보여 줘요) */
+  const pendingClarKey = em.clarification ? [...em.messages].reverse().find((x) => x.kind === "clarification")?.key : undefined
   const renderMessage = (m: Emergency["messages"][number]) => m.notice ? (
     // 대응 카드가 바뀌었을 때: 제목·가장 먼저 할 일만 짧게, 전체는 위쪽 대응 방법으로
     <div className="prep-message assistant" key={m.key}>
-      <span><Icon name="shield" size={18} /></span>
+      <span className="v2-avatar"><HelperAvatar size={36} /></span>
       <div>
         <small>어떡하지 도우미 · 대응 방법 변경</small>
-        <div style={{ background: "#fff", border: "1px solid #d6e4fb", borderRadius: 14, padding: "12px 14px", display: "grid", gap: 10, maxWidth: 560 }}>
+        {/* 상자 전체가 버튼: 아무 데나 누르면 위쪽 대응 방법으로 이동해요 */}
+        <button type="button" className="v2-notice-box" onClick={() => document.getElementById("em-plan")?.scrollIntoView({ behavior: "smooth", block: "start" })}>
           {m.notice.added.map((a) => (
             <div key={a.code}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
@@ -184,22 +224,24 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
           {m.notice.removed.length > 0 && (
             <div style={{ fontSize: 13, color: "#697586" }}>{m.notice.removed.map((t) => `'${t}'`).join(", ")}은(는) 지금 상황에 맞지 않아 뺐어요.</div>
           )}
-          <button type="button" onClick={() => document.getElementById("em-plan")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-            style={{ justifySelf: "start", padding: "6px 12px", border: "1px solid #1769e0", borderRadius: 999, background: "#fff", color: "#1769e0", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
-            위에서 전체 보기 ↑
-          </button>
-        </div>
+          <span className="v2-notice-more">위에서 전체 보기 ↑</span>
+        </button>
       </div>
     </div>
   ) : (
     <div className={`prep-message ${m.from}`} key={m.key}>
-      {m.from === "assistant" && <span><Icon name="shield" size={18} /></span>}
+      {m.from === "assistant" && <span className="v2-avatar"><HelperAvatar size={36} /></span>}
       <div>
         <small>{m.from === "assistant" ? (m.kind ? KIND_LABEL[m.kind] : "어떡하지 도우미") : "나"}</small>
         {m.text && (m.from === "assistant"
-          ? <MessageText text={m.text} className={m.kind ? `assist-${m.kind}` : undefined} structured={m.kind === "answer" || /\n1\. /.test(m.text)} />
+          ? <MessageText text={m.text} className={m.kind ? `assist-${m.kind}` : undefined} structured={m.kind === "answer" || /\n1\. /.test(m.text)} arrows={!m.kind} />
           : <p className={m.kind ? `assist-${m.kind}` : undefined}>{m.text}</p>)}
-        {m.references && <div className="assist-refs">근거: {m.references.map((code) => em.cardDetails[code]?.title ?? em.cards.find((c) => c.code === code)?.title ?? code).join(" · ")}</div>}
+        {/* 근거 카드 코드(m.references)는 내부 확인용이라 화면에는 보여 주지 않아요 */}
+        {em.clarification && m.key === pendingClarKey && !em.completed && (
+          <div className="v2-answer-chips" role="group" aria-label="도우미 질문에 답하기">
+            {em.clarification.options.map((v) => <button key={v} type="button" disabled={em.typing} onClick={() => void em.answerClarification(v)}>{ANSWER_LABEL[v]}</button>)}
+          </div>
+        )}
         {m.images && m.images.length > 0 && <div className="sent-photo-gallery"><EvidenceGallery images={m.images} /></div>}
       </div>
     </div>
@@ -221,12 +263,12 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
         />
       )}
       <div className="container emergency-chat-heading">
-        <div><span className="badge">금융사기 대응 안내</span><h1>어떡하지 긴급 대응 도우미</h1><p>현재 상황에 필요한 대응 방법을 안내하고, 궁금한 점에 답변해 드립니다.</p></div>
-        <button className="outline-button" onClick={em.back}><Icon name="refresh" size={16} /> 다른 상황 선택하기</button>
+        <div>{guide && <DuoIcon name={em.situation!} size={60} />}<h1>{guide ? `${guide.title}, 이렇게 대응하세요` : "지금 필요한 대응 방법"}</h1><p>대응 방법을 확인하고, 궁금한 점은 아래 도우미에게 물어보세요.</p></div>
+        <button className="v2-btn-soft" onClick={em.back}>다른 상황 고르기</button>
       </div>
       <div className="container emergency-chat-layout">
         <div className="emergency-conversation">
-          <div className="assistant-header"><span><Icon name="shield" size={23} /></span><div><h2>어떡하지 대응 도우미</h2><p><i /> {USE_MOCK ? (aiUp ? "mock 모드 (백엔드 없음 · AI 서버 연결됨)" : aiUp === null ? "mock 모드 (AI 서버 확인 중)" : "mock 모드 (백엔드·AI 서버 없음 → 프론트 예비 답변)") : "AI 분석 연결됨"}</p></div></div>
+          <div className="assistant-header"><span className="v2-avatar"><HelperAvatar size={44} /></span><div><h2>어떡하지 도우미</h2><p><i /> {USE_MOCK ? (aiUp ? "mock 모드 (백엔드 없음 · AI 서버 연결됨)" : aiUp === null ? "mock 모드 (AI 서버 확인 중)" : "mock 모드 (백엔드·AI 서버 없음 → 프론트 예비 답변)") : "AI 분석 연결됨"}</p></div></div>
           <div className="emergency-messages" ref={scrollRef} aria-live="polite">
             {first.slice(0, 1).map(renderMessage)}
             {/* 대응 카드를 먼저(화면 폭 가득), 그 아래에 도우미 첫 안내 */}
@@ -251,11 +293,15 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
                 <div className="result-card-heading"><span><Icon name="check" size={21} /></span><div><small>안전 행동 안내</small><h3>지금 필요한 대응 방법</h3></div></div>
                 {guide ? (
                   <div style={{ marginTop: 4 }}>
-                    <h4 style={{ margin: "0 0 10px", display: "flex", alignItems: "center", gap: 8 }}>
-                      <span className="badge" style={em.situation !== "trade" ? { background: "#fff2f1", color: "#b43b38" } : undefined}>{em.situation !== "trade" ? "긴급" : "대처 방법"}</span>
-                      {guide.title}
-                    </h4>
-                    <div className="action-steps">{guide.steps.map((a, i) => <div key={i}><span>{i + 1}</span><div><h4>{a.title}</h4><p>{a.body}</p></div></div>)}</div>
+                    {em.situation !== "trade" && (
+                      <div className="v2-first">
+                        <strong>가장 먼저</strong>
+                        <h4>돈을 보냈다면 지금 바로 지급정지를 요청하세요</h4>
+                        <p><b>112</b>나 돈을 보낸 은행 고객센터에 전화해 "지급정지해 주세요"라고 말하면 돼요.</p>
+                      </div>
+                    )}
+                    <h4 className="v2-section-title">순서대로 해 주세요</h4>
+                    <div className="action-steps v2-steps">{guide.steps.map((a, i) => <div key={i}><DuoIcon name={stepIcon(a.title)} size={44} /><div><small>{i + 1}단계</small><h4>{a.title}</h4><p>{a.body}</p></div></div>)}</div>
                   </div>
                 ) : <>
                 {em.cards.length === 0 && <p>대응 카드를 준비하고 있어요.</p>}
@@ -263,36 +309,46 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
                   const d = em.cardDetails[c.code]
                   const actions = toTextItems(d?.actions)
                   const materials = toTextItems(d?.requiredMaterials)
-                  const sources = toLinkItems(d?.sourceReferences)
                   const urgent = (c.priority ?? d?.priority) === "URGENT" // 상담 응답의 우선순위가 먼저 (중고거래+송금이면 긴급)
+                  const title = d?.title ?? c.title ?? c.code
+                  // 상황 카드 안내와 같은 모양: 긴급 카드는 '가장 먼저' 박스, 할 일은 큰 글씨 단계, 준비물은 회색 박스 (출처 줄은 화면에 안 보여요)
                   return (
-                    <div key={c.code} style={{ marginTop: gi ? 22 : 4 }}>
-                      <h4 style={{ margin: "0 0 10px", display: "flex", alignItems: "center", gap: 8 }}>
-                        <span className="badge" style={urgent ? { background: "#fff2f1", color: "#b43b38" } : undefined}>{urgent ? "긴급" : `상황 ${gi + 1}`}</span>
-                        {d?.title ?? c.title ?? c.code}
-                      </h4>
-                      {actions.length > 0 ? <div className="action-steps">{actions.map((a, i) => <div key={i}><span>{i + 1}</span><div>{a.title && <h4>{a.title}</h4>}<p>{a.body}</p></div></div>)}</div>
-                        : <p style={{ fontSize: 12, color: "#697586" }}>{d ? "세부 조치가 아직 등록되지 않았어요. 아래 공식 기관에 문의해 주세요." : "카드 내용을 불러오는 중이에요."}</p>}
-                      {materials.length > 0 && <p style={{ margin: "10px 0 0", fontSize: 12, color: "#526174" }}><strong>준비할 것:</strong> {materials.map((m) => m.body).join(", ")}</p>}
-                      {sources.length > 0 && <p style={{ margin: "6px 0 0", fontSize: 11, color: "#7a8798" }}>근거: {sources.map((s, i) => <span key={i}>{i ? " · " : ""}{s.url ? <a href={s.url} target="_blank" rel="noreferrer">{s.label}</a> : s.label}</span>)}{d?.reviewedAt && ` (검토 ${d.reviewedAt.slice(0, 10)})`}</p>}
+                    <div key={c.code} style={{ marginTop: gi ? 32 : 4 }}>
+                      {urgent
+                        ? <div className="v2-first"><strong>{gi === 0 ? "가장 먼저" : "긴급"}</strong><h4>{title}</h4></div>
+                        : <h4 className="v2-section-title">{title}</h4>}
+                      {actions.length > 0
+                        ? <div className="action-steps v2-steps">{actions.map((a, i) => <div key={i}><DuoIcon name={stepIcon(`${a.title ?? ""} ${a.body}`)} size={44} /><div><small>{i + 1}단계</small>{a.title && <h4>{a.title}</h4>}<p className="v2-step-body">{a.body}</p></div></div>)}</div>
+                        : <p className="v2-step-body">{d ? "세부 조치가 아직 등록되지 않았어요. 아래 도움받을 곳에 문의해 주세요." : "카드 내용을 불러오는 중이에요."}</p>}
+                      {materials.length > 0 && (
+                        <div className="v2-materials">
+                          <h5>미리 준비해 두세요</h5>
+                          <ul>{materials.map((m, i) => <li key={i}>{m.body}</li>)}</ul>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
                 </>}
               </section>
-              <p className="analysis-disclaimer"><Icon name="alert" size={15} /> 분석 결과는 참고용이며, 실제 금융사기 여부를 확정하는 판단은 아닙니다. 실제 피해가 있다면 공식 기관 신고를 우선해 주세요.</p>
+              <p className="analysis-disclaimer"><Icon name="shield" size={15} /> 이 안내는 금융감독원·경찰청 등 공식 자료를 바탕으로 해요. 사기 여부의 최종 확인과 피해금 환급은 경찰·금융회사가 진행하니, 피해가 있다면 112·1394에도 꼭 신고해 주세요.</p>
             </div>
             {guide && (
               <div className="chat-organizations">
-                <h3>관련 공식 기관</h3>
+                <h3>도움받을 곳</h3>
                 <div className="organization-grid">
                   {guide.organizations.map((k) => {
                     const o = organizationData[k]
+                    // PC 웹이라 전화 걸기 링크 대신 번호만 안내해요. 웹사이트가 있는 기관만 링크로
+                    const tel = o.href.startsWith("tel:")
+                    const Tag = tel ? "div" : "a"
                     return (
-                      <a key={k} href={o.href} target={o.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer">
-                        <span className="org-mark">{o.mark}</span>
-                        <div><h4>{o.name}</h4><p>{o.desc}</p><strong>{o.action} <Icon name="arrow" size={15} /></strong></div>
-                      </a>
+                      <Tag key={k} href={tel ? undefined : o.href} target={tel ? undefined : "_blank"} rel={tel ? undefined : "noreferrer"}>
+                        <span className="org-mark"><DuoIcon name={ORG_ICON[k] ?? "shield"} size={32} /></span>
+                        <div><h4>{o.name}</h4><p>{o.desc}</p></div>
+                        {/* 전화 기관은 이름에 번호가 있어서(경찰청 112) 따로 표시하지 않아요 */}
+                        {!tel && <strong>바로가기 <Icon name="arrow" size={16} /></strong>}
+                      </Tag>
                     )
                   })}
                 </div>
@@ -300,20 +356,22 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
             )}
             {!guide && institutionCodes.length > 0 && (
               <div className="chat-organizations">
-                <h3>관련 공식 기관</h3>
+                <h3>도움받을 곳</h3>
                 <div className="organization-grid">
                   {institutionCodes.map((code) => {
                     const it = institutionOf(code)
-                    const href = it?.phone ? `tel:${it.phone}` : it?.officialUrl ?? undefined
+                    // 상황 카드의 기관 박스와 같게: 이름에 번호가 있으면(경찰청 112) 안내만, 웹사이트가 있으면 바로가기, 둘 다 아니면 번호 표시
+                    const phoneInName = !!it?.phone && it.name.includes(it.phone)
+                    const href = !phoneInName && it?.officialUrl ? it.officialUrl : undefined
                     const Tag = href ? "a" : "div"
                     return (
-                      <Tag key={code} href={href} target={href?.startsWith("http") ? "_blank" : undefined} rel="noreferrer">
-                        <span className="org-mark">{it?.phone ?? (it?.name ?? code).slice(0, 2)}</span>
+                      <Tag key={code} href={href} target={href ? "_blank" : undefined} rel={href ? "noreferrer" : undefined}>
+                        <span className="org-mark"><DuoIcon name={INSTITUTION_ICON[code] ?? (it?.phone ? "call" : "institution")} size={32} /></span>
                         <div>
                           <h4>{it?.name ?? code}</h4>
                           <p>{it?.role ?? "기관 정보를 불러오는 중"}</p>
-                          {href && <strong>{it?.phone ? `${it.phone} 전화하기` : "공식 사이트 이동"} <Icon name="arrow" size={15} /></strong>}
                         </div>
+                        {href ? <strong>바로가기 <Icon name="arrow" size={16} /></strong> : !phoneInName && it?.phone && <span className="v2-phone-label">전화 {it.phone}</span>}
                       </Tag>
                     )
                   })}
@@ -325,11 +383,11 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
             {em.nextQuestion && !em.typing && !em.clarification && !em.completed && (
               // 사실 확인 질문(송금·정보·앱·연락)은 카드 대신 채팅 말풍선 + 빠른 답 버튼으로 물어봐요
               <div className="prep-message assistant">
-                <span><Icon name="shield" size={18} /></span>
+                <span className="v2-avatar"><HelperAvatar size={36} /></span>
                 <div>
                   <small>어떡하지 도우미 · 확인 질문</small>
                   {USE_CHECKLIST && em.firstQuestion ? <>
-                    <p className="assist-clarification" style={{ margin: 0 }}>지금까지 있었던 일을 모두 골라 주세요.<br /><small style={{ fontSize: 13, color: "#697586", fontWeight: 400 }}>고르신 것에 따라 지금 할 일이 달라져요.</small></p>
+                    <p className="assist-clarification" style={{ margin: 0 }}>지금까지 있었던 일을 모두 골라 주세요. 고르신 것에 따라 지금 할 일이 달라져요.</p>
                     <FactChecklist facts={em.facts} onSubmit={(s) => void em.submitChecklist(s)} />
                   </> : <>
                     {em.firstQuestion && <p style={{ margin: "0 0 6px" }}>지금 상황에 맞는 방법을 골라 드리려고 몇 가지만 여쭤볼게요.</p>}
@@ -356,10 +414,6 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
             {pendingImages.length > 0 && <div className="chat-attachments pending-photos"><span>전송할 사진: {pendingImages.length}장</span><EvidenceGallery images={pendingImages} onRemove={(id) => setPendingImages((items) => items.filter((i) => i.id !== id))} /></div>}
             {uploadError && <p className="upload-error" role="alert">{uploadError}</p>}
             {em.error && <p className="upload-error" role="alert">{em.error}{em.failed && <> <button type="button" className="assist-retry" disabled={em.typing} onClick={em.retry}>다시 보내기</button></>}</p>}
-            {em.clarification &&
-              <div className="assist-mode answering"><span><Icon name="chat" size={14} /> 도우미 질문에 답하는 중: <strong>{em.clarification.content}</strong></span>
-                {em.clarification.options.length > 0 && <div className="assist-quick">{em.clarification.options.map((v) => <button key={v} type="button" disabled={em.typing} onClick={() => void em.send(ANSWER_LABEL[v], [], "answer")}>{ANSWER_LABEL[v]}</button>)}</div>}</div>}
-            <div className="privacy"><Icon name="lock" size={15} /><span>민감한 개인정보는 입력하지 마세요. 입력해도 가려서 전송돼요.{!loggedIn && " 로그인하지 않으면 상담 기록이 저장되지 않아요."}</span></div>
             <div className="chat-input-row">
               <button type="button" className="chat-attach-button" title="사진 첨부" aria-label="사진 첨부" onClick={() => fileRef.current?.click()}><Icon name="image" size={20} /></button>
               <textarea rows={1} value={input} disabled={em.typing} onChange={(e) => setInput(e.target.value)}
@@ -367,7 +421,11 @@ export function EmergencyChat({ em, loggedIn = false, onMyPage }: { em: Emergenc
                 placeholder={PLACEHOLDER[mode]} />
               <button disabled={(!input.trim() && !pendingImages.length) || em.typing} onClick={submit}><Icon name="send" size={17} /> 전송</button>
             </div>
-            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 10 }}><button type="button" className="text-button" onClick={() => setConfirmEnd(true)}>상담 마치기 <Icon name="check" size={15} /></button></div>
+            {/* 입력창과 함께 화면 아래에 붙어 있어서, 대화가 길어져도 언제든 상담을 마칠 수 있어요 */}
+            <div className="v2-chat-footer">
+              <div className="privacy"><Icon name="lock" size={15} /><span>민감한 개인정보는 입력하지 마세요. 입력해도 가려서 전송돼요.{!loggedIn && " 로그인하지 않으면 상담 기록이 저장되지 않아요."}</span></div>
+              <button type="button" className="v2-btn-soft" onClick={() => setConfirmEnd(true)}>상담 마치기</button>
+            </div>
           </div>}
         </div>
       </div>

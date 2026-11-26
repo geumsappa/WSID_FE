@@ -23,6 +23,12 @@ export type ChatLine = {
   mockPage?: MockPage
   /** 이 대사의 가상 앱 설치 링크([모의앱])를 눌렀는지 (실제 설치는 없음) */
   appClicked?: boolean
+  /** 이 대사의 훈련용 계좌([모의계좌])로 송금 버튼을 눌렀는지 (실제 송금은 없음) */
+  transferDone?: boolean
+  /** 말풍선을 하나씩 보여 주는 중: 지금까지 보인 개수 (다 보이면 없음) */
+  reveal?: number
+  /** 서버에 없는 화면 연출 줄 (답이 없을 때 상대가 재촉하는 말). 서버로 보내지 않아요 */
+  local?: boolean
 }
 /** channel: 대화 화면 모양 (SMS 문자, MESSENGER 메신저, MARKET 중고거래 채팅, EMAIL, SNS) */
 export type ScenarioChannel = "SMS" | "MESSENGER" | "MARKET" | "EMAIL" | "SNS"

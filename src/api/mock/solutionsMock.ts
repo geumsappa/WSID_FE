@@ -121,11 +121,28 @@ function situationAnswer(s: MockSolution, text: string): AssistantReply {
   const answer = answerQuestion(text, { facts: { ...s.facts }, cards: list, nextQuestion: null }, details, institutionList())
   return { status: "ANSWERED", questionId: null, answer, referenceCodes: list.slice(0, 2).map((c) => c.code) }
 }
+/**
+ * 질문 글에 이미 들어 있는 사실("돈을 이미 보내버렸어" → 송금 YES)을 더한 사실 (AI·되묻기 판단용).
+ * 유형 카드 모드에서는 질문으로만 보내서 사실이 저장되지 않는데, 그대로 두면 방금 말한 걸 "돈 보내셨나요?"라고 되물어요.
+ * 화면 카드·사실(s.facts)은 바꾸지 않아요.
+ */
+function factsWithText(s: MockSolution, text: string): SolutionFacts {
+  const tmp = { ...s, facts: { ...s.facts }, extra: [...s.extra] } as MockSolution
+  applyText(tmp, text)
+  const out = { ...s.facts }
+  for (const k of Object.keys(out) as FactKey[]) if (out[k] === "UNKNOWN") out[k] = tmp.facts[k]
+  return out
+}
+/** "돈을 이미 보내버렸어"처럼 상황만 말하면 AI가 '무엇을 묻는지' 몰라 답변 불가가 나와서, 다음 할 일을 묻는 문장으로 보내요 */
+const asQuestion = (text: string) =>
+  /[?？]|까요?$|나요|어떻게|어떡|뭐|무엇|어디|언제|왜|될까|돼$|할까|알려|방법|가능|수 있/.test(text.trim()) ? text : `${text.trim().replace(/[.!]+$/, "")}. 이제 어떻게 해야 하나요?`
+
 /** 질문(QUESTION) 처리: 답에 꼭 필요한 사실을 아직 모르면 되묻고, 알면 상황에 맞게 답해요 */
 function assistQuestion(s: MockSolution, text: string): AssistantReply {
   if (/주식|코인|투자|대출.{0,4}추천/.test(text)) return reply("UNABLE_TO_ANSWER")
   const topics = TOPIC.filter(([, re]) => re.test(text)).map(([f]) => f)
-  const unknown = topics.find((f) => s.facts[f] === "UNKNOWN" && !(s.settled ?? []).includes(f))
+  const known = factsWithText(s, text)
+  const unknown = topics.find((f) => known[f] === "UNKNOWN" && !(s.settled ?? []).includes(f))
   if (unknown) {
     s.qSeq = (s.qSeq ?? 0) + 1
     s.pending = { questionId: `q-${s.id}-${s.qSeq}`, content: CLARIFY[unknown], factKey: unknown, question: text }
@@ -133,6 +150,7 @@ function assistQuestion(s: MockSolution, text: string): AssistantReply {
   }
   return situationAnswer(s, text)
 }
+const CLARIFY_ANSWER_TEXT: Record<YesNoUnknown, string> = { YES: "네", NO: "아니요", UNKNOWN: "모르겠어요" }
 /** 추가 질문에 대한 답(CLARIFICATION_ANSWER) 처리: 답으로 사실을 채운 뒤, 원래 질문에 상황에 맞게 답해요 */
 function assistAnswer(s: MockSolution, questionId: string, text: string): AssistantReply {
   const p = s.pending
@@ -181,7 +199,7 @@ async function devAiAnswer(s: MockSolution, question: string): Promise<Assistant
       headers: { "Content-Type": "application/json" },
       // 최근 대화 6개를 같이 보내서 "둘 다 알려줘" 같은 질문도 앞 대화를 보고 이해하게 해요
       body: JSON.stringify({
-        facts: { ...s.facts }, question, fraudType: fraudTypeOf(s),
+        facts: factsWithText(s, question), question: asQuestion(question), fraudType: fraudTypeOf(s),
         history: s.messages.slice(-6).map((m) => ({ role: m.sender === "USER" ? "USER" : "AI", content: m.content })).filter((m) => m.content),
       }),
       // 개발 대역(try_assist --serve)은 Spring처럼 PLAN·ANSWER 두 번을 불러서, 실제 서비스보다 오래 기다려요
@@ -234,7 +252,7 @@ export const solutionsMock = withSave({
     await delay(600)
     const s = get(id)
     checkVersion(s.stateVersion, body.stateVersion)
-    if (body.inputKind === "CHOICE") {
+    if (body.inputKind === "CHOICE" && !("purpose" in body)) {
       s.facts[body.factKey] = body.selectedCode
       settle(s, body.factKey)
       s.messages.push({ sender: "USER", inputKind: "CHOICE", content: `${QUESTIONS[body.factKey]} → ${body.selectedCode}` })
@@ -242,7 +260,8 @@ export const solutionsMock = withSave({
       s.lastAssistant = null
       return { facts: { ...s.facts }, responseCards: cards(s), nextQuestion: questionOf(s), stateVersion: s.stateVersion, assistant: null }
     }
-    const masked = maskSensitive(body.content.trim())
+    // AI 추가 질문의 답은 백엔드처럼 예/아니오/모름 선택으로 와요. 기존 규칙 답변이 쓰도록 짧은 말로 바꿔요
+    const masked = body.inputKind === "CHOICE" ? CLARIFY_ANSWER_TEXT[body.selectedCode] : maskSensitive(body.content.trim())
     if (/실패 ?테스트/.test(masked)) throw errorFromCode(503, "AI_SERVICE_UNAVAILABLE") // 재시도 흐름 확인용
     let assistant: AssistantReply | null = null
     if (body.purpose === "CLARIFICATION_ANSWER") {
@@ -258,6 +277,9 @@ export const solutionsMock = withSave({
     s.messages.push({ sender: "USER", inputKind: "TEXT", content: masked })
     const aiText = assistant?.status === "NEED_USER_INPUT" ? s.pending?.content : assistant?.answer
     if (aiText) s.messages.push({ sender: "AI", inputKind: "TEXT", content: aiText })
+    // 백엔드와 같은 모양: 되묻기면 assistant.question에 질문을 담아요
+    if (assistant?.status === "NEED_USER_INPUT" && s.pending)
+      assistant = { ...assistant, question: { questionId: s.pending.questionId, factKey: null, content: s.pending.content, options: ["YES", "NO", "UNKNOWN"] } }
     s.lastAssistant = assistant
     s.stateVersion += 1
     return { facts: { ...s.facts }, responseCards: cards(s), nextQuestion: questionOf(s), stateVersion: s.stateVersion, assistant }

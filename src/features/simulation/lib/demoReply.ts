@@ -9,7 +9,7 @@ export const hasSafeEnding = (text: string) =>
 
 export const createDemoReply = (message: string, turn: number, scenario: Scenario) => {
   if (hasSafeEnding(message))
-    return "알겠습니다. 공식 경로로 확인하거나 대화를 중단하겠다는 뜻을 확인했습니다. 이 가상 대화는 여기서 종료됩니다."
+    return "알겠습니다. 공식 경로로 확인하거나 대화를 중단하겠다는 뜻을 확인했습니다. 대화는 여기서 종료됩니다."
   if (
     /공식|고객센터|대표번호|앱|홈페이지|직접 확인|판매자에게 확인/.test(message)
   )
