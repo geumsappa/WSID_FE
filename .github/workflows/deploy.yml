@@ -1,4 +1,4 @@
-# WSID_FE: new-main에 push → 빌드 확인 → FE_ENV 시크릿을 Parameter Store에 저장 → FE 서버의 web(Nginx + FE) 다시 빌드
+# WSID_FE: main에 push → 빌드 확인 → FE_ENV 시크릿을 Parameter Store에 저장 → FE 서버의 web(Nginx + FE) 다시 빌드
 # 필요한 GitHub Secret (레포 Settings > Secrets and variables > Actions > Repository secret): FE_ENV = deploy/fe/.env 전체 내용
 name: Deploy FE
 

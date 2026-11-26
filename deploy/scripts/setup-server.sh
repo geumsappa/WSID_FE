@@ -23,10 +23,10 @@ clone() { # 레포 브랜치
   if [ ! -d "$1" ]; then git clone --branch "$2" "https://github.com/geumsappa/$1.git"; fi
 }
 command -v git-lfs >/dev/null 2>&1 || apt-get install -y git-lfs
-clone WSID_FE "${FE_BRANCH:-new-main}"
+clone WSID_FE "${FE_BRANCH:-main}"
 git -C WSID_FE lfs install --local && git -C WSID_FE lfs pull
-clone WSID_BE "${BE_BRANCH:-develop}"
-clone WSID_AI "${AI_BRANCH:-develop}"
+clone WSID_BE "${BE_BRANCH:-main}"
+clone WSID_AI "${AI_BRANCH:-main}"
 
 docker --version
 docker compose version
